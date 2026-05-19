@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raphael Giulieri — Technical Artist</title>
+    <meta name="description" content="Technical Artist specializing in shaders, real-time VFX, and interactive graphics. 5+ years Unity experience.">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Main WebGL Canvas - renders all environmental effects -->
+    <canvas id="environment-canvas"></canvas>
+
+    <!-- Scroll Progress Indicator -->
+    <div class="scroll-depth">
+        <div class="depth-track">
+            <div class="depth-marker sky" data-label="Sky"></div>
+            <div class="depth-marker surface" data-label="Surface"></div>
+            <div class="depth-marker ocean" data-label="Ocean"></div>
+            <div class="depth-marker deep" data-label="Deep"></div>
+            <div class="depth-marker abyss" data-label="Abyss"></div>
+        </div>
+        <div class="depth-indicator"></div>
+    </div>
+
+    <!-- Navigation - floats above everything -->
+    <nav class="nav" id="nav">
+        <a href="../" class="nav-logo" title="Back to main portfolio">
+            <span class="logo-text">← RG</span>
+        </a>
+
+        <div class="nav-links">
+            <a href="#experiences" class="nav-link">Experiences</a>
+            <a href="#skills" class="nav-link">Skills</a>
+            <a href="#projects" class="nav-link">Projects</a>
+            <a href="#contact" class="nav-link">Contact</a>
+        </div>
+
+        <a href="mailto:contact.raphael.giulieri@gmail.com" class="nav-cta">
+            <span>Get in touch</span>
+        </a>
+
+        <button class="nav-toggle" aria-label="Toggle menu">
+            <span></span>
+            <span></span>
+        </button>
+    </nav>
+
+    <!-- Mobile Navigation -->
+    <div class="mobile-nav">
+        <div class="mobile-nav-links">
+            <a href="#experiences" class="mobile-nav-link">Experiences</a>
+            <a href="#skills" class="mobile-nav-link">Skills</a>
+            <a href="#projects" class="mobile-nav-link">Projects</a>
+            <a href="#contact" class="mobile-nav-link">Contact</a>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- ZONE 1: SKY - Hero in the clouds          -->
+    <!-- ========================================== -->
+    <section id="hero" class="zone zone-sky" data-zone="sky">
+        <div class="hero-content">
+            <div class="hero-badge">
+                <span class="badge-text">Technical Artist</span>
+            </div>
+
+            <h1 class="hero-title">
+                <span class="title-line">Raphael</span>
+                <span class="title-line title-accent">Giulieri</span>
+            </h1>
+
+            <p class="hero-description">
+                Crafting <em>shaders</em>, <em>visual effects</em> & <em>real-time graphics</em>
+            </p>
+
+            <div class="hero-stats">
+                <div class="stat">
+                    <span class="stat-value">5+</span>
+                    <span class="stat-label">Years Unity</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">HLSL</span>
+                    <span class="stat-label">& GLSL</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-value">VFX</span>
+                    <span class="stat-label">Graph</span>
+                </div>
+            </div>
+
+            <div class="hero-scroll-hint">
+                <span>Begin Descent</span>
+                <div class="scroll-arrow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12l7 7 7-7"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Volumetric clouds rendered via WebGL -->
+        <div class="zone-overlay clouds-overlay"></div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- ZONE 2: OVERLOOK - Experiences Gallery    -->
+    <!-- ========================================== -->
+    <section id="experiences" class="zone zone-overlook" data-zone="overlook">
+        <div class="gallery-room">
+            <!-- Left Wall - Poster 1 -->
+            <div class="wall wall-left">
+                <article class="poster" data-company="sabda">
+                    <div class="poster-frame">
+                        <div class="poster-content">
+                            <div class="poster-header">
+                                <span class="poster-date">2023 — 2024</span>
+                                <h3 class="poster-title">SABDA</h3>
+                                <span class="poster-role">Technical Artist</span>
+                            </div>
+                            <div class="poster-visual">
+                                <img src="assets/images/posters/sabda.PNG" alt="SABDA - Underwater Scene" class="poster-image">
+                            </div>
+                            <ul class="poster-highlights">
+                                <li>Boids Simulations</li>
+                                <li>Procedural Vegetation</li>
+                                <li>Underwater Lighting</li>
+                                <li>VFX Graph Birds</li>
+                            </ul>
+                            <div class="poster-tags">
+                                <span>Unity</span>
+                                <span>HLSL</span>
+                                <span>VFX Graph</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="poster-light"></div>
+                </article>
+            </div>
+
+            <!-- Center Window - Skybox View -->
+            <div class="window-container">
+                <div class="window-frame">
+                    <div class="window-glass">
+                        <!-- Skybox parallax rendered here -->
+                        <div class="skybox-view" id="skybox-view"></div>
+                    </div>
+                    <div class="window-sill"></div>
+                </div>
+                <div class="section-label">
+                    <span class="label-index">01</span>
+                    <span class="label-text">Experience</span>
+                </div>
+            </div>
+
+            <!-- Right Wall - Poster 2 -->
+            <div class="wall wall-right">
+                <article class="poster" data-company="lrd">
+                    <div class="poster-frame">
+                        <div class="poster-content">
+                            <div class="poster-header">
+                                <span class="poster-date">2023</span>
+                                <h3 class="poster-title">Little Red Dog</h3>
+                                <span class="poster-role">Technical Artist</span>
+                            </div>
+                            <div class="poster-visual">
+                                <img src="assets/images/posters/little_red_dog_games_logo.jfif" alt="Little Red Dog Games" class="poster-image poster-logo">
+                            </div>
+                            <ul class="poster-highlights">
+                                <li>VFX Graph & EmberGen</li>
+                                <li>Character PBR Shader</li>
+                                <li>Fog of War System</li>
+                            </ul>
+                            <div class="poster-tags">
+                                <span>VFX Graph</span>
+                                <span>PBR</span>
+                                <span>URP</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="poster-light"></div>
+                </article>
+            </div>
+        </div>
+
+        <!-- Dark wall texture overlay -->
+        <div class="zone-overlay wall-texture"></div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- ZONE 3: SEA SURFACE - Full-screen Ocean   -->
+    <!-- ========================================== -->
+    <section id="surface" class="zone zone-surface" data-zone="surface">
+        <!-- Full-screen ocean surface with Gerstner waves -->
+        <canvas id="ocean-surface-canvas" class="ocean-canvas"></canvas>
+
+        <!-- Underwater transition overlay - bubbles and blur -->
+        <div class="underwater-transition" id="underwater-transition">
+            <div class="bubble-container">
+                <!-- Bubbles generated via CSS -->
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+                <div class="bubble"></div>
+            </div>
+            <div class="water-blur"></div>
+        </div>
+
+        <!-- Depth indicator during dive -->
+        <div class="dive-indicator">
+            <span class="depth-label" id="depth-label">Sea Level</span>
+        </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- ZONE 4: AQUARIUM - Skills                 -->
+    <!-- ========================================== -->
+    <section id="skills" class="zone zone-aquarium" data-zone="aquarium">
+        <div class="aquarium-room">
+            <!-- The glass panel -->
+            <div class="aquarium-glass">
+                <div class="glass-reflection"></div>
+                <div class="glass-edge glass-edge-left"></div>
+                <div class="glass-edge glass-edge-right"></div>
+
+                <!-- Aquarium interior - WebGL rendered -->
+                <div class="aquarium-interior" id="aquarium-interior">
+                    <!-- Fish and creatures rendered via canvas -->
+                    <canvas id="aquarium-canvas"></canvas>
+                </div>
+
+                <!-- Skill creatures with hover interactions -->
+                <div class="skill-creatures">
+                    <!-- Placeholder creatures - will be interactive -->
+                    <div class="creature anemone" data-skill="VFX & Particles">
+                        <div class="creature-glow"></div>
+                        <div class="creature-body"></div>
+                        <span class="creature-label">VFX & Particles</span>
+                    </div>
+
+                    <div class="creature jellyfish" data-skill="Shaders">
+                        <div class="creature-glow"></div>
+                        <div class="creature-body"></div>
+                        <span class="creature-label">Shaders</span>
+                    </div>
+
+                    <div class="creature coral" data-skill="C# & Tools">
+                        <div class="creature-glow"></div>
+                        <div class="creature-body"></div>
+                        <span class="creature-label">C# & Tools</span>
+                    </div>
+
+                    <div class="creature seaweed" data-skill="Environmental Art">
+                        <div class="creature-glow"></div>
+                        <div class="creature-body"></div>
+                        <span class="creature-label">Environmental Art</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Room elements -->
+            <div class="room-ambient">
+                <div class="ambient-light"></div>
+            </div>
+
+            <div class="section-label aquarium-label">
+                <span class="label-index">02</span>
+                <span class="label-text">Skills</span>
+            </div>
+        </div>
+
+        <div class="zone-overlay dark-room"></div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- ZONE 5: BUNKER - Projects Cinema          -->
+    <!-- ========================================== -->
+    <section id="projects" class="zone zone-bunker" data-zone="bunker">
+        <div class="bunker-interior">
+            <div class="section-label bunker-label">
+                <span class="label-index">03</span>
+                <span class="label-text">Projects</span>
+            </div>
+
+            <div class="cinema-screens">
+                <article class="screen" data-project="boids">
+                    <div class="screen-frame">
+                        <div class="screen-display">
+                            <div class="screen-content">
+                                <div class="screen-visual boids-visual"></div>
+                            </div>
+                            <div class="screen-scanlines"></div>
+                        </div>
+                        <div class="screen-light"></div>
+                    </div>
+                    <div class="screen-info">
+                        <h3 class="screen-title">Boids Simulation</h3>
+                        <p class="screen-desc">CPU-based boids for realistic marine life behavior with spatial partitioning optimization.</p>
+                        <div class="screen-tech">
+                            <span>Unity</span>
+                            <span>C#</span>
+                            <span>Compute</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="screen" data-project="pbr">
+                    <div class="screen-frame">
+                        <div class="screen-display">
+                            <div class="screen-content">
+                                <div class="screen-visual pbr-visual"></div>
+                            </div>
+                            <div class="screen-scanlines"></div>
+                        </div>
+                        <div class="screen-light"></div>
+                    </div>
+                    <div class="screen-info">
+                        <h3 class="screen-title">Character PBR Shader</h3>
+                        <p class="screen-desc">Custom shader with subsurface scattering, anisotropic highlights, and detail maps.</p>
+                        <div class="screen-tech">
+                            <span>HLSL</span>
+                            <span>Unity</span>
+                            <span>URP</span>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="screen" data-project="vfx">
+                    <div class="screen-frame">
+                        <div class="screen-display">
+                            <div class="screen-content">
+                                <div class="screen-visual vfx-visual"></div>
+                            </div>
+                            <div class="screen-scanlines"></div>
+                        </div>
+                        <div class="screen-light"></div>
+                    </div>
+                    <div class="screen-info">
+                        <h3 class="screen-title">VFX Graph Birds</h3>
+                        <p class="screen-desc">GPU-accelerated bird flocks with LOD system for large counts.</p>
+                        <div class="screen-tech">
+                            <span>VFX Graph</span>
+                            <span>GPU Particles</span>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </div>
+
+        <!-- Concrete/industrial overlay -->
+        <div class="zone-overlay concrete-texture"></div>
+        <!-- Spot lights -->
+        <div class="bunker-lights">
+            <div class="spot-light" style="--x: 20%;"></div>
+            <div class="spot-light" style="--x: 50%;"></div>
+            <div class="spot-light" style="--x: 80%;"></div>
+        </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- ZONE 6: CRYSTAL MINE - Contact            -->
+    <!-- ========================================== -->
+    <section id="contact" class="zone zone-mine" data-zone="mine">
+        <div class="mine-interior">
+            <!-- Crystal formations -->
+            <div class="crystal-formations">
+                <div class="crystal crystal-1"></div>
+                <div class="crystal crystal-2"></div>
+                <div class="crystal crystal-3"></div>
+                <div class="crystal crystal-4"></div>
+                <div class="crystal crystal-5"></div>
+            </div>
+
+            <!-- Glowing ambient particles -->
+            <canvas id="crystal-particles"></canvas>
+
+            <div class="mine-content">
+                <div class="section-label mine-label">
+                    <span class="label-index">04</span>
+                    <span class="label-text">Contact</span>
+                </div>
+
+                <div class="contact-beacon">
+                    <h2 class="contact-heading">
+                        Let's create<br>
+                        <em>something remarkable</em>
+                    </h2>
+
+                    <p class="contact-text">
+                        Interested in pushing the boundaries of real-time graphics together?
+                    </p>
+
+                    <div class="contact-links">
+                        <a href="mailto:contact.raphael.giulieri@gmail.com" class="contact-link primary">
+                            <span class="link-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="2" y="4" width="20" height="16" rx="2"/>
+                                    <path d="M22 6l-10 7L2 6"/>
+                                </svg>
+                            </span>
+                            <span class="link-text">contact.raphael.giulieri@gmail.com</span>
+                        </a>
+
+                        <a href="https://www.artstation.com/raphaelgiulieri" target="_blank" rel="noopener" class="contact-link">
+                            <span class="link-icon">
+                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M0 17.723l2.027 3.505h.001a2.424 2.424 0 0 0 2.164 1.333h13.457l-2.792-4.838H0zm24-3.012c0-.501-.136-.988-.383-1.413l-6.584-11.415a2.424 2.424 0 0 0-2.164-1.333H9.631l8.846 15.332h5.14c.248 0 .383-.127.383-.333V14.71zM8.462 0L0 14.711h4.319l4.143-7.177L12.605 0H8.462z"/>
+                                </svg>
+                            </span>
+                            <span class="link-text">ArtStation</span>
+                        </a>
+
+                        <a href="tel:+33648770368" class="contact-link">
+                            <span class="link-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                                </svg>
+                            </span>
+                            <span class="link-text">+33 6 48 77 03 68</span>
+                        </a>
+
+                        <div class="contact-location">
+                            <span class="link-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+                                    <circle cx="12" cy="10" r="3"/>
+                                </svg>
+                            </span>
+                            <span class="link-text">Nice, France</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Crystal glow effect -->
+            <div class="crystal-glow"></div>
+        </div>
+
+        <!-- Rock texture overlay -->
+        <div class="zone-overlay rock-texture"></div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <span class="footer-copy">© 2024 Raphael Giulieri</span>
+            <span class="footer-depth">Depth: Maximum</span>
+        </div>
+    </footer>
+
+    <script src="js/ocean-surface-shader.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>

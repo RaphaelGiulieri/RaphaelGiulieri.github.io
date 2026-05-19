@@ -1,0 +1,22 @@
+name = "rg-portfolio-chat"
+main = "src/index.js"
+compatibility_date = "2025-10-01"
+
+# After `wrangler kv:namespace create RATE_KV`, paste the printed id below.
+[[kv_namespaces]]
+binding = "RATE_KV"
+id = "c3b7905a57a74ae7b0eba1498304d590"
+
+[vars]
+ALLOWED_ORIGINS = "https://raphaelgiulieri.github.io,http://localhost:8000,http://127.0.0.1:8000"
+DAILY_PER_IP = "20"
+DAILY_GLOBAL = "100"
+MIN_MSG_INTERVAL_MS = "800"
+DUP_REJECT_TTL_S = "300"
+MIN_CONTENT_CHARS = "4"
+MODEL = "claude-haiku-4-5-20251001"
+MAX_OUTPUT_TOKENS = "400"
+
+# Secrets (NOT in this file):
+#   wrangler secret put ANTHROPIC_API_KEY
+#   wrangler secret put TURNSTILE_SECRET   (optional — when set, Turnstile is enforced)

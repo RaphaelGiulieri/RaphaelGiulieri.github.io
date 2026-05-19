@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boids · Raphael Giulieri</title>
+<style>
+    html, body { margin: 0; height: 100%; background: #0c0a07; color: #f0ebe0; font-family: "JetBrains Mono", ui-monospace, monospace; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; background: #0c0a07; }
+    .label { position: absolute; bottom: 12px; left: 12px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.78); pointer-events: none; line-height: 1.5; max-width: calc(100% - 24px); text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+    .label b { color: #ff4b1f; font-weight: 500; }
+    .controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .controls button, .controls .pop, .controls .speed { font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.85); background: rgba(12,10,7,0.45); border: 1px solid rgba(240,235,224,0.20); padding: 4px 8px; cursor: pointer; backdrop-filter: blur(6px); }
+    .controls button:hover { border-color: #ff4b1f; color: #ff4b1f; }
+    .controls .pop { cursor: default; color: rgba(240,235,224,0.55); }
+    .controls .pop b { color: #ff4b1f; font-weight: 500; }
+    .controls .speed { cursor: default; display: flex; align-items: center; gap: 8px; color: rgba(240,235,224,0.55); }
+    .controls .speed input { -webkit-appearance: none; appearance: none; width: 100px; height: 2px; background: rgba(240,235,224,0.25); outline: none; }
+    .controls .speed input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 8px; height: 12px; background: #ff4b1f; cursor: pointer; }
+    .controls .speed input::-moz-range-thumb { width: 8px; height: 12px; background: #ff4b1f; cursor: pointer; border: none; }
+    .controls .speed b { color: #ff4b1f; font-weight: 500; min-width: 28px; text-align: right; }
+    .err { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 13px; line-height: 1.6; color: #ff4b1f; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="controls">
+    <button id="reset">Reset</button>
+    <button id="predators">Predators · 3</button>
+    <button id="cursorMode">Cursor · Prey</button>
+    <label class="speed" title="Simulation speed">Speed <input id="speed" type="range" min="0.1" max="3.0" step="0.05" value="1.0"><b id="speedVal">1.00×</b></label>
+    <span class="pop" id="pop">Prey · <b>180</b></span>
+</div>
+<p class="label"><b>Boids · click to alternate cursor between prey and predator</b><br>Reynolds' three rules · CPU sim, WebGL2 trail texture · proper shader-driven fade · no canvas-2d residue</p>
+<script>
+(async () => {
+'use strict';
+
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
+if (!gl) {
+    document.body.innerHTML = '<p class="err">WebGL2 not available. The demo needs floating-point textures (EXT_color_buffer_float).</p>';
+    return;
+}
+if (!gl.getExtension('EXT_color_buffer_float')) {
+    document.body.innerHTML = '<p class="err">EXT_color_buffer_float not supported. Try a recent Chrome / Firefox / Safari.</p>';
+    return;
+}
+
+// ============================================================================
+// Shader loader — pulls each pass from its own .glsl file under shaders/boids/
+// so the source lives in a real GLSL file (with editor highlighting + lint),
+// not as an inline JS string.
+// ============================================================================
+
+const SHADER_DIR = 'shaders/boids/';
+async function loadShader(file) {
+    const r = await fetch(SHADER_DIR + file);
+    if (!r.ok) throw new Error(`Failed to load ${file}: ${r.status}`);
+    return r.text();
+}
+
+let VERT_QUAD, FRAG_FADE, VERT_BOID, FRAG_BOID, FRAG_SCREEN;
+try {
+    [VERT_QUAD, FRAG_FADE, VERT_BOID, FRAG_BOID, FRAG_SCREEN] = await Promise.all([
+        loadShader('quad.vert.glsl'),
+        loadShader('fade.frag.glsl'),
+        loadShader('boid.vert.glsl'),
+        loadShader('boid.frag.glsl'),
+        loadShader('screen.frag.glsl'),
+    ]);
+} catch (e) {
+    document.body.innerHTML = '<p class="err">Failed to load shaders: ' + e.message + '</p>';
+    return;
+}
+
+// ============================================================================
+// GL helpers
+// ============================================================================
+
+function compile(type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(sh));
+        throw new Error('shader compile failed');
+    }
+    return sh;
+}
+function makeProgram(vs, fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+    gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+        console.error(gl.getProgramInfoLog(p));
+        throw new Error('program link failed');
+    }
+    return p;
+}
+function makeFloatTex(w, h) {
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return t;
+}
+function makeFBO(tex) {
+    const f = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    return f;
+}
+
+// ============================================================================
+// Programs + geometry
+// ============================================================================
+
+const fadeProg   = makeProgram(VERT_QUAD, FRAG_FADE);
+const boidProg   = makeProgram(VERT_BOID, FRAG_BOID);
+const screenProg = makeProgram(VERT_QUAD, FRAG_SCREEN);
+
+// Fullscreen quad
+const quadVbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadVbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, -1,1, 1,-1, 1,1]), gl.STATIC_DRAW);
+
+// Boid template — single triangle, head at +X, base on -X
+const boidTemplateVbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, boidTemplateVbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+     1.0,  0.0,
+    -0.5,  0.5,
+    -0.5, -0.5,
+]), gl.STATIC_DRAW);
+
+// Per-instance buffer: each boid takes 8 floats (pos.x, pos.y, vel.x, vel.y, type, fear, hunt, flash)
+const STRIDE_FLOATS = 8;
+const boidInstanceVbo = gl.createBuffer();
+
+// VAO for boid splat: bind template + instance attribs once
+const boidVao = gl.createVertexArray();
+gl.bindVertexArray(boidVao);
+const aCorner = gl.getAttribLocation(boidProg, 'a_corner');
+const aPosI   = gl.getAttribLocation(boidProg, 'a_pos');
+const aVelI   = gl.getAttribLocation(boidProg, 'a_vel');
+const aStateI = gl.getAttribLocation(boidProg, 'a_state');
+gl.bindBuffer(gl.ARRAY_BUFFER, boidTemplateVbo);
+gl.enableVertexAttribArray(aCorner);
+gl.vertexAttribPointer(aCorner, 2, gl.FLOAT, false, 0, 0);
+gl.bindBuffer(gl.ARRAY_BUFFER, boidInstanceVbo);
+gl.enableVertexAttribArray(aPosI);
+gl.vertexAttribPointer(aPosI, 2, gl.FLOAT, false, STRIDE_FLOATS * 4, 0);
+gl.vertexAttribDivisor(aPosI, 1);
+gl.enableVertexAttribArray(aVelI);
+gl.vertexAttribPointer(aVelI, 2, gl.FLOAT, false, STRIDE_FLOATS * 4, 8);
+gl.vertexAttribDivisor(aVelI, 1);
+gl.enableVertexAttribArray(aStateI);
+gl.vertexAttribPointer(aStateI, 4, gl.FLOAT, false, STRIDE_FLOATS * 4, 16);
+gl.vertexAttribDivisor(aStateI, 1);
+gl.bindVertexArray(null);
+
+// Quad VAOs (one for each program that uses the quad)
+function makeQuadVao(prog) {
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVbo);
+    const a = gl.getAttribLocation(prog, 'a_pos');
+    gl.enableVertexAttribArray(a);
+    gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+    gl.bindVertexArray(null);
+    return vao;
+}
+const fadeVao   = makeQuadVao(fadeProg);
+const screenVao = makeQuadVao(screenProg);
+
+// Trail textures + FBOs (sized after first resize)
+let trailA = null, trailB = null, fboA = null, fboB = null;
+let texW = 0, texH = 0;
+
+function rebuildTrails() {
+    if (trailA) gl.deleteTexture(trailA);
+    if (trailB) gl.deleteTexture(trailB);
+    if (fboA) gl.deleteFramebuffer(fboA);
+    if (fboB) gl.deleteFramebuffer(fboB);
+    texW = canvas.width;
+    texH = canvas.height;
+    trailA = makeFloatTex(texW, texH);
+    trailB = makeFloatTex(texW, texH);
+    fboA = makeFBO(trailA);
+    fboB = makeFBO(trailB);
+    // Clear both to zero
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fboA);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+let W = 0, H = 0;
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = Math.floor(canvas.clientWidth  * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+    W = canvas.width; H = canvas.height;
+    rebuildTrails();
+}
+resize();
+new ResizeObserver(resize).observe(canvas);
+
+// ============================================================================
+// Boid CPU simulation
+// ============================================================================
+
+const TAU = Math.PI * 2;
+const N_PREY = 180;
+const PERCEPTION = 90;
+const PERCEPTION_SQ = PERCEPTION * PERCEPTION;
+const SEP_DIST = 28;
+const SEP_DIST_SQ = SEP_DIST * SEP_DIST;
+const PREY_SPEED = 2.4;
+const PREY_FLEE_SPEED = 3.6;
+const FEAR_DIST = 110;
+const FEAR_DIST_SQ = FEAR_DIST * FEAR_DIST;
+const MAX_FORCE = 0.06;
+const MAX_FORCE_FLEE = 0.18;
+
+const PRED_PERCEPTION = 220;
+const PRED_PERCEPTION_SQ = PRED_PERCEPTION * PRED_PERCEPTION;
+const PRED_SPEED = 3.0;
+const PRED_SEP_DIST = 90;
+const PRED_SEP_DIST_SQ = PRED_SEP_DIST * PRED_SEP_DIST;
+const PRED_LEAD = 12;
+const PRED_KILL_DIST = 8;
+const PRED_KILL_DIST_SQ = PRED_KILL_DIST * PRED_KILL_DIST;
+
+let nPredators = 3;
+let cursorMode = 'prey';
+let speedMul = 1.0;
+
+class Boid {
+    constructor(x, y, type = 'prey') {
+        this.x = x; this.y = y;
+        const a = Math.random() * TAU;
+        const s = 0.5 + Math.random() * 0.5;
+        this.vx = Math.cos(a) * s; this.vy = Math.sin(a) * s;
+        this.ax = 0; this.ay = 0;
+        this.type = type;
+        this.fearLevel = 0;
+        this.huntLevel = 0;
+        this.flashUntil = 0;
+    }
+
+    flockPrey(prey, predators, mouseX, mouseY, hasMouse) {
+        let alignX = 0, alignY = 0, alignN = 0;
+        let sepX = 0, sepY = 0;
+        let cohX = 0, cohY = 0, cohN = 0;
+        for (let i = 0; i < prey.length; i++) {
+            const o = prey[i];
+            if (o === this) continue;
+            const dx = o.x - this.x, dy = o.y - this.y;
+            const d2 = dx*dx + dy*dy;
+            if (d2 > PERCEPTION_SQ) continue;
+            alignX += o.vx; alignY += o.vy; alignN++;
+            cohX += o.x; cohY += o.y; cohN++;
+            if (d2 < SEP_DIST_SQ && d2 > 0.001) {
+                const inv = 1 / d2;
+                sepX -= dx * inv * 60;
+                sepY -= dy * inv * 60;
+            }
+        }
+        let fx = 0, fy = 0;
+        if (alignN > 0) {
+            alignX /= alignN; alignY /= alignN;
+            const al = Math.hypot(alignX, alignY);
+            if (al > 0.001) {
+                fx += (alignX / al * PREY_SPEED - this.vx) * 0.7;
+                fy += (alignY / al * PREY_SPEED - this.vy) * 0.7;
+            }
+        }
+        if (cohN > 0) {
+            const cx = cohX / cohN - this.x, cy = cohY / cohN - this.y;
+            const cl = Math.hypot(cx, cy);
+            if (cl > 0.001) {
+                fx += (cx / cl * PREY_SPEED - this.vx) * 0.5;
+                fy += (cy / cl * PREY_SPEED - this.vy) * 0.5;
+            }
+        }
+        const sl = Math.hypot(sepX, sepY);
+        if (sl > 0.001) {
+            fx += (sepX / sl * PREY_SPEED - this.vx) * 1.5;
+            fy += (sepY / sl * PREY_SPEED - this.vy) * 1.5;
+        }
+
+        let flee = 0, fleeX = 0, fleeY = 0;
+        for (let i = 0; i < predators.length; i++) {
+            const p = predators[i];
+            const dx = this.x - p.x, dy = this.y - p.y;
+            const d2 = dx*dx + dy*dy;
+            if (d2 > FEAR_DIST_SQ || d2 < 0.001) continue;
+            const d = Math.sqrt(d2);
+            const w = (FEAR_DIST - d) / FEAR_DIST;
+            fleeX += dx / d * w;
+            fleeY += dy / d * w;
+            flee = Math.max(flee, w);
+        }
+        if (cursorMode === 'predator' && hasMouse) {
+            const dx = this.x - mouseX, dy = this.y - mouseY;
+            const d2 = dx*dx + dy*dy;
+            if (d2 < FEAR_DIST_SQ && d2 > 0.001) {
+                const d = Math.sqrt(d2);
+                const w = (FEAR_DIST - d) / FEAR_DIST * 1.4;
+                fleeX += dx / d * w;
+                fleeY += dy / d * w;
+                flee = Math.max(flee, Math.min(1, w));
+            }
+        }
+        if (flee > 0.001) {
+            const fl = Math.hypot(fleeX, fleeY);
+            if (fl > 0.001) {
+                const desiredSpeed = PREY_SPEED + (PREY_FLEE_SPEED - PREY_SPEED) * flee;
+                fx += (fleeX / fl * desiredSpeed - this.vx) * 3.5;
+                fy += (fleeY / fl * desiredSpeed - this.vy) * 3.5;
+            }
+        }
+        this.fearLevel = flee;
+
+        const cap = flee > 0.1 ? MAX_FORCE_FLEE : MAX_FORCE;
+        const fmag = Math.hypot(fx, fy);
+        if (fmag > cap) { fx = fx / fmag * cap; fy = fy / fmag * cap; }
+        this.ax = fx; this.ay = fy;
+    }
+
+    flockPredator(predators, prey, mouseX, mouseY, hasMouse, cursorIsPrey) {
+        let nearest = null;
+        let nearestD2 = PRED_PERCEPTION_SQ;
+        let killIndex = -1;
+        for (let i = 0; i < prey.length; i++) {
+            const o = prey[i];
+            const dx = o.x - this.x, dy = o.y - this.y;
+            const d2 = dx*dx + dy*dy;
+            if (d2 < nearestD2) { nearestD2 = d2; nearest = o; }
+            if (d2 < PRED_KILL_DIST_SQ) killIndex = i;
+        }
+        if (killIndex >= 0) {
+            const v = prey[killIndex];
+            v.x = Math.random() * W;
+            v.y = Math.random() * H;
+            v.vx = (Math.random() - 0.5) * 2;
+            v.vy = (Math.random() - 0.5) * 2;
+            this.flashUntil = performance.now() + 220;
+        }
+
+        let target = nearest;
+        let targetVx = nearest ? nearest.vx : 0, targetVy = nearest ? nearest.vy : 0;
+        if (cursorIsPrey && hasMouse) {
+            const dx = mouseX - this.x, dy = mouseY - this.y;
+            const d2 = dx*dx + dy*dy;
+            if (d2 < nearestD2 * 1.6) {
+                target = { x: mouseX, y: mouseY };
+                targetVx = 0; targetVy = 0;
+                nearestD2 = d2;
+            }
+        }
+
+        let fx = 0, fy = 0;
+        if (target) {
+            const tx = target.x + targetVx * PRED_LEAD;
+            const ty = target.y + targetVy * PRED_LEAD;
+            const dx = tx - this.x, dy = ty - this.y;
+            const d = Math.hypot(dx, dy);
+            if (d > 0.001) {
+                fx += (dx / d * PRED_SPEED - this.vx) * 1.2;
+                fy += (dy / d * PRED_SPEED - this.vy) * 1.2;
+            }
+            this.huntLevel = Math.min(1, 1 - Math.sqrt(nearestD2) / PRED_PERCEPTION + 0.2);
+        } else {
+            this.huntLevel *= 0.94;
+        }
+
+        let sepX = 0, sepY = 0;
+        for (let i = 0; i < predators.length; i++) {
+            const p = predators[i];
+            if (p === this) continue;
+            const dx = p.x - this.x, dy = p.y - this.y;
+            const d2 = dx*dx + dy*dy;
+            if (d2 < PRED_SEP_DIST_SQ && d2 > 0.001) {
+                const inv = 1 / d2;
+                sepX -= dx * inv * 200;
+                sepY -= dy * inv * 200;
+            }
+        }
+        const sl = Math.hypot(sepX, sepY);
+        if (sl > 0.001) {
+            fx += (sepX / sl * PRED_SPEED - this.vx) * 0.6;
+            fy += (sepY / sl * PRED_SPEED - this.vy) * 0.6;
+        }
+
+        const cap = MAX_FORCE * 1.5;
+        const fmag = Math.hypot(fx, fy);
+        if (fmag > cap) { fx = fx / fmag * cap; fy = fy / fmag * cap; }
+        this.ax = fx; this.ay = fy;
+    }
+
+    integrate() {
+        this.vx += this.ax; this.vy += this.ay;
+        const sp = Math.hypot(this.vx, this.vy);
+        let cap;
+        if (this.type === 'predator') cap = PRED_SPEED;
+        else cap = PREY_SPEED + (PREY_FLEE_SPEED - PREY_SPEED) * this.fearLevel;
+        if (sp > cap) { this.vx = this.vx / sp * cap; this.vy = this.vy / sp * cap; }
+        this.x += this.vx * speedMul;
+        this.y += this.vy * speedMul;
+        if (this.x < 0) this.x += W; else if (this.x >= W) this.x -= W;
+        if (this.y < 0) this.y += H; else if (this.y >= H) this.y -= H;
+    }
+}
+
+let prey = [];
+let predators = [];
+function spawn() {
+    prey = [];
+    predators = [];
+    for (let i = 0; i < N_PREY; i++) {
+        prey.push(new Boid(Math.random() * W, Math.random() * H, 'prey'));
+    }
+    for (let i = 0; i < nPredators; i++) {
+        const side = i % 4;
+        let px, py;
+        if      (side === 0) { px = 10;     py = Math.random() * H; }
+        else if (side === 1) { px = W - 10; py = Math.random() * H; }
+        else if (side === 2) { px = Math.random() * W; py = 10; }
+        else                 { px = Math.random() * W; py = H - 10; }
+        predators.push(new Boid(px, py, 'predator'));
+    }
+}
+spawn();
+window.addEventListener('resize', () => setTimeout(spawn, 50));
+
+// ============================================================================
+// UI handlers
+// ============================================================================
+
+document.getElementById('reset').addEventListener('click', spawn);
+
+const predBtn = document.getElementById('predators');
+const PRED_COUNTS = [0, 2, 3, 4, 6];
+function refreshPredButton() {
+    predBtn.textContent = `Predators · ${nPredators}`;
+    predBtn.style.color = nPredators > 0 ? '#ff4b1f' : '';
+    predBtn.style.borderColor = nPredators > 0 ? '#ff4b1f' : '';
+}
+refreshPredButton();
+predBtn.addEventListener('click', () => {
+    const idx = PRED_COUNTS.indexOf(nPredators);
+    nPredators = PRED_COUNTS[(idx + 1) % PRED_COUNTS.length];
+    refreshPredButton();
+    spawn();
+});
+
+const cursorModeBtn = document.getElementById('cursorMode');
+function refreshCursorModeBtn() {
+    cursorModeBtn.textContent = `Cursor · ${cursorMode === 'predator' ? 'Predator' : 'Prey'}`;
+    const on = cursorMode === 'predator';
+    cursorModeBtn.style.color = on ? '#ff4b1f' : '';
+    cursorModeBtn.style.borderColor = on ? '#ff4b1f' : '';
+}
+refreshCursorModeBtn();
+cursorModeBtn.addEventListener('click', () => {
+    cursorMode = (cursorMode === 'prey') ? 'predator' : 'prey';
+    refreshCursorModeBtn();
+});
+canvas.addEventListener('click', () => {
+    cursorMode = (cursorMode === 'prey') ? 'predator' : 'prey';
+    refreshCursorModeBtn();
+});
+
+const speedEl = document.getElementById('speed');
+const speedValEl = document.getElementById('speedVal');
+function refreshSpeed() {
+    speedMul = parseFloat(speedEl.value);
+    speedValEl.textContent = `${speedMul.toFixed(2)}×`;
+}
+speedEl.addEventListener('input', refreshSpeed);
+refreshSpeed();
+
+let mouseX = -1e6, mouseY = -1e6, hasMouse = false;
+canvas.addEventListener('pointermove', e => {
+    const r = canvas.getBoundingClientRect();
+    const dpr = canvas.width / r.width;
+    mouseX = (e.clientX - r.left) * dpr;
+    mouseY = (e.clientY - r.top)  * dpr;
+    hasMouse = true;
+});
+canvas.addEventListener('pointerleave', () => { hasMouse = false; });
+
+// ============================================================================
+// Render
+// ============================================================================
+
+const uFadeRate = gl.getUniformLocation(fadeProg, 'u_fade');
+const uFadeTrail = gl.getUniformLocation(fadeProg, 'u_trail');
+const uBoidRes = gl.getUniformLocation(boidProg, 'u_res');
+const uScreenTrail = gl.getUniformLocation(screenProg, 'u_trail');
+const uScreenRes = gl.getUniformLocation(screenProg, 'u_res');
+const uScreenCursor = gl.getUniformLocation(screenProg, 'u_cursor');
+const uScreenHasMouse = gl.getUniformLocation(screenProg, 'u_hasMouse');
+const uScreenCursorMode = gl.getUniformLocation(screenProg, 'u_cursorMode');
+const uScreenFearDist = gl.getUniformLocation(screenProg, 'u_fearDist');
+
+// Per-frame boid instance buffer (reuploaded each frame)
+let instanceData = new Float32Array((N_PREY + 6) * STRIDE_FLOATS);
+
+function packInstances(now) {
+    const total = prey.length + predators.length;
+    if (instanceData.length < total * STRIDE_FLOATS) {
+        instanceData = new Float32Array(total * STRIDE_FLOATS);
+    }
+    let i = 0;
+    for (let k = 0; k < prey.length; k++) {
+        const b = prey[k];
+        instanceData[i++] = b.x;
+        instanceData[i++] = b.y;
+        instanceData[i++] = b.vx;
+        instanceData[i++] = b.vy;
+        instanceData[i++] = 0;            // type = prey
+        instanceData[i++] = b.fearLevel;
+        instanceData[i++] = 0;
+        instanceData[i++] = 0;
+    }
+    for (let k = 0; k < predators.length; k++) {
+        const b = predators[k];
+        const flash = now < b.flashUntil ? 1 : 0;
+        instanceData[i++] = b.x;
+        instanceData[i++] = b.y;
+        instanceData[i++] = b.vx;
+        instanceData[i++] = b.vy;
+        instanceData[i++] = 1;            // type = predator
+        instanceData[i++] = 0;
+        instanceData[i++] = b.huntLevel;
+        instanceData[i++] = flash;
+    }
+    return total;
+}
+
+// Per-frame fade rate. Solving (1 - F)^60 = 0.05 for a one-second decay-to-5%
+// gives F ≈ 0.0488. We bias slightly higher so the trail clears within ~0.7 s.
+const FADE_PER_FRAME = 0.93;
+
+function frame() {
+    const now = performance.now();
+
+    // ---- CPU sim ----
+    const cursorIsPrey = (cursorMode === 'prey');
+    for (let i = 0; i < prey.length; i++) prey[i].flockPrey(prey, predators, mouseX, mouseY, hasMouse);
+    for (let i = 0; i < predators.length; i++) predators[i].flockPredator(predators, prey, mouseX, mouseY, hasMouse, cursorIsPrey);
+    for (let i = 0; i < prey.length; i++) prey[i].integrate();
+    for (let i = 0; i < predators.length; i++) predators[i].integrate();
+
+    // ---- Pack instances ----
+    const total = packInstances(now);
+    gl.bindBuffer(gl.ARRAY_BUFFER, boidInstanceVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.DYNAMIC_DRAW);
+
+    // ---- Pass 1: Fade trailA → fboB ----
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fboB);
+    gl.viewport(0, 0, texW, texH);
+    gl.useProgram(fadeProg);
+    gl.bindVertexArray(fadeVao);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, trailA);
+    gl.uniform1i(uFadeTrail, 0);
+    gl.uniform1f(uFadeRate, FADE_PER_FRAME);
+    gl.disable(gl.BLEND);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    // ---- Pass 2: Splat boids onto trailB ----
+    gl.useProgram(boidProg);
+    gl.bindVertexArray(boidVao);
+    gl.uniform2f(uBoidRes, texW, texH);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, total);
+    gl.disable(gl.BLEND);
+
+    // ---- Pass 3: Composite to screen ----
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, W, H);
+    gl.useProgram(screenProg);
+    gl.bindVertexArray(screenVao);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, trailB);
+    gl.uniform1i(uScreenTrail, 0);
+    gl.uniform2f(uScreenRes, W, H);
+    gl.uniform2f(uScreenCursor, mouseX, mouseY);
+    gl.uniform1i(uScreenHasMouse, hasMouse ? 1 : 0);
+    gl.uniform1i(uScreenCursorMode, cursorMode === 'predator' ? 1 : 0);
+    gl.uniform1f(uScreenFearDist, FEAR_DIST);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+    // ---- Swap ----
+    [trailA, trailB] = [trailB, trailA];
+    [fboA, fboB]     = [fboB, fboA];
+
+    requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

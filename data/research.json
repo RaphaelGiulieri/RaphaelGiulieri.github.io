@@ -1,0 +1,131 @@
+{
+  "updated": "2026-04-23",
+  "cards": [
+    {
+      "id": "lifesim_npc_autonomy",
+      "order": 1,
+      "title": "NPCs that actually live",
+      "pitch": "Per-NPC memory, planning, and social dynamics pushed far enough that the simulation reads as alive. TTS/STT for first-person immersion instead of typed dialogue. The work already done in LifeSim's 4-layer AI and Kokoro/Moonshine speech stack is the foundation — the research is how far it stretches before cost or coherence breaks.",
+      "the_question": "What's the right split between symbolic planning and LLM inference per NPC-tick to keep a village coherent for 20+ hours of play at under $1/hr? Where does emergent behaviour stop looking like reasoning and start looking like noise?",
+      "groundwork": ["lifesim"],
+      "needs": [
+        "Cheap reliable local inference (8-13B) for the Layer-2 NPC-decision tier",
+        "Grammar-constrained decoding so JSON actions never break the sim",
+        "Long-horizon memory compression that survives 20+ in-game days"
+      ],
+      "status": "active_exploration"
+    },
+    {
+      "id": "structured_output_reliability",
+      "order": 2,
+      "title": "LLM structured-output reliability",
+      "pitch": "The hardest part of shipping agentic systems isn't the reasoning — it's the JSON not breaking. Grammar-constrained decoding, self-repair loops, schema-shape validators, and evaluation harnesses that measure format-accuracy as a first-class metric alongside task-accuracy.",
+      "the_question": "What's the minimum-overhead enforcement stack — across Anthropic tool-use, Ollama grammars, and homegrown validators — that gives multi-agent systems contract-level reliability on their internal JSON?",
+      "groundwork": ["lifesim", "aitrading"],
+      "needs": [
+        "An open eval harness that tracks format regression across model versions",
+        "Generalised self-repair (parse-fail → regenerate with error context → validate) as a library",
+        "Benchmark corpus of the 20 most common schema breakages"
+      ],
+      "status": "active_exploration"
+    },
+    {
+      "id": "multi_agent_orchestration",
+      "order": 3,
+      "title": "Multi-agent orchestration",
+      "pitch": "Team-of-agents patterns that run for hours, spend within a budget, route messages through a typed bus, and leave an audit trail you can reconstruct a decision from. AITrading's team_orchestrator + MCP architecture is the existing implementation; the research is what else this pattern is good for — autonomous code review, research operators, long-horizon simulation steering.",
+      "the_question": "How do you run an agent-of-agents system overnight without it drifting, looping, or silently burning budget? What's the minimum-viable supervision loop?",
+      "groundwork": ["aitrading", "lifesim"],
+      "needs": [
+        "An ergonomic MCP-server pattern for inter-agent routing",
+        "Budget-accounting instrumentation that surfaces as first-class data, not logs",
+        "Ephemeral-agent lifecycle (spawn / task / reduce / dispose) as a library"
+      ],
+      "status": "active_exploration"
+    },
+    {
+      "id": "procedural_world_generation",
+      "order": 4,
+      "title": "Procedural world generation",
+      "pitch": "Infinite worlds with continuous streaming, WFC and marching-cubes backends working together, biome systems that respect global constraints while producing local variety. Remain's terrain + scatter + forest and LifeSim's AI-first world gen both push in this direction; the unified next step is a framework that lets either share the underlying solver.",
+      "the_question": "What's the right seam between solvers (WFC / noise / marching cubes / L-system) and game logic so the same world-gen stack powers a survival sandbox and a multiplayer grassland?",
+      "groundwork": ["remain", "lifesim", "unity_legacy"],
+      "needs": [
+        "A shared streaming-chunk API across Unity, WebGPU, and Hytale SDK back-ends",
+        "Constraint-propagation primitives faster than current per-cell WFC",
+        "Biome-transition blending that survives player fast-travel"
+      ],
+      "status": "seeking_collaborators"
+    },
+    {
+      "id": "real_time_graphics_rd",
+      "order": 5,
+      "title": "Real-time graphics R&D",
+      "pitch": "Cloud volumetrics, GPU grass + scatter, 7-pass retro post-processing, Gaussian-splatting experiments. This lives at /tech-art/ as a showcase, but the research thread continues — the next waves are compute-driven fluids with proper boundary conditions, Gaussian splats as a game-asset format, temporal super-resolution without the TAA ghosting.",
+      "the_question": "Can a solo developer ship a WebGPU game with Gaussian-splat assets, reconstructed per-frame at 60 FPS, on consumer hardware?",
+      "groundwork": ["remain", "qatar_360", "unity_legacy"],
+      "needs": [
+        "A faster splat-renderer than the current best-public implementation",
+        "A pipeline that takes photogrammetry → splats → compressed runtime format",
+        "WebGPU subgroup/quad operations (when they ship) for compute-side splat sort"
+      ],
+      "status": "active_exploration"
+    },
+    {
+      "id": "trading_research",
+      "order": 6,
+      "title": "Algorithmic trading research",
+      "pitch": "Beyond AITrading-as-is: better signals (options-flow, cross-market regime detection, LLM-extracted alpha), principled Kelly sizing, walk-forward-with-regime-split validation, conformal prediction thresholds calibrated per ticker. The framework exists; the open problem is surfacing non-obvious alpha from unstructured sources.",
+      "the_question": "What's the honest Sharpe ceiling for a solo retail quant with 1 GPU, Ollama, and a year's worth of experimentation budget?",
+      "groundwork": ["aitrading"],
+      "needs": [
+        "Cleaner options-chain + unusual-activity data",
+        "Evaluation harness that separates data-mining overfit from genuine alpha",
+        "Cross-asset regime features that don't require hand-labelling"
+      ],
+      "status": "active_exploration"
+    },
+    {
+      "id": "massive_training",
+      "order": 7,
+      "title": "Training on massive setups",
+      "pitch": "Multi-GPU distributed training, pipeline parallelism, efficient fine-tuning, long-context pre-training on synthetic data. Not currently possible on a single RTX 3070; the ambition is explicit. Where the capacity goes: bespoke NPC-brain models for LifeSim, specialised vision models for technical-art tasks, domain-tuned trading models.",
+      "the_question": "What's the per-GPU-hour floor for training a useful 3B-parameter task model from scratch in 2026?",
+      "groundwork": ["aitrading", "imagegen"],
+      "needs": [
+        "Compute (cloud or co-op)",
+        "A well-scoped problem that justifies training-from-scratch vs fine-tuning an open model",
+        "Distributed-training expertise (DeepSpeed / FSDP / Megatron patterns)"
+      ],
+      "status": "theoretical"
+    },
+    {
+      "id": "gpu_compute_simulation",
+      "order": 8,
+      "title": "GPU compute for simulation",
+      "pitch": "Particle systems, rigid and soft-body physics, fluid solvers — running as compute shaders instead of engine physics. The Qatar 360° project has a 2D incompressible fluid sim; Remain has a 256×256 Navier-Stokes cloud layer. The next step is 3D compute fluid running at game tick rates, and compute-driven rigid body with constraint solving.",
+      "the_question": "Where's the WebGPU-vs-CUDA performance gap for particle/physics sims in 2026, and can WebGPU close enough of it to ship AAA-grade simulation in a browser game?",
+      "groundwork": ["remain", "qatar_360", "unity_legacy"],
+      "needs": [
+        "WGSL atomic + subgroup operations matching Vulkan feature parity",
+        "A reference 3D fluid solver for WebGPU (currently nothing public at quality)",
+        "Benchmarking corpus (WebGPU vs CUDA vs Metal) for real game workloads"
+      ],
+      "status": "active_exploration"
+    },
+    {
+      "id": "ecology_engineering",
+      "order": 9,
+      "title": "Energy & ecology engineering",
+      "pitch": "Thermal modelling of building envelopes, renewable-energy sizing, efficiency optimisation for residential and agricultural installations. Background from prior work on heat isolation, renewables, and the [solar-install modelling](gaec_solar) for a French dairy farm. Applying software craft — simulation, optimisation, tooling — to decarbonisation is the direction.",
+      "the_question": "What's missing between the existing off-the-shelf thermal-simulation tools (EnergyPlus, IES-VE) and what a small-farm / retrofit client actually needs? Where does better tooling cut material misuse?",
+      "groundwork": ["gaec_solar"],
+      "needs": [
+        "Partnership with a renewable-energy or thermal-retrofit firm for real workloads",
+        "Access to a dataset of actual energy-bill outcomes for calibration",
+        "A user cohort for whom current tooling is too heavyweight"
+      ],
+      "status": "seeking_collaborators"
+    }
+  ]
+}

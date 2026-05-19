@@ -1,0 +1,33 @@
+data/_scratch/shots/
+data/_scratch/diag.json
+data/_archive/
+/tmp/
+*.log
+
+# --- Private docs — repo is public, anything here would be world-readable ---
+# Keep CV PDFs and full CV markdown out of the public repo. The Experience
+# section is rendered from data/experiences.json (curated, anonymised), not
+# from the raw CV.
+assets/cv-*.pdf
+assets/cv.pdf
+data/cv.md
+data/private/
+
+# Internal exploration / planning notes (RMS internals, server IPs, account
+# vault paths, etc). Keep them off the public site.
+data/_scratch/phase1-exploration-findings.md
+data/_scratch/asset-needs.md
+data/_scratch/*-private.md
+
+# --- Cloudflare Worker local state — contains account id, email, cache.
+# Worker secrets (ANTHROPIC_API_KEY) live in Cloudflare's encrypted store,
+# never on disk, but wrangler's local cache + the .dev.vars file would be
+# real leaks if pushed.
+worker/.wrangler/
+worker/node_modules/
+worker/.dev.vars
+**/.wrangler/
+
+# --- Node bookkeeping (in case anything ever installs deps) ---
+node_modules/
+.npm/

@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raphael Giulieri — n° 01</title>
+    <meta name="description" content="Raphael Giulieri — creative technologist. Games, WebGPU, shaders, ML, automation, 3D. Based in Nice, France.">
+
+    <meta property="og:title" content="Raphael Giulieri — creative technologist">
+    <meta property="og:description" content="A designed catalogue of work across games, graphics, ML, automation and 3D. n° 01.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://raphaelgiulieri.github.io/">
+    <meta property="og:locale" content="en_US">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="theme-color" content="#f3ece0" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0c0a07" media="(prefers-color-scheme: dark)">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Geist:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <!-- Progress rail — right-edge section markers -->
+    <aside class="rail" aria-hidden="true">
+        <ol class="rail-list">
+            <li data-section="hero"><span>00</span><em>Masthead</em></li>
+            <li data-section="work"><span>01</span><em>Work</em></li>
+            <li data-section="research"><span>02</span><em>Research</em></li>
+            <li data-section="experience"><span>03</span><em>Timeline</em></li>
+            <li data-section="contact"><span>04</span><em>Colophon</em></li>
+        </ol>
+    </aside>
+
+    <!-- Masthead -->
+    <header class="masthead" id="masthead">
+        <div class="masthead-inner">
+            <a href="#hero" class="masthead-brand" aria-label="Raphael Giulieri — home">
+                <span class="brand-sigil">R<i>·</i>G</span>
+                <span class="brand-issue">n° 01 · Spring 2026</span>
+            </a>
+            <nav class="masthead-nav" aria-label="Primary">
+                <a href="#work"><span class="nav-n">01</span>Work</a>
+                <a href="#research"><span class="nav-n">02</span>Research</a>
+                <a href="#experience"><span class="nav-n">03</span>Experience</a>
+                <a href="#contact"><span class="nav-n">04</span>Colophon</a>
+            </nav>
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle colour theme">
+                <span class="theme-dot"></span>
+                <span class="theme-label">—</span>
+            </button>
+        </div>
+    </header>
+
+    <main id="main">
+
+        <!-- § 00 — Hero -->
+        <section id="hero" class="hero" data-section="hero">
+            <div class="hero-grid">
+                <p class="hero-eyebrow revealable">
+                    <span class="eyebrow-dot"></span>
+                    Creative technologist
+                    <span class="eyebrow-sep">/</span>
+                    Nice<span class="thin"> / </span>FR
+                    <span class="eyebrow-sep">/</span>
+                    <span class="eyebrow-avail">Available for freelance</span>
+                </p>
+                <h1 class="hero-name revealable">
+                    <span class="name-line name-line-1">Raphael</span>
+                    <span class="name-line name-line-2"><em>Giulieri.</em></span>
+                </h1>
+                <p class="hero-tagline revealable">
+                    Multi-disciplinary creative technologist — games, web, ML, 3D, automation. I work across engines and stacks on the problems that need a graphics mindset, a systems mindset, and an engineering mindset all at once.
+                </p>
+                <dl class="hero-stats revealable">
+                    <div><dt>Since</dt><dd>2020</dd></div>
+                    <div><dt>Catalogue</dt><dd>38</dd></div>
+                    <div><dt>Clients</dt><dd>6<span class="stat-sup">*</span></dd></div>
+                    <div><dt>Disciplines</dt><dd>9</dd></div>
+                </dl>
+            </div>
+
+            <section class="hero-disciplines revealable" aria-label="Disciplines">
+                <div class="discipline-col">
+                    <h3 class="discipline-head"><em>Graphics &amp; shading</em></h3>
+                    <ul class="discipline-list">
+                        <li>WebGPU &amp; WGSL</li>
+                        <li>HLSL (URP, HDRP, Wallpaper Engine)</li>
+                        <li>GLSL (Three.js, WebGL2)</li>
+                        <li>GPGPU compute &amp; Navier-Stokes</li>
+                        <li>Reaction-diffusion</li>
+                        <li>Raymarching, signed-distance fields</li>
+                        <li>Procedural worlds (WFC, L-systems, simplex, Voronoi)</li>
+                        <li>Retro post-processing (Kuwahara, CRT, Bayer dither)</li>
+                    </ul>
+                </div>
+                <div class="discipline-col">
+                    <h3 class="discipline-head"><em>ML &amp; AI</em></h3>
+                    <ul class="discipline-list">
+                        <li>Claude API + tool use</li>
+                        <li>Multi-agent orchestration</li>
+                        <li>Local diffusion stack (ComfyUI, SDXL, IP-Adapter, LoRA)</li>
+                        <li>XGBoost + walk-forward validation</li>
+                        <li>Conformal prediction</li>
+                        <li>Kelly / HRP sizing</li>
+                        <li>Cheap-inference NPCs (4-layer LLM stack)</li>
+                    </ul>
+                </div>
+                <div class="discipline-col">
+                    <h3 class="discipline-head"><em>Web, systems, tooling</em></h3>
+                    <ul class="discipline-list">
+                        <li>FastAPI / Flask back-ends</li>
+                        <li>React 19 + TypeScript</li>
+                        <li>Cloudflare Workers + KV</li>
+                        <li>Browser automation (nodriver, curl-cffi, Akamai-grade)</li>
+                        <li>3D CAD scripting (SketchUp Python)</li>
+                        <li>Engine modding (Hytale Java, Darktide DMF/Lua, Bitsquid)</li>
+                        <li>Custom C++ engines, Unity URP &amp; HDRP</li>
+                    </ul>
+                </div>
+            </section>
+
+            <p class="hero-catalogue-link revealable">
+                <a href="#work"><em>The catalogue begins below</em> <span aria-hidden="true">↓</span></a>
+            </p>
+        </section>
+
+        <!-- § 01 — Selected Work -->
+        <section id="work" class="section section-work" data-section="work">
+            <header class="section-head">
+                <p class="section-marker">§ 01 / Selected work</p>
+                <h2 class="section-title">Work<span class="title-dot">.</span></h2>
+                <p class="section-lede">
+                    A catalogue of 38 projects across client engagements and personal research. Filter by category; click any entry for the full case study. The <em>archive</em> reveals the rest of the catalogue — R&amp;D sketches, utilities, legacy experiments.
+                </p>
+            </header>
+
+            <nav class="filter-strip" role="tablist" aria-label="Filter projects">
+                <span class="filter-legend">Filter <span aria-hidden="true">/</span></span>
+                <button role="tab" aria-selected="true" data-filter="all" class="filter-item is-active">All</button>
+                <i aria-hidden="true">·</i>
+                <button role="tab" aria-selected="false" data-filter="game" class="filter-item">Games</button>
+                <i aria-hidden="true">·</i>
+                <button role="tab" aria-selected="false" data-filter="graphics" class="filter-item">Graphics</button>
+                <i aria-hidden="true">·</i>
+                <button role="tab" aria-selected="false" data-filter="web" class="filter-item">Web</button>
+                <i aria-hidden="true">·</i>
+                <button role="tab" aria-selected="false" data-filter="ml" class="filter-item">ML</button>
+                <i aria-hidden="true">·</i>
+                <button role="tab" aria-selected="false" data-filter="automation" class="filter-item">Automation</button>
+                <i aria-hidden="true">·</i>
+                <button role="tab" aria-selected="false" data-filter="tools" class="filter-item">Tools</button>
+                <i aria-hidden="true">·</i>
+                <button role="tab" aria-selected="false" data-filter="client" class="filter-item">Client</button>
+                <i aria-hidden="true">·</i>
+                <button role="tab" aria-selected="false" data-filter="mod" class="filter-item">Mods</button>
+                <i aria-hidden="true">·</i>
+                <button role="tab" aria-selected="false" data-filter="rnd" class="filter-item">R&amp;D</button>
+            </nav>
+
+            <div class="projects-grid" id="projectsGrid">
+                <!-- rendered -->
+            </div>
+
+            <button class="archive-link" id="archiveToggle" aria-expanded="false">
+                <span class="archive-label">Show archive</span>
+                <span class="archive-count" id="archiveCount"></span>
+                <span class="archive-arrow" aria-hidden="true">↓</span>
+            </button>
+        </section>
+
+        <!-- § 02 — Research -->
+        <section id="research" class="section section-research" data-section="research">
+            <header class="section-head">
+                <p class="section-marker">§ 02 / Most wanted</p>
+                <h2 class="section-title">Research I'd love to do next<span class="title-dot">.</span></h2>
+                <p class="section-lede">
+                    Nine directions — some are extensions of shipped work, some are open ambitions, a few are invitations to collaborate. Flag the ones that resonate.
+                </p>
+            </header>
+
+            <div class="research-grid" id="researchGrid">
+                <!-- rendered -->
+            </div>
+        </section>
+
+        <!-- § 03 — Experience -->
+        <section id="experience" class="section section-experience" data-section="experience">
+            <header class="section-head">
+                <p class="section-marker">§ 03 / Timeline</p>
+                <h2 class="section-title">Experience<span class="title-dot">.</span></h2>
+                <p class="section-lede">
+                    Freelance and studio engagements, most recent first. Clients are anonymised by domain; every entry links to the project dossier where applicable.
+                </p>
+            </header>
+
+            <ol class="timeline" id="experienceTimeline">
+                <!-- rendered -->
+            </ol>
+        </section>
+
+        <!-- § 04 — Colophon -->
+        <section id="contact" class="section section-colophon" data-section="contact">
+            <header class="section-head">
+                <p class="section-marker">§ 04 / Colophon</p>
+                <h2 class="section-title">Get in touch<span class="title-dot">.</span></h2>
+                <p class="section-lede">
+                    Available for freelance engagements. Based in Nice, France; happy to work remotely across Europe and further if the project warrants it.
+                </p>
+            </header>
+
+            <div class="colophon-grid">
+                <section class="colophon-block">
+                    <h3 class="colophon-h">Correspondence</h3>
+                    <ul class="colophon-list">
+                        <li>
+                            <span class="colophon-key">E</span>
+                            <a href="mailto:contact.raphael.giulieri@gmail.com" class="colophon-val">contact.raphael.giulieri@gmail.com</a>
+                        </li>
+                        <li>
+                            <span class="colophon-key">T</span>
+                            <a href="tel:+33648770368" class="colophon-val">+33 6 48 77 03 68</a>
+                        </li>
+                    </ul>
+                </section>
+
+                <section class="colophon-block">
+                    <h3 class="colophon-h">Presences</h3>
+                    <ul class="colophon-list">
+                        <li>
+                            <span class="colophon-key">A</span>
+                            <a href="https://www.artstation.com/raphaelgiulieri" target="_blank" rel="noopener" class="colophon-val">artstation.com/raphaelgiulieri</a>
+                        </li>
+                    </ul>
+                </section>
+
+                <section class="colophon-block colophon-imprint">
+                    <h3 class="colophon-h">Imprint</h3>
+                    <p>
+                        This site was set in <em>Fraunces</em> &amp; <em>Geist</em>.
+                        Drawn, coded and deployed by hand. No framework, no analytics, no cookies.
+                    </p>
+                    <p class="imprint-meta">
+                        n° 01 · Spring 2026 · Nice, France.
+                    </p>
+                </section>
+            </div>
+
+            <p class="end-mark" aria-hidden="true">§ end <span class="end-rule"></span></p>
+        </section>
+    </main>
+
+    <!-- Dossier (case study) -->
+    <div class="dossier" id="modal" role="dialog" aria-modal="true" aria-labelledby="dossierTitle" aria-hidden="true">
+        <div class="dossier-backdrop" data-modal-close></div>
+        <article class="dossier-sheet" tabindex="-1">
+            <header class="dossier-hero" id="dossierHero" aria-label="Project hero"><!-- rendered --></header>
+            <div class="dossier-meta-strip" id="dossierMetaStrip"><!-- rendered --></div>
+            <div class="dossier-grid">
+                <div class="dossier-body" id="dossierBody"><!-- rendered --></div>
+                <aside class="dossier-aside" aria-label="Dossier sidebar">
+                    <div class="dossier-stat" id="dossierStat"><!-- rendered --></div>
+                    <nav class="dossier-toc" id="dossierToc" aria-label="In this dossier"><!-- rendered --></nav>
+                </aside>
+            </div>
+            <footer class="dossier-next" id="dossierNext"><!-- rendered --></footer>
+        </article>
+    </div>
+
+    <script src="js/main.js" defer></script>
+    <script src="js/chat.js" defer></script>
+</body>
+</html>

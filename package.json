@@ -1,0 +1,11 @@
+{
+  "name": "raphaelgiulieri-github-io",
+  "private": true,
+  "description": "Portfolio site — vanilla HTML/CSS/JS. The `scripts` below exist solely to keep the chat-assistant corpus in sync with data/*.json.",
+  "scripts": {
+    "build-corpus": "node scripts/build-corpus.mjs",
+    "deploy-chat": "node scripts/build-corpus.mjs && cd worker && wrangler deploy",
+    "dev-worker": "cd worker && wrangler dev --local --port 8787",
+    "tail-worker": "cd worker && wrangler tail"
+  }
+}

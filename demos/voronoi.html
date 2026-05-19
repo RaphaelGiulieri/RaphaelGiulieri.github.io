@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voronoi mosaic · Raphael Giulieri</title>
+<style>
+    html, body { margin: 0; height: 100%; background: #0c0a07; color: #f0ebe0; font-family: "JetBrains Mono", ui-monospace, monospace; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    .label { position: absolute; bottom: 12px; left: 12px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.78); pointer-events: none; line-height: 1.5; max-width: calc(100% - 24px); text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+    .label b { color: #ff4b1f; font-weight: 500; }
+    .controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; }
+    .controls button { font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.55); background: rgba(12,10,7,0.55); border: 1px solid rgba(240,235,224,0.18); padding: 4px 8px; cursor: pointer; backdrop-filter: blur(6px); }
+    .controls button.on { color: #ff4b1f; border-color: #ff4b1f; }
+    .err { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 13px; line-height: 1.6; color: #ff4b1f; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="controls">
+    <button data-mode="0" class="on">Cells</button>
+    <button data-mode="1">Edges</button>
+    <button data-mode="2">Worley F2-F1</button>
+    <button data-mode="3">Cracked</button>
+</div>
+<p class="label"><b>Voronoi mosaic · move the cursor to drag a site</b><br>40 animated sites · single-pass fragment shader · 5×5 hash grid lookup · F1 + F2 nearest-distances · cells coloured by site hash · cursor commandeers the first site</p>
+<script>
+(() => {
+'use strict';
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
+if (!gl) {
+    document.body.innerHTML = '<p class="err">Needs WebGL2. Try a recent Chrome / Firefox / Safari.</p>';
+    return;
+}
+
+const VERT = `#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
+void main() {
+    v_uv = a_pos;
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 fragColor;
+
+uniform vec2  u_resolution;
+uniform float u_time;
+uniform vec2  u_mouse;       // in cell-space (0..N), or negative if absent
+uniform int   u_mode;
+uniform float u_cellsX;      // hash grid resolution
+
+vec2 hash22(vec2 p) {
+    vec3 q = vec3(p, 1.0);
+    q = vec3(dot(q, vec3(127.1, 311.7, 74.7)),
+             dot(q, vec3(269.5, 183.3, 246.1)),
+             dot(q, vec3(113.5, 271.9, 124.6)));
+    return fract(sin(q.xy) * 43758.5453);
+}
+
+float hash21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+vec3 paletteForCell(vec2 cell) {
+    // Mouse-controlled cell gets a saturated vermilion accent.
+    if (cell.x < -100.0 || (cell.x == -1.0 && cell.y == 0.0)) return vec3(1.00, 0.32, 0.10);
+    // Discrete colour from a 4-stop warm palette: vermilion / amber / bone / shadow.
+    float h = hash21(cell);
+    if (h < 0.30) return vec3(0.95, 0.36, 0.14);   // vermilion
+    if (h < 0.60) return vec3(1.00, 0.62, 0.20);   // amber
+    if (h < 0.85) return vec3(0.90, 0.82, 0.62);   // bone
+    return vec3(0.20, 0.10, 0.05);                  // shadow
+}
+
+// Sample a Voronoi site within a cell, animated.
+vec2 cellSite(vec2 cell) {
+    vec2 h = hash22(cell);
+    // Animate in a small loop within the cell
+    return 0.5 + 0.45 * vec2(
+        sin(u_time * 0.6 + h.x * 6.28),
+        cos(u_time * 0.5 + h.y * 6.28)
+    );
+}
+
+void main() {
+    vec2 pix = gl_FragCoord.xy / u_resolution.xy;
+    pix.x *= u_resolution.x / u_resolution.y;
+    vec2 p = pix * u_cellsX;       // domain in cell units
+
+    // Find F1 (closest) and F2 (second-closest) sites by searching the 3x3 neighbourhood.
+    // The search uses 5x5 to reduce edge artifacts when cells animate close to the boundary.
+    float f1 = 1e9, f2 = 1e9;
+    vec2 cell1 = vec2(-999.0);
+    vec2 base = floor(p);
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            vec2 cell = base + vec2(float(dx), float(dy));
+            vec2 site = cell + cellSite(cell);
+            float d = distance(p, site);
+            if (d < f1) {
+                f2 = f1;
+                f1 = d;
+                cell1 = cell;
+            } else if (d < f2) {
+                f2 = d;
+            }
+        }
+    }
+
+    // Mouse site (global cell-space position) is treated as an additional site
+    // that lives outside the grid — competes with all generated sites for F1/F2.
+    if (u_mouse.x >= 0.0) {
+        float dm = distance(p, u_mouse);
+        if (dm < f1) {
+            f2 = f1;
+            f1 = dm;
+            cell1 = vec2(-1.0);    // sentinel for the mouse site palette
+        } else if (dm < f2) {
+            f2 = dm;
+        }
+    }
+
+    vec3 col;
+
+    if (u_mode == 0) {
+        // Cells: flat-fill each Voronoi region with its site colour, with a slight
+        // gradient toward the site to add depth.
+        vec3 base = paletteForCell(cell1);
+        float dist = clamp(f1, 0.0, 1.4);
+        col = base * (1.05 - dist * 0.45);
+        // Black border at boundaries (where F2-F1 is small)
+        float edge = f2 - f1;
+        col *= smoothstep(0.0, 0.04, edge);
+    } else if (u_mode == 1) {
+        // Edges: just the boundaries between cells, glowing.
+        float edge = f2 - f1;
+        float line = smoothstep(0.06, 0.0, edge);
+        col = vec3(1.0, 0.30, 0.10) * line + vec3(0.04, 0.03, 0.02);
+    } else if (u_mode == 2) {
+        // Worley F2-F1: classic shader-art look — gradient based on edge distance.
+        float v = f2 - f1;
+        col = mix(vec3(0.95, 0.36, 0.14), vec3(0.10, 0.06, 0.03), pow(1.0 - v, 1.5));
+        col *= 0.6 + 0.4 * v;
+    } else {
+        // Cracked: F1 darkens cells centres, edges glow vermilion.
+        vec3 base = paletteForCell(cell1) * 0.5;
+        float crack = smoothstep(0.04, 0.0, f2 - f1);
+        col = base * (0.4 + 0.6 * f1) + vec3(1.0, 0.45, 0.18) * crack * 1.2;
+    }
+
+    // Subtle vignette
+    vec2 vUV = v_uv * 0.5;
+    col *= 1.0 - 0.18 * dot(vUV, vUV);
+
+    // Tonemap + gamma
+    col = col / (1.0 + col);
+    col = pow(col, vec3(1.0 / 2.2));
+    fragColor = vec4(col, 1.0);
+}`;
+
+function compile(type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(sh));
+        throw new Error('shader compile failed');
+    }
+    return sh;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link failed');
+
+const u_res = gl.getUniformLocation(prog, 'u_resolution');
+const u_time = gl.getUniformLocation(prog, 'u_time');
+const u_mouse = gl.getUniformLocation(prog, 'u_mouse');
+const u_mode = gl.getUniformLocation(prog, 'u_mode');
+const u_cellsX = gl.getUniformLocation(prog, 'u_cellsX');
+
+const quadBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'a_pos');
+
+let mode = 0;
+document.querySelectorAll('.controls button').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.controls button').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        mode = parseInt(btn.dataset.mode, 10);
+    });
+});
+
+const CELLS_X = 9.0;
+let mouseX = -1, mouseY = -1, hasMouse = false;
+canvas.addEventListener('pointermove', e => {
+    const r = canvas.getBoundingClientRect();
+    mouseX = (e.clientX - r.left) / r.width;
+    mouseY = 1 - (e.clientY - r.top) / r.height;
+    hasMouse = true;
+});
+canvas.addEventListener('pointerleave', () => { hasMouse = false; });
+
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.6);
+    canvas.width  = Math.floor(canvas.clientWidth  * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+}
+resize();
+new ResizeObserver(resize).observe(canvas);
+
+const start = performance.now();
+function frame() {
+    const aspect = canvas.width / canvas.height;
+    let mu, mv;
+    if (hasMouse) {
+        // Map screen-UV to cell-space same as shader, then offset within cell (0,0)
+        const px = mouseX * aspect * CELLS_X;
+        const py = mouseY * CELLS_X;
+        // Mouse "site" should be the local position inside whichever cell the mouse
+        // is in. To override cell (0,0), pass a position relative to that cell.
+        // Simplest: the cell containing the mouse holds a site at its local (mu, mv).
+        // We override cell (0,0) regardless — visual hack but reads as cursor-attached.
+        mu = ((px - Math.floor(px)));
+        mv = ((py - Math.floor(py)));
+        // Actually we want the mouse to BE a site that takes over wherever it is.
+        // Cleaner: override cell(0,0)'s site location to be at the mouse's GLOBAL position.
+        mu = px;  // put site directly at mouse global position
+        mv = py;
+    } else {
+        mu = -1; mv = -1;
+    }
+
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform2f(u_res, canvas.width, canvas.height);
+    gl.uniform1f(u_time, (performance.now() - start) * 0.001);
+    gl.uniform2f(u_mouse, mu, mv);
+    gl.uniform1i(u_mode, mode);
+    gl.uniform1f(u_cellsX, CELLS_X);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

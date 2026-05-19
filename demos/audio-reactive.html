@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio-reactive shader · Raphael Giulieri</title>
+<style>
+    html, body { margin: 0; height: 100%; background: #0c0a07; color: #f0ebe0; font-family: "JetBrains Mono", ui-monospace, monospace; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .label { position: absolute; bottom: 12px; left: 12px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.78); pointer-events: none; line-height: 1.5; max-width: calc(100% - 24px); text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+    .label b { color: #ff4b1f; font-weight: 500; }
+    .controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; }
+    .controls button, .controls .pop { font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.85); background: rgba(12,10,7,0.45); border: 1px solid rgba(240,235,224,0.20); padding: 4px 8px; cursor: pointer; backdrop-filter: blur(6px); }
+    .controls button:hover, .controls button.on { border-color: #ff4b1f; color: #ff4b1f; }
+    .controls .pop { cursor: default; color: rgba(240,235,224,0.55); }
+    .controls .pop b { color: #ff4b1f; font-weight: 500; }
+    .err { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 13px; line-height: 1.6; color: #ff4b1f; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="controls">
+    <button id="play">Play synth</button>
+    <span class="pop" id="amp">Spectrum · <b>—</b></span>
+</div>
+<p class="label"><b>Audio-reactive shader · click play</b><br>WebAudio synth · 4 oscillators · 1024-FFT analyser → 128-bin spectrum texture · radial kaleidoscopic shader warped by bass / mid / treble bands · port of WallpaperShader's NAudio→HLSL pipeline</p>
+<script>
+(() => {
+'use strict';
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
+if (!gl) {
+    document.body.innerHTML = '<p class="err">Needs WebGL2. Try a recent Chrome / Firefox / Safari.</p>';
+    return;
+}
+
+// --- WebAudio synth -------------------------------------------------------
+let actx = null;
+let analyser = null;
+let synthGain = null;
+let isPlaying = false;
+let spectrumBuf = new Uint8Array(128);
+
+function startSynth() {
+    if (actx) { actx.resume(); return; }
+    actx = new (window.AudioContext || window.webkitAudioContext)();
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.6;
+
+    synthGain = actx.createGain();
+    synthGain.gain.value = 0.0;
+    synthGain.connect(analyser);
+    analyser.connect(actx.destination);
+
+    // Slow chord progression: 4 chords looping every ~16s.
+    const chords = [
+        [55.00, 110.00, 164.81, 220.00, 261.63],   // A minor-ish
+        [49.00,  98.00, 146.83, 196.00, 246.94],   // G
+        [43.65,  87.31, 130.81, 174.61, 220.00],   // F
+        [55.00, 110.00, 174.61, 220.00, 277.18],   // A min7-ish
+    ];
+    const oscs = [];
+    for (let i = 0; i < 5; i++) {
+        const o = actx.createOscillator();
+        o.type = i === 0 ? 'sawtooth' : 'sine';
+        o.frequency.value = 110;
+        const g = actx.createGain();
+        g.gain.value = i === 0 ? 0.15 : 0.06;
+        o.connect(g);
+        // Lowpass filter on the bass oscillator for warmth
+        if (i === 0) {
+            const lp = actx.createBiquadFilter();
+            lp.type = 'lowpass';
+            lp.frequency.value = 800;
+            lp.Q.value = 4;
+            // Modulate filter frequency with an LFO for movement
+            const lfo = actx.createOscillator();
+            lfo.frequency.value = 0.18;
+            const lfoGain = actx.createGain();
+            lfoGain.gain.value = 600;
+            lfo.connect(lfoGain).connect(lp.frequency);
+            lfo.start();
+            g.disconnect();
+            o.connect(lp);
+            lp.connect(g);
+        }
+        g.connect(synthGain);
+        o.start();
+        oscs.push({ o, g });
+    }
+
+    // Sequencer: change chords every 4 seconds with smooth transitions
+    function scheduleChord(idx, when) {
+        const chord = chords[idx];
+        for (let i = 0; i < oscs.length; i++) {
+            oscs[i].o.frequency.cancelScheduledValues(when);
+            oscs[i].o.frequency.setValueAtTime(oscs[i].o.frequency.value, when);
+            oscs[i].o.frequency.exponentialRampToValueAtTime(chord[i], when + 0.5);
+        }
+    }
+    let chordIdx = 0;
+    function nextStep() {
+        const t = actx.currentTime;
+        scheduleChord(chordIdx, t);
+        chordIdx = (chordIdx + 1) % chords.length;
+        setTimeout(nextStep, 4000);
+    }
+    nextStep();
+
+    // Add a slow rhythmic pulse: the gain swells gently every 2 seconds for the bass.
+    function pulse() {
+        const t = actx.currentTime;
+        oscs[0].g.gain.cancelScheduledValues(t);
+        oscs[0].g.gain.setValueAtTime(oscs[0].g.gain.value, t);
+        oscs[0].g.gain.linearRampToValueAtTime(0.30, t + 0.05);
+        oscs[0].g.gain.exponentialRampToValueAtTime(0.10, t + 0.8);
+        setTimeout(pulse, 2000);
+    }
+    pulse();
+
+    // Master fade-in
+    synthGain.gain.cancelScheduledValues(actx.currentTime);
+    synthGain.gain.setValueAtTime(0.0, actx.currentTime);
+    synthGain.gain.linearRampToValueAtTime(0.5, actx.currentTime + 1.2);
+}
+
+function stopSynth() {
+    if (!actx) return;
+    synthGain.gain.cancelScheduledValues(actx.currentTime);
+    synthGain.gain.setValueAtTime(synthGain.gain.value, actx.currentTime);
+    synthGain.gain.linearRampToValueAtTime(0.0, actx.currentTime + 0.2);
+}
+
+const playBtn = document.getElementById('play');
+const ampEl = document.getElementById('amp');
+playBtn.addEventListener('click', () => {
+    isPlaying = !isPlaying;
+    if (isPlaying) {
+        startSynth();
+        playBtn.textContent = 'Pause';
+        playBtn.classList.add('on');
+    } else {
+        stopSynth();
+        playBtn.textContent = 'Play synth';
+        playBtn.classList.remove('on');
+    }
+});
+
+// --- Spectrum texture ------------------------------------------------------
+const spectrumTex = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, spectrumTex);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+const initSpec = new Uint8Array(128);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 128, 1, 0, gl.RED, gl.UNSIGNED_BYTE, initSpec);
+
+// --- Shader ----------------------------------------------------------------
+const VERT = `#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
+void main() {
+    v_uv = a_pos;
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 fragColor;
+
+uniform vec2  u_resolution;
+uniform float u_time;
+uniform sampler2D u_spectrum;
+uniform float u_bass;
+uniform float u_mid;
+uniform float u_treble;
+
+const float PI = 3.14159265359;
+
+float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+
+void main() {
+    vec2 ndc = (gl_FragCoord.xy / u_resolution.xy) * 2.0 - 1.0;
+    ndc.x *= u_resolution.x / u_resolution.y;
+
+    // Polar coordinates centred on the canvas
+    float r = length(ndc);
+    float a = atan(ndc.y, ndc.x);
+
+    // Kaleidoscopic fold: 6-fold radial symmetry, modulated by bass.
+    float folds = 6.0 + floor(u_bass * 6.0);
+    float aFold = mod(a, 2.0 * PI / folds) - (PI / folds);
+    aFold = abs(aFold);
+
+    // Sample spectrum: feed angle and radius through the spectrum bins.
+    float specAngle = aFold / (PI / folds);
+    float specR = clamp(r * 0.7 + u_treble * 0.2, 0.0, 1.0);
+    float specBin = mix(specAngle, specR, 0.5);
+    float spec = texture(u_spectrum, vec2(specBin, 0.5)).r;
+
+    // Radial bands modulated by spectrum + treble pulse.
+    float band = sin(r * 18.0 - u_time * 1.4 + u_treble * 6.0) * 0.5 + 0.5;
+    band *= smoothstep(0.0, 0.05, abs(sin(aFold * 3.0 - u_time * 0.6)));
+
+    // Pulsing core
+    float pulseRadius = 0.18 + u_bass * 0.35;
+    float core = smoothstep(pulseRadius, pulseRadius - 0.10, r);
+
+    // Energy ring at the bass-driven radius
+    float ring = smoothstep(0.04, 0.0, abs(r - pulseRadius));
+
+    // Compose intensity
+    float intensity = 0.0;
+    intensity += spec * (0.6 + 0.6 * u_mid);
+    intensity += band * 0.45 * (0.4 + u_mid);
+    intensity += core * 1.2;
+    intensity += ring * 1.8;
+
+    // Color: vermilion → amber → bone, hue shifted by treble
+    float h = 0.06 + 0.08 * u_treble;
+    vec3 c1 = vec3(1.00, 0.30, 0.12);  // vermilion
+    vec3 c2 = vec3(1.00, 0.62, 0.20);  // amber
+    vec3 c3 = vec3(0.95, 0.86, 0.65);  // bone
+    vec3 col = mix(c1, c2, smoothstep(0.0, 0.6, intensity));
+    col = mix(col, c3, smoothstep(0.7, 1.6, intensity));
+    col *= intensity;
+
+    // Background haze — deepens at low energy so the visual breathes.
+    float haze = exp(-r * 1.4) * 0.15 * (0.4 + u_bass);
+    col += vec3(0.95, 0.36, 0.12) * haze;
+
+    // Outer fade
+    col *= smoothstep(1.6, 0.5, r);
+
+    // Faint grain so flat areas have texture
+    float g = (hash(gl_FragCoord.xy + u_time * 60.0) - 0.5) * 0.04;
+    col += g;
+
+    // Tonemap + gamma
+    col = col / (1.0 + col);
+    col = pow(col, vec3(1.0 / 2.2));
+    fragColor = vec4(col, 1.0);
+}`;
+
+function compile(type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(sh));
+        throw new Error('shader compile failed');
+    }
+    return sh;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link failed');
+
+const u_res = gl.getUniformLocation(prog, 'u_resolution');
+const u_time = gl.getUniformLocation(prog, 'u_time');
+const u_specU = gl.getUniformLocation(prog, 'u_spectrum');
+const u_bass = gl.getUniformLocation(prog, 'u_bass');
+const u_mid = gl.getUniformLocation(prog, 'u_mid');
+const u_treble = gl.getUniformLocation(prog, 'u_treble');
+
+const quadBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'a_pos');
+
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.6);
+    canvas.width  = Math.floor(canvas.clientWidth  * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+}
+resize();
+new ResizeObserver(resize).observe(canvas);
+
+// Synthetic spectrum when audio isn't playing — so the demo still moves on first paint.
+const fakeSpec = new Uint8Array(128);
+function fillFakeSpectrum(t) {
+    for (let i = 0; i < 128; i++) {
+        const f = i / 128;
+        const wave = Math.sin(t * (1 + f * 4)) * 0.5 + 0.5;
+        const env = Math.exp(-f * 2.5);
+        fakeSpec[i] = Math.floor(wave * env * 200);
+    }
+    return fakeSpec;
+}
+
+const start = performance.now();
+function frame() {
+    const t = (performance.now() - start) * 0.001;
+
+    let bass = 0, mid = 0, treble = 0;
+    let spec;
+    if (isPlaying && analyser) {
+        const raw = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(raw);
+        // Downsample to 128 bins
+        for (let i = 0; i < 128; i++) {
+            const j = Math.floor(i / 128 * raw.length);
+            spectrumBuf[i] = raw[j];
+        }
+        spec = spectrumBuf;
+        // Bands
+        for (let i = 0; i < 16; i++) bass   += raw[i];
+        for (let i = 16; i < 64; i++) mid    += raw[i];
+        for (let i = 64; i < raw.length; i++) treble += raw[i];
+        bass   /= (16 * 255);
+        mid    /= (48 * 255);
+        treble /= ((raw.length - 64) * 255);
+        ampEl.innerHTML = `Spectrum · <b>${(bass + mid + treble) > 0.05 ? 'live' : 'silent'}</b>`;
+    } else {
+        spec = fillFakeSpectrum(t);
+        bass   = 0.4 + 0.3 * Math.sin(t * 0.5);
+        mid    = 0.3 + 0.2 * Math.sin(t * 0.7 + 1.0);
+        treble = 0.2 + 0.2 * Math.sin(t * 1.1 + 2.0);
+        ampEl.innerHTML = `Spectrum · <b>idle</b>`;
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, spectrumTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 128, 1, gl.RED, gl.UNSIGNED_BYTE, spec);
+
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, spectrumTex);
+    gl.uniform1i(u_specU, 0);
+    gl.uniform2f(u_res, canvas.width, canvas.height);
+    gl.uniform1f(u_time, t);
+    gl.uniform1f(u_bass, bass);
+    gl.uniform1f(u_mid, mid);
+    gl.uniform1f(u_treble, treble);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wave function collapse · Raphael Giulieri</title>
+<style>
+    html, body { margin: 0; height: 100%; background: #0c0a07; color: #f0ebe0; font-family: "JetBrains Mono", ui-monospace, monospace; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .label { position: absolute; bottom: 12px; left: 12px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.78); pointer-events: none; line-height: 1.5; max-width: calc(100% - 24px); text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+    .label b { color: #ff4b1f; font-weight: 500; }
+    .controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; }
+    .controls button, .controls .pop { font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.85); background: rgba(12,10,7,0.45); border: 1px solid rgba(240,235,224,0.20); padding: 4px 8px; cursor: pointer; backdrop-filter: blur(6px); }
+    .controls button:hover { border-color: #ff4b1f; color: #ff4b1f; }
+    .controls .pop { cursor: default; color: rgba(240,235,224,0.55); }
+    .controls .pop b { color: #ff4b1f; font-weight: 500; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="controls">
+    <button id="restart">Restart</button>
+    <button id="speed">Speed · 1×</button>
+    <span class="pop" id="status"><b>collapsing</b></span>
+</div>
+<p class="label"><b>Wave function collapse · circuitry tileset</b><br>Pick the lowest-entropy cell · collapse to a random tile · propagate adjacency constraints · backtrack on contradiction · 11 tiles, 6 sockets, 40×24 grid</p>
+<script>
+(() => {
+'use strict';
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const speedBtn = document.getElementById('speed');
+
+let W = 0, H = 0;
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = Math.floor(canvas.clientWidth  * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+    W = canvas.width; H = canvas.height;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+resize();
+new ResizeObserver(resize).observe(canvas);
+
+// --- Tile definitions ------------------------------------------------------
+// Each tile has 4 edge-sockets [N, E, S, W]. Two adjacent tiles agree if the
+// shared edge has the same socket symbol. "0" = empty edge, "1" = pipe end.
+//
+// Tile drawing is done procedurally (no images) by stamping line primitives.
+const TILES = [
+    // index, sockets [N,E,S,W], weight
+    { id:'empty',  s:['0','0','0','0'], w: 1.5, draw: drawEmpty },
+    { id:'cross',  s:['1','1','1','1'], w: 0.6, draw: drawCross },
+    { id:'horiz',  s:['0','1','0','1'], w: 1.0, draw: drawHoriz },
+    { id:'vert',   s:['1','0','1','0'], w: 1.0, draw: drawVert },
+    { id:'tn',     s:['1','1','0','1'], w: 0.7, draw: drawTN },
+    { id:'te',     s:['1','1','1','0'], w: 0.7, draw: drawTE },
+    { id:'ts',     s:['0','1','1','1'], w: 0.7, draw: drawTS },
+    { id:'tw',     s:['1','0','1','1'], w: 0.7, draw: drawTW },
+    { id:'cnw',    s:['1','0','0','1'], w: 0.8, draw: drawCNW },
+    { id:'cne',    s:['1','1','0','0'], w: 0.8, draw: drawCNE },
+    { id:'cse',    s:['0','1','1','0'], w: 0.8, draw: drawCSE },
+    { id:'csw',    s:['0','0','1','1'], w: 0.8, draw: drawCSW },
+];
+const N = TILES.length;
+
+// Tile drawing helpers — all draw centred in a unit square [0,1]² with the
+// given context already translated and scaled to one cell.
+const VERMILION = '#ff4b1f';
+const AMBER     = '#f4a23c';
+const BONE      = '#cdb98a';
+const DUST      = 'rgba(240,235,224,0.10)';
+
+function drawEmpty(c) {
+    // Tiny dot to mark the cell center; cell otherwise blank.
+    c.fillStyle = DUST;
+    c.beginPath(); c.arc(0.5, 0.5, 0.04, 0, Math.PI * 2); c.fill();
+}
+function drawHoriz(c) {
+    pipeLine(c, 0, 0.5, 1, 0.5);
+    pipeNode(c, 0.5, 0.5);
+}
+function drawVert(c) {
+    pipeLine(c, 0.5, 0, 0.5, 1);
+    pipeNode(c, 0.5, 0.5);
+}
+function drawCross(c) {
+    pipeLine(c, 0, 0.5, 1, 0.5);
+    pipeLine(c, 0.5, 0, 0.5, 1);
+    pipeNode(c, 0.5, 0.5, true);
+}
+function drawTN(c) { drawT(c, 'N'); }
+function drawTE(c) { drawT(c, 'E'); }
+function drawTS(c) { drawT(c, 'S'); }
+function drawTW(c) { drawT(c, 'W'); }
+function drawT(c, side) {
+    if (side === 'N') { pipeLine(c, 0,0.5, 1,0.5); pipeLine(c, 0.5,0, 0.5,0.5); }
+    if (side === 'E') { pipeLine(c, 0.5,0, 0.5,1); pipeLine(c, 0.5,0.5, 1,0.5); }
+    if (side === 'S') { pipeLine(c, 0,0.5, 1,0.5); pipeLine(c, 0.5,0.5, 0.5,1); }
+    if (side === 'W') { pipeLine(c, 0.5,0, 0.5,1); pipeLine(c, 0,0.5, 0.5,0.5); }
+    pipeNode(c, 0.5, 0.5, true);
+}
+function drawCNW(c) { pipeArc(c, 'NW'); }
+function drawCNE(c) { pipeArc(c, 'NE'); }
+function drawCSE(c) { pipeArc(c, 'SE'); }
+function drawCSW(c) { pipeArc(c, 'SW'); }
+function pipeArc(c, corner) {
+    // Quarter-circle from one cell edge to the adjacent edge.
+    let cx, cy, a0, a1;
+    if (corner === 'NW') { cx = 0; cy = 0; a0 = 0; a1 = Math.PI/2; }
+    if (corner === 'NE') { cx = 1; cy = 0; a0 = Math.PI/2; a1 = Math.PI; }
+    if (corner === 'SE') { cx = 1; cy = 1; a0 = Math.PI; a1 = 1.5*Math.PI; }
+    if (corner === 'SW') { cx = 0; cy = 1; a0 = 1.5*Math.PI; a1 = 2*Math.PI; }
+    c.strokeStyle = AMBER;
+    c.lineWidth = 0.16;
+    c.beginPath(); c.arc(cx, cy, 0.5, a0, a1); c.stroke();
+    c.strokeStyle = VERMILION;
+    c.lineWidth = 0.06;
+    c.beginPath(); c.arc(cx, cy, 0.5, a0, a1); c.stroke();
+}
+function pipeLine(c, x0, y0, x1, y1) {
+    c.strokeStyle = AMBER;
+    c.lineWidth = 0.16;
+    c.lineCap = 'butt';
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+    c.strokeStyle = VERMILION;
+    c.lineWidth = 0.06;
+    c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+}
+function pipeNode(c, x, y, big) {
+    const r = big ? 0.13 : 0.085;
+    c.fillStyle = '#0c0a07';
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = VERMILION;
+    c.lineWidth = 0.04;
+    c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.stroke();
+}
+
+// --- WFC -------------------------------------------------------------------
+// Grid of cells. Each cell holds a set of allowed tile indices.
+// "Lowest entropy" is the cell with fewest options > 1.
+//
+// Adjacency: tile A can be neighbour of tile B in direction d if
+// A.s[d] === B.s[oppositeDir(d)].
+const DIRS = [[0,-1],[1,0],[0,1],[-1,0]];   // N, E, S, W
+const OPP  = [2,3,0,1];
+
+function precomputeAdjacency() {
+    // adj[d][a] = array of tile indices b that fit when b is in direction d from a
+    const adj = [[],[],[],[]];
+    for (let d = 0; d < 4; d++) {
+        for (let a = 0; a < N; a++) {
+            const fits = [];
+            for (let b = 0; b < N; b++) {
+                if (TILES[a].s[d] === TILES[b].s[OPP[d]]) fits.push(b);
+            }
+            adj[d].push(fits);
+        }
+    }
+    return adj;
+}
+const ADJ = precomputeAdjacency();
+
+// Grid sized to canvas (target ~36x22 cells regardless of panel size)
+let cols, rows, cellSize;
+let grid;          // grid[i] = Uint8Array of length N (1 = allowed)
+let collapsed;     // grid[i] = -1 if not collapsed yet, else tile index
+let cellsRemaining;
+let propagationQueue = [];
+let restartCount = 0;
+let stepsPerFrame = 4;
+
+function configureGrid() {
+    const targetCols = Math.max(20, Math.min(48, Math.floor(W / 50)));
+    cellSize = Math.floor(W / targetCols);
+    cols = Math.floor(W / cellSize);
+    rows = Math.floor(H / cellSize);
+    grid = new Array(cols * rows);
+    collapsed = new Int8Array(cols * rows);
+    for (let i = 0; i < cols * rows; i++) {
+        const opts = new Uint8Array(N);
+        for (let t = 0; t < N; t++) opts[t] = 1;
+        grid[i] = opts;
+        collapsed[i] = -1;
+    }
+    cellsRemaining = cols * rows;
+    propagationQueue = [];
+}
+
+function entropyOf(opts) {
+    let n = 0;
+    for (let t = 0; t < N; t++) n += opts[t];
+    return n;
+}
+
+function pickLowestEntropy() {
+    let bestN = 1e9;
+    let bestList = [];
+    for (let i = 0; i < cols * rows; i++) {
+        if (collapsed[i] !== -1) continue;
+        const n = entropyOf(grid[i]);
+        if (n === 0) return -2;  // contradiction
+        if (n === 1) continue;   // implicitly collapsed; will be picked up
+        if (n < bestN) { bestN = n; bestList = [i]; }
+        else if (n === bestN) bestList.push(i);
+    }
+    if (bestList.length === 0) {
+        // Maybe everything is collapsed already (entropy 1 cells get auto-set on next sweep)
+        for (let i = 0; i < cols * rows; i++) {
+            if (collapsed[i] === -1) {
+                if (entropyOf(grid[i]) === 1) return i;
+            }
+        }
+        return -1;  // done
+    }
+    return bestList[Math.floor(Math.random() * bestList.length)];
+}
+
+function collapseCell(i) {
+    const opts = grid[i];
+    let totalW = 0;
+    for (let t = 0; t < N; t++) if (opts[t]) totalW += TILES[t].w;
+    let r = Math.random() * totalW;
+    let chosen = -1;
+    for (let t = 0; t < N; t++) {
+        if (!opts[t]) continue;
+        r -= TILES[t].w;
+        if (r <= 0) { chosen = t; break; }
+    }
+    if (chosen === -1) {
+        for (let t = 0; t < N; t++) if (opts[t]) { chosen = t; break; }
+    }
+    for (let t = 0; t < N; t++) opts[t] = (t === chosen) ? 1 : 0;
+    collapsed[i] = chosen;
+    cellsRemaining--;
+    propagationQueue.push(i);
+    return true;
+}
+
+function propagate() {
+    let safety = 200000;
+    while (propagationQueue.length > 0 && safety-- > 0) {
+        const i = propagationQueue.shift();
+        const cx = i % cols;
+        const cy = (i / cols) | 0;
+        // For each neighbour, intersect its options with what i allows.
+        for (let d = 0; d < 4; d++) {
+            const nx = cx + DIRS[d][0], ny = cy + DIRS[d][1];
+            if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue;
+            const j = nx + ny * cols;
+            if (collapsed[j] !== -1) continue;
+            const myOpts = grid[i];
+            // Allowed neighbour tiles = union over my allowed tiles of adj[d][me]
+            const allow = new Uint8Array(N);
+            for (let me = 0; me < N; me++) {
+                if (!myOpts[me]) continue;
+                const fits = ADJ[d][me];
+                for (let k = 0; k < fits.length; k++) allow[fits[k]] = 1;
+            }
+            const nbrOpts = grid[j];
+            let changed = false;
+            let entropy = 0;
+            for (let t = 0; t < N; t++) {
+                if (nbrOpts[t] && !allow[t]) { nbrOpts[t] = 0; changed = true; }
+                entropy += nbrOpts[t];
+            }
+            if (entropy === 0) return false; // contradiction
+            if (changed) propagationQueue.push(j);
+            if (entropy === 1 && collapsed[j] === -1) {
+                // Auto-collapse fully constrained cells
+                for (let t = 0; t < N; t++) if (nbrOpts[t]) { collapsed[j] = t; break; }
+                cellsRemaining--;
+            }
+        }
+    }
+    return true;
+}
+
+function step() {
+    const i = pickLowestEntropy();
+    if (i === -1) return 'done';
+    if (i === -2) return 'contradiction';
+    collapseCell(i);
+    if (!propagate()) return 'contradiction';
+    return 'ok';
+}
+
+function restart() {
+    restartCount++;
+    configureGrid();
+}
+
+// --- Render ----------------------------------------------------------------
+function drawCell(i) {
+    const cx = i % cols;
+    const cy = (i / cols) | 0;
+    const x = cx * cellSize, y = cy * cellSize;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(cellSize, cellSize);
+
+    if (collapsed[i] !== -1) {
+        TILES[collapsed[i]].draw(ctx);
+    } else {
+        // Faint backlight for uncollapsed cells, denser when entropy is low
+        const e = entropyOf(grid[i]);
+        const ratio = Math.max(0, 1 - e / N);
+        ctx.fillStyle = `rgba(255, 75, 31, ${0.04 + 0.18 * ratio})`;
+        ctx.fillRect(0.04, 0.04, 0.92, 0.92);
+    }
+    ctx.restore();
+}
+
+function fullRender() {
+    ctx.fillStyle = '#0c0a07';
+    ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < cols * rows; i++) drawCell(i);
+}
+
+// --- Loop ------------------------------------------------------------------
+configureGrid();
+
+document.getElementById('restart').addEventListener('click', restart);
+const speedLevels = [1, 4, 16];
+let speedIdx = 0;
+speedBtn.addEventListener('click', () => {
+    speedIdx = (speedIdx + 1) % speedLevels.length;
+    stepsPerFrame = speedLevels[speedIdx] * 4;
+    speedBtn.textContent = `Speed · ${speedLevels[speedIdx]}×`;
+});
+window.addEventListener('resize', () => setTimeout(restart, 50));
+
+let stallSince = 0;
+function frame() {
+    let stalled = false;
+    for (let s = 0; s < stepsPerFrame; s++) {
+        const r = step();
+        if (r === 'done') {
+            statusEl.innerHTML = `<b>done</b> · ${restartCount + 1}× · auto-restart in 5s`;
+            stalled = true;
+            if (stallSince === 0) stallSince = performance.now();
+            break;
+        } else if (r === 'contradiction') {
+            statusEl.innerHTML = `<b>backtrack</b> · attempt ${restartCount + 1}`;
+            restart();
+            stallSince = 0;
+            break;
+        }
+    }
+    if (!stalled) statusEl.innerHTML = `<b>collapsing</b> · ${cellsRemaining} cells`;
+
+    fullRender();
+
+    if (stallSince > 0 && performance.now() - stallSince > 5000) {
+        restart();
+        stallSince = 0;
+    }
+    requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

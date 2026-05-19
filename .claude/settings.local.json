@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"c:\\\\Users\\\\Legion\\\\Desktop\\\\RaphaelGiulieri.github.io\\\\assets\\\\skybox\"\")",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(mkdir:*)",
+      "Bash(claude mcp *)",
+      "Bash(python -c \"import nodriver; print\\('nodriver', nodriver.__version__ if hasattr\\(nodriver, '__version__'\\) else 'installed'\\)\")",
+      "Bash(python -c \"import mcp; print\\('mcp ok'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import site; print\\(site.getsitepackages\\(\\)[0]\\)\")",
+      "Bash(python -c \"import tools.nodriver_mcp; print\\('Found tools.nodriver_mcp at:', tools.nodriver_mcp.__file__\\)\")",
+      "Bash(rm -f \"C:/Users/Legion/.claude/nodriver-mcp-launcher.py\")",
+      "Bash(node -e \"const r=require\\('c:/Users/Legion/Desktop/RaphaelGiulieri.github.io/data/research.json'\\); console.log\\('keys:', Object.keys\\(r\\)\\); const e=require\\('c:/Users/Legion/Desktop/RaphaelGiulieri.github.io/data/experiences.json'\\); console.log\\('exp keys:', Object.keys\\(e\\)\\);\")"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\Legion\\.claude"
+    ]
+  }
+}

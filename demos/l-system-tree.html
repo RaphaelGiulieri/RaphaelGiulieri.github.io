@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L-system tree · Raphael Giulieri</title>
+<style>
+    html, body { margin: 0; height: 100%; background: #0c0a07; color: #f0ebe0; font-family: "JetBrains Mono", ui-monospace, monospace; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    .label { position: absolute; bottom: 12px; left: 12px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.78); pointer-events: none; line-height: 1.5; max-width: calc(100% - 24px); text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+    .label b { color: #ff4b1f; font-weight: 500; }
+    .controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; }
+    .controls button, .controls .pop { font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.85); background: rgba(12,10,7,0.45); border: 1px solid rgba(240,235,224,0.20); padding: 4px 8px; cursor: pointer; backdrop-filter: blur(6px); }
+    .controls button:hover, .controls button.on { border-color: #ff4b1f; color: #ff4b1f; }
+    .controls .pop { cursor: default; color: rgba(240,235,224,0.55); }
+    .controls .pop b { color: #ff4b1f; font-weight: 500; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="controls">
+    <button id="regrow">Regrow</button>
+    <button id="archetype">Archetype · 1</button>
+    <span class="pop" id="info"><b>—</b> segments</span>
+</div>
+<p class="label"><b>L-system tree · click regrow</b><br>Five archetypes · turtle interpreter for F · +/− · [ ] · stochastic angle jitter · gradient fade vermilion → amber by depth · leaves at terminal segments</p>
+<script>
+(() => {
+'use strict';
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W = 0, H = 0;
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = Math.floor(canvas.clientWidth  * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+    W = canvas.width; H = canvas.height;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+resize();
+new ResizeObserver(resize).observe(canvas);
+
+// --- Archetypes ------------------------------------------------------------
+// Each archetype = axiom, rules, base angle, iteration count, base length,
+// per-depth length scale (branches shrink with depth), trunk width multiplier.
+const ARCHETYPES = [
+    {
+        name: 'bushy',
+        axiom: 'F',
+        rules: { 'F': 'FF+[+F-F-F]-[-F+F+F]' },
+        angle: 22.5,
+        iters: 4,
+        depthScale: 0.85,
+        wMul:  0.62,
+    },
+    {
+        name: 'spread',
+        axiom: 'F',
+        rules: { 'F': 'F[+F][-F][++F][--F]F' },
+        angle: 18,
+        iters: 4,
+        depthScale: 0.78,
+        wMul:  0.62,
+    },
+    {
+        name: 'plant',
+        axiom: 'X',
+        rules: {
+            'X': 'F+[[X]-X]-F[-FX]+X',
+            'F': 'FF',
+        },
+        angle: 25,
+        iters: 5,
+        depthScale: 0.92,
+        wMul:  0.72,
+    },
+    {
+        name: 'broom',
+        axiom: 'F',
+        rules: { 'F': 'F[+FF][-FF][+F-F]F' },
+        angle: 28,
+        iters: 4,
+        depthScale: 0.75,
+        wMul:  0.65,
+    },
+    {
+        name: 'fern',
+        axiom: 'X',
+        rules: {
+            'X': 'F-[[X]+X]+F[+FX]-X',
+            'F': 'FF',
+        },
+        angle: 22.5,
+        iters: 5,
+        depthScale: 0.92,
+        wMul:  0.74,
+    },
+];
+
+let archetypeIdx = 0;
+const archBtn = document.getElementById('archetype');
+function setArchLabel() { archBtn.textContent = `Archetype · ${archetypeIdx + 1}`; }
+setArchLabel();
+archBtn.addEventListener('click', () => {
+    archetypeIdx = (archetypeIdx + 1) % ARCHETYPES.length;
+    setArchLabel();
+    regrow();
+});
+
+// --- L-system expansion ----------------------------------------------------
+function expand(axiom, rules, n) {
+    let s = axiom;
+    for (let i = 0; i < n; i++) {
+        let next = '';
+        for (let j = 0; j < s.length; j++) next += rules[s[j]] || s[j];
+        s = next;
+    }
+    return s;
+}
+
+// --- Turtle: produce a list of segments {x0,y0,x1,y1,depth,terminal} -------
+// Each branch level (entering a `[`) shrinks the segment length by depthScale,
+// so the tree tapers naturally instead of overshooting the frame.
+function turtle(str, baseLen, baseAngleDeg, depthScale, originX, originY) {
+    const stack = [];
+    let x = originX, y = originY;
+    let a = -Math.PI / 2;          // start pointing up
+    let depth = 0;
+    let curLen = baseLen;
+    let segs = [];
+    const baseAngle = baseAngleDeg * Math.PI / 180;
+    for (let i = 0; i < str.length; i++) {
+        const ch = str[i];
+        if (ch === 'F') {
+            // Stochastic jitter on length and angle for organic feel
+            const lj = curLen * (0.85 + 0.30 * Math.random());
+            const aj = a + (Math.random() - 0.5) * 0.06;
+            const x1 = x + Math.cos(aj) * lj;
+            const y1 = y + Math.sin(aj) * lj;
+            // "Terminal" if next char is end-of-branch
+            const next = str[i + 1];
+            const terminal = (next === undefined || next === ']' || next === '+' || next === '-');
+            segs.push({ x0: x, y0: y, x1, y1, depth, terminal });
+            x = x1; y = y1;
+        } else if (ch === '+') {
+            a += baseAngle * (0.85 + 0.30 * Math.random());
+        } else if (ch === '-') {
+            a -= baseAngle * (0.85 + 0.30 * Math.random());
+        } else if (ch === '[') {
+            stack.push({ x, y, a, depth, curLen });
+            depth++;
+            curLen *= depthScale;
+        } else if (ch === ']') {
+            const s = stack.pop();
+            x = s.x; y = s.y; a = s.a; depth = s.depth; curLen = s.curLen;
+        }
+        // X (and other non-drawing symbols) are no-ops.
+    }
+    return segs;
+}
+
+// --- Animation -------------------------------------------------------------
+let segments = [];
+let growStart = 0;
+let growDur = 2.5;
+let maxDepth = 0;
+const infoEl = document.getElementById('info');
+
+function fitSegments(segs, targetW, targetH, anchorX, anchorY) {
+    if (segs.length === 0) return;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const s of segs) {
+        if (s.x0 < minX) minX = s.x0; if (s.x0 > maxX) maxX = s.x0;
+        if (s.x1 < minX) minX = s.x1; if (s.x1 > maxX) maxX = s.x1;
+        if (s.y0 < minY) minY = s.y0; if (s.y0 > maxY) maxY = s.y0;
+        if (s.y1 < minY) minY = s.y1; if (s.y1 > maxY) maxY = s.y1;
+    }
+    const treeW = Math.max(1, maxX - minX);
+    const treeH = Math.max(1, maxY - minY);
+    const scale = Math.min(targetW / treeW, targetH / treeH);
+    // Anchor: the original turtle origin (anchorX, anchorY in input space) maps to
+    // the visual anchor (W*0.5, H*0.94 in pixel space). The tree root was placed
+    // at (anchorX, anchorY) = original origin, so we scale around that point.
+    const offX = W * 0.5 - anchorX * scale;
+    const offY = H * 0.94 - anchorY * scale;
+    for (const s of segs) {
+        s.x0 = s.x0 * scale + offX;
+        s.y0 = s.y0 * scale + offY;
+        s.x1 = s.x1 * scale + offX;
+        s.y1 = s.y1 * scale + offY;
+    }
+}
+
+function regrow() {
+    const arch = ARCHETYPES[archetypeIdx];
+    const str = expand(arch.axiom, arch.rules, arch.iters);
+    // Turtle in normalised space (baseLen = 1), then fit-to-canvas afterwards.
+    const anchorX = 0, anchorY = 0;
+    segments = turtle(str, 1.0, arch.angle, arch.depthScale, anchorX, anchorY);
+    fitSegments(segments, W * 0.55, H * 0.78, anchorX, anchorY);
+    // Build a "growth time" per segment based on root distance — closer to root grows first.
+    // Approximate by index in the string (prefix grows first).
+    maxDepth = 0;
+    for (let i = 0; i < segments.length; i++) {
+        const s = segments[i];
+        s.tStart = (i / segments.length) * 0.7;
+        s.tEnd = s.tStart + 0.04 + (s.depth * 0.005);
+        if (s.depth > maxDepth) maxDepth = s.depth;
+    }
+    growStart = performance.now();
+    infoEl.innerHTML = `<b>${segments.length}</b> segments · depth ${maxDepth}`;
+}
+regrow();
+
+document.getElementById('regrow').addEventListener('click', regrow);
+window.addEventListener('resize', () => setTimeout(regrow, 80));
+
+// Auto-restart 4s after fully grown
+let lastFinishedAt = 0;
+
+function frame() {
+    const t = (performance.now() - growStart) / 1000;
+    const grow = Math.min(t / growDur, 1.0);
+
+    // Background — soft warm vignette
+    ctx.fillStyle = '#0c0a07';
+    ctx.fillRect(0, 0, W, H);
+    const grad = ctx.createRadialGradient(W * 0.5, H * 0.6, W * 0.1, W * 0.5, H * 0.6, W * 0.7);
+    grad.addColorStop(0, 'rgba(255, 75, 31, 0.08)');
+    grad.addColorStop(1, 'rgba(255, 75, 31, 0.0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Ground line
+    ctx.strokeStyle = 'rgba(240,235,224,0.10)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, H * 0.94);
+    ctx.lineTo(W, H * 0.94);
+    ctx.stroke();
+
+    // Branches
+    ctx.lineCap = 'round';
+    for (let i = 0; i < segments.length; i++) {
+        const s = segments[i];
+        if (grow < s.tStart) continue;
+        const segGrow = Math.min((grow - s.tStart) / Math.max(0.001, s.tEnd - s.tStart), 1.0);
+
+        // Lerp endpoint as the segment grows in
+        const ex = s.x0 + (s.x1 - s.x0) * segGrow;
+        const ey = s.y0 + (s.y1 - s.y0) * segGrow;
+
+        // Branch width: thicker near trunk
+        const wMul = ARCHETYPES[archetypeIdx].wMul;
+        const lineW = Math.max(1.2, Math.pow(wMul, s.depth) * 6);
+
+        // Color: vermilion (trunk) → amber (tips)
+        const k = maxDepth > 0 ? s.depth / maxDepth : 0;
+        const r = 255;
+        const g = 75 + k * 130;
+        const b = 31 + k * 60;
+        ctx.strokeStyle = `rgb(${r|0},${g|0},${b|0})`;
+        ctx.lineWidth = lineW;
+        ctx.beginPath();
+        ctx.moveTo(s.x0, s.y0);
+        ctx.lineTo(ex, ey);
+        ctx.stroke();
+
+        // Leaf at terminal segments once fully grown
+        if (s.terminal && segGrow >= 1.0) {
+            ctx.fillStyle = `rgba(255, 180, 90, ${0.55 + 0.25 * Math.sin(t * 2 + i)})`;
+            ctx.beginPath();
+            ctx.arc(s.x1, s.y1, 1.8 + 1.0 * Math.sin(t * 1.4 + i * 0.3), 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    if (grow >= 1.0 && lastFinishedAt === 0) lastFinishedAt = performance.now();
+    if (lastFinishedAt > 0 && performance.now() - lastFinishedAt > 4000) {
+        regrow();
+        lastFinishedAt = 0;
+    }
+
+    requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

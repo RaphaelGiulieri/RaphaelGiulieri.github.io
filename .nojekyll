@@ -1,0 +1,3 @@
+# GitHub Pages: Jekyll disabled.
+# Our data/projects/*.md files use YAML frontmatter that Jekyll would try to render.
+# This file signals GitHub to serve the repo as-is.

@@ -1,0 +1,852 @@
+{
+  "updated": "2026-04-23",
+  "schema_version": 1,
+  "note": "Single index of all projects. Case-study body lives at data/projects/{id}.md and is fetched on modal open. Highlights appear in the main grid; non-highlights appear under the Archive toggle.",
+  "projects": [
+    {
+      "id": "remain",
+      "title": "Remain",
+      "tagline": "A WebGPU multiplayer with a 7-pass retro pipeline, GPU grass culling, 2D fluid-sim clouds, and a grappling hook that actually feels good.",
+      "categories": [
+        "game",
+        "graphics",
+        "web",
+        "ai"
+      ],
+      "skills_short": [
+        "WebGPU + WGSL",
+        "Retro post-processing",
+        "GPU compute culling",
+        "Real-time multiplayer",
+        "Procedural worlds"
+      ],
+      "year": 2025,
+      "status": "functional",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 93,
+      "cover": "assets/projects/remain/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "lifesim",
+      "title": "LifeSim",
+      "tagline": "An AI-driven medieval sandbox where the NPCs don't need you — and remember when you lied.",
+      "categories": [
+        "game",
+        "ai",
+        "simulation"
+      ],
+      "skills_short": [
+        "Emergent NPC simulation",
+        "Layered AI cost model",
+        "Local TTS / STT",
+        "Permadeath systems",
+        "Memory & relationships"
+      ],
+      "year": 2025,
+      "status": "wip",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 92,
+      "cover": "assets/projects/lifesim/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "aitrading",
+      "title": "Quantitative trading R&D framework",
+      "tagline": "71 R&D modules, a realistic backtester, walk-forward with embargo, conformal rejection, per-ticker feature sets, multi-agent orchestrator.",
+      "categories": [
+        "ml"
+      ],
+      "skills_short": [
+        "Quantitative ML",
+        "Walk-forward validation",
+        "Conformal prediction",
+        "Risk-managed sizing",
+        "Multi-agent automation"
+      ],
+      "year": 2025,
+      "status": "production",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 91,
+      "cover": "assets/projects/aitrading/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "qatar_360",
+      "title": "360° tourism campaign — WebGL + GPGPU",
+      "tagline": "A QR-code-triggered 360° video experience where curl-noise particles reveal the frame under your gaze.",
+      "categories": [
+        "web",
+        "graphics",
+        "client"
+      ],
+      "skills_short": [
+        "WebGL / GLSL",
+        "GPGPU particle systems",
+        "Curl-noise physics",
+        "Mobile-first PWA",
+        "Production deployment"
+      ],
+      "year": 2025,
+      "status": "production",
+      "client": "A Doha creative agency, for a Gulf tourism board",
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 90,
+      "cover": "assets/projects/qatar_360/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "planning_manager",
+      "title": "Workforce scheduling SaaS",
+      "tagline": "Replaces a French team's manual Excel rotation with an eTemptation importer, a rotation algorithm, a constraint fixer, and PDF / Excel export.",
+      "categories": [
+        "web",
+        "client",
+        "tools"
+      ],
+      "skills_short": [
+        "FastAPI + Pydantic",
+        "Constraint-satisfaction scheduling",
+        "Excel + PDF export",
+        "Domain-specific UX",
+        "eTemptation XML import"
+      ],
+      "year": 2025,
+      "status": "production",
+      "client": "A French workforce-management team",
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 78,
+      "cover": "assets/projects/planning_manager/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "imagegen",
+      "title": "ComfyUI dashboard for local image generation",
+      "tagline": "A Flask front-end orchestrating four diffusion backends, five ControlNet preprocessors, and IP-Adapter character consistency on an 8 GB RTX 3070.",
+      "categories": [
+        "ml",
+        "tools"
+      ],
+      "skills_short": [
+        "Local diffusion stack",
+        "GGUF quantisation",
+        "IP-Adapter consistency",
+        "ControlNet stacking",
+        "Prompt engineering by shot"
+      ],
+      "year": 2025,
+      "status": "functional",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 78,
+      "cover": "assets/projects/imagegen/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "lrd_calico",
+      "title": "Indie game shader library — 70 shaders",
+      "tagline": "A full production shader library for an indie client's game — UI blurs, damage-localized shaders, bullet impacts, custom-lit character pipeline, environment, outline.",
+      "categories": [
+        "graphics",
+        "game",
+        "client"
+      ],
+      "skills_short": [
+        "Unity URP shader authoring",
+        "Custom lighting includes",
+        "Damage / impact systems",
+        "MaterialPropertyBlock patterns",
+        "Shader-library architecture"
+      ],
+      "year": 2023,
+      "status": "delivered",
+      "client": "An indie game studio",
+      "role": "Technical Artist",
+      "highlight": true,
+      "rank": 75,
+      "cover": "assets/projects/lrd_calico/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "sabda_vfx",
+      "title": "Immersive 360° exhibition VFX — studio work",
+      "tagline": "Handpainted skyboxes, audio-reactive visuals, generator tools, and procedural VFX for a studio producing 360° immersive exhibitions.",
+      "categories": [
+        "graphics",
+        "game",
+        "client"
+      ],
+      "skills_short": [
+        "Unity HDRP + URP",
+        "Audio-reactive shaders",
+        "Skybox baking pipeline",
+        "Editor tool authoring",
+        "Handpainted asset integration"
+      ],
+      "year": 2024,
+      "year_range": "2023-2024",
+      "status": "delivered",
+      "client": "A studio producing immersive 360° exhibitions",
+      "role": "Technical Artist",
+      "highlight": true,
+      "rank": 74,
+      "cover": "assets/projects/sabda_vfx/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "gaec_solar",
+      "title": "Solar PV 3D modelling & calepinage",
+      "tagline": "A 337 kWc rooftop solar install for a French dairy farm: 734 panels, 35 strings, 4 Huawei inverters, parametric Python OBJ mesh, Excel calepinage, 4,800-word installer manual.",
+      "categories": [
+        "client",
+        "3d",
+        "docs"
+      ],
+      "skills_short": [
+        "Parametric 3D modelling",
+        "Solar PV engineering",
+        "Reproducible deliverables",
+        "French regulatory documentation",
+        "Editorial documentation HTML"
+      ],
+      "year": 2026,
+      "status": "delivered",
+      "client": "A French dairy farm",
+      "role": "Solo developer (modelling + documentation)",
+      "highlight": true,
+      "rank": 70,
+      "cover": "assets/projects/gaec_solar/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "site_avocat",
+      "title": "Law-firm website (Nice, France)",
+      "tagline": "42 hand-written HTML pages, 30 in-depth legal guides, no tracking, no framework, AAA colour contrast, mailto: contact form.",
+      "categories": [
+        "web",
+        "client"
+      ],
+      "skills_short": [
+        "Semantic HTML5",
+        "Accessibility-first",
+        "Schema.org SEO",
+        "GDPR-by-architecture",
+        "Vanilla CSS + JS"
+      ],
+      "year": 2025,
+      "status": "production",
+      "client": "A Nice-based French lawyer",
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 68,
+      "cover": "assets/projects/site_avocat/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "niche_finder",
+      "title": "Niche-finder + auto-site generator",
+      "tagline": "A two-bot system — one mines profitable web niches, the other spins up SEO-optimised affiliate sites, with Ollama doing the copywriting.",
+      "categories": [
+        "automation",
+        "web",
+        "ml"
+      ],
+      "skills_short": [
+        "Multi-bot orchestration",
+        "Cloudflare-bypass scraping",
+        "Local LLM (Ollama)",
+        "Static-site generation",
+        "Schema.org SEO"
+      ],
+      "year": 2025,
+      "status": "functional",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 62,
+      "cover": "assets/projects/niche_finder/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "universal_converter",
+      "title": "Universal file converter",
+      "tagline": "A drag-and-drop Flet desktop app converting images, PDFs, audio, and video — always-on-top, compact or expanded, ffmpeg auto-installed.",
+      "categories": [
+        "tools"
+      ],
+      "skills_short": [
+        "Flet desktop UI",
+        "Format conversion pipelines",
+        "Auto-bundled ffmpeg",
+        "Always-on-top windowing",
+        "PyInstaller packaging"
+      ],
+      "year": 2025,
+      "status": "polished",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 60,
+      "cover": "assets/projects/universal_converter/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "custom_engine_tps",
+      "title": "TPS on a custom C++ engine",
+      "tagline": "A third-person stealth shooter built on a from-scratch C++ engine — collision, enemy vision, and sand-trail effect all driven by GPU textures.",
+      "categories": [
+        "game",
+        "graphics"
+      ],
+      "skills_short": [
+        "Custom C++ engine architecture",
+        "OpenGL rendering",
+        "Texture-as-state design",
+        "Enemy AI state machines",
+        "ImGui debug tooling"
+      ],
+      "year": 2022,
+      "year_range": "2021-2022",
+      "status": "completed",
+      "client": null,
+      "role": "Solo developer (school project)",
+      "highlight": false,
+      "rank": 60,
+      "cover": "assets/projects/custom_engine_tps/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "volum_audio",
+      "title": "Volume & audio-device switcher",
+      "tagline": "Windows has no official per-app audio routing API. This gets one anyway — pycaw plus NirSoft SoundVolumeView CSV-bridging.",
+      "categories": [
+        "tools"
+      ],
+      "skills_short": [
+        "Windows Core Audio (pycaw)",
+        "SoundVolumeView CSV bridging",
+        "Flet UI",
+        "PyInstaller packaging"
+      ],
+      "year": 2025,
+      "status": "polished",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 58,
+      "cover": "assets/projects/volum_audio/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "spendings",
+      "title": "Personal spending tracker (PWA)",
+      "tagline": "React 19 + Dexie + Tailwind 4: a local-first expense tracker that installs to your home screen, works offline, and never ships data off the device.",
+      "categories": [
+        "web",
+        "tools"
+      ],
+      "skills_short": [
+        "React 19",
+        "Dexie / IndexedDB",
+        "Tailwind 4",
+        "PWA service worker",
+        "Local-first architecture"
+      ],
+      "year": 2025,
+      "status": "wip",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 54,
+      "cover": "assets/projects/spendings/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "tech_particles",
+      "title": "Particle systems — CPU boids, GPU points, GPGPU simulation",
+      "tagline": "Cross-engine particle work — Unity VFX Graph and CPU boids, WebGPU GL_POINTS at 256k+ instances, WebGL GPGPU position-texture ping-pong with curl-noise physics.",
+      "categories": [
+        "graphics",
+        "rnd"
+      ],
+      "skills_short": [
+        "Unity VFX Graph",
+        "WebGPU compute particles",
+        "WebGL GPGPU simulation",
+        "Curl-noise physics",
+        "Boids flocking"
+      ],
+      "year": 2024,
+      "year_range": "2021-2025",
+      "status": "active",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 73,
+      "cover": "assets/projects/tech_particles/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "tech_volumetric",
+      "title": "Volumetric, fluid & atmospheric rendering",
+      "tagline": "Clouds as 2D Navier-Stokes on textures, fog as 12-step volumetric raymarch, water as flow-map + Gerstner + caustics, atmosphere as single-scattering Rayleigh.",
+      "categories": [
+        "graphics",
+        "rnd"
+      ],
+      "skills_short": [
+        "2D Navier-Stokes solvers",
+        "Volumetric raymarching",
+        "Flow-map water",
+        "Atmospheric scattering",
+        "Density-field sampling"
+      ],
+      "year": 2024,
+      "year_range": "2021-2025",
+      "status": "active",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 70,
+      "cover": "assets/projects/tech_volumetric/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "tech_lighting",
+      "title": "Lighting systems & shading pipelines",
+      "tagline": "A shared CustomLighting.cginc that drove 70 production shaders, anisotropic hair, subsurface skin, Rayleigh atmospheric scattering, and a 3-cascade shadow system with Gouraud toggle.",
+      "categories": [
+        "graphics",
+        "rnd"
+      ],
+      "skills_short": [
+        "PBR shading",
+        "Custom lighting includes",
+        "Shadow cascades",
+        "Atmospheric scattering",
+        "Subsurface approximation"
+      ],
+      "year": 2024,
+      "year_range": "2021-2025",
+      "status": "active",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 68,
+      "cover": "assets/projects/tech_lighting/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "tech_compute_procedural",
+      "title": "Compute shaders & procedural generation",
+      "tagline": "GPU grass culling on a 1,400×1,400 camera-anchored grid, Gray-Scott reaction-diffusion in compute, L-system trees baked offline, simplex-noise archipelagos, DOTS/ECS.",
+      "categories": [
+        "graphics",
+        "game",
+        "rnd"
+      ],
+      "skills_short": [
+        "GPU compute (WGSL / HLSL)",
+        "Procedural generation",
+        "DOTS / ECS exploration",
+        "Reaction-diffusion",
+        "L-system / FBM noise"
+      ],
+      "year": 2024,
+      "year_range": "2021-2026",
+      "status": "active",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 68,
+      "cover": "assets/projects/tech_compute_procedural/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "tech_stylization_post",
+      "title": "Stylisation & post-processing",
+      "tagline": "A 7-pass retro pipeline in WebGPU, a Kuwahara-filter painterly grass scene, Bayer 8×8 dithering in perceptual space, a live retro-intensity slider, a PS2-era rendering sandbox.",
+      "categories": [
+        "graphics",
+        "rnd"
+      ],
+      "skills_short": [
+        "Retro post-processing",
+        "Bayer dither (perceptual)",
+        "Kuwahara NPR",
+        "CRT / VHS aesthetics",
+        "Selective bloom"
+      ],
+      "year": 2024,
+      "year_range": "2021-2025",
+      "status": "active",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": true,
+      "rank": 66,
+      "cover": "assets/projects/tech_stylization_post/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "tech_raymarching_sdf",
+      "title": "Raymarching & signed-distance fields",
+      "tagline": "A full SDF primitives + operations library shipping in production, used for wallpaper rendering, volumetric reveal masks, and raymarched scenes.",
+      "categories": [
+        "graphics",
+        "rnd"
+      ],
+      "skills_short": [
+        "SDF primitives + ops",
+        "Sphere-trace raymarching",
+        "Volumetric integration",
+        "Numerical-gradient normals",
+        "Smooth-min compositing"
+      ],
+      "year": 2024,
+      "year_range": "2021-2025",
+      "status": "active",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 65,
+      "cover": "assets/projects/tech_raymarching_sdf/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "tech_vfx",
+      "title": "Visual effects composition",
+      "tagline": "Unity VFX Graph sandboxes, EmberGen-baked flipbooks, bullet impacts and damage localisation with MaterialPropertyBlocks, audio-reactive shader materials.",
+      "categories": [
+        "graphics",
+        "game",
+        "rnd"
+      ],
+      "skills_short": [
+        "Unity VFX Graph",
+        "EmberGen flipbooks",
+        "Impact / outline / damage shaders",
+        "MaterialPropertyBlock patterns",
+        "Audio-reactive materials"
+      ],
+      "year": 2024,
+      "year_range": "2021-2025",
+      "status": "active",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 64,
+      "cover": "assets/projects/tech_vfx/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "tech_projection",
+      "title": "Projection mapping, skyboxes & flow-maps",
+      "tagline": "Equirectangular sphere authoring, longitude-latitude skybox baking with an editor-side generator tool, flow-map-driven water, and a hero WebGL shader where the UV formula is shared three ways.",
+      "categories": [
+        "graphics",
+        "rnd"
+      ],
+      "skills_short": [
+        "Equirectangular projection",
+        "Cubemap baking pipelines",
+        "Flow-map velocity fields",
+        "Skybox generator tools",
+        "Unproject matrices"
+      ],
+      "year": 2024,
+      "year_range": "2022-2025",
+      "status": "active",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 63,
+      "cover": "assets/projects/tech_projection/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "smart_clipboard",
+      "title": "Smart clipboard manager",
+      "tagline": "A Flet-based Windows clipboard-history manager with favourites, search, and JSON persistence — single PyInstaller binary.",
+      "categories": [
+        "tools"
+      ],
+      "skills_short": [
+        "Flet desktop UI",
+        "Clipboard polling",
+        "JSON persistence",
+        "System-tray integration"
+      ],
+      "year": 2025,
+      "status": "polished",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 50,
+      "cover": "assets/projects/smart_clipboard/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "ar_projects",
+      "title": "AR exploration projects",
+      "tagline": "Two Unity XR projects — face tracking + XRI, and image-target tracking (Pokémon cards, physical objects) for AR-over-tabletop effects.",
+      "categories": [
+        "graphics",
+        "game"
+      ],
+      "skills_short": [
+        "Unity XR / XRI",
+        "ARFoundation",
+        "Face tracking",
+        "Image-target tracking"
+      ],
+      "year": 2023,
+      "year_range": "2022-2023",
+      "status": "functional",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 48,
+      "cover": "assets/projects/ar_projects/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "shader_master",
+      "title": "Road to shader master — 9-day study",
+      "tagline": "A self-directed 9-day shader curriculum — lighting, noise, SDFs, raymarching, post-processing — that produced the HLSL library still used downstream.",
+      "categories": [
+        "graphics",
+        "docs"
+      ],
+      "skills_short": [
+        "Classical lighting models",
+        "Procedural noise",
+        "SDF + raymarching",
+        "Post-processing",
+        "Reference-implementation authorship"
+      ],
+      "year": 2021,
+      "status": "completed",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 42,
+      "cover": "assets/projects/shader_master/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "site_scrapper",
+      "title": "LinkedIn scraper with LLM parsing",
+      "tagline": "Pulls LinkedIn job pages and pipes the raw HTML through an LLM to extract structured data — resists DOM churn.",
+      "categories": [
+        "automation",
+        "ml",
+        "web"
+      ],
+      "skills_short": [
+        "Selenium browser automation",
+        "LLM-driven extraction",
+        "Schema-prompted JSON",
+        "DOM-churn resilience"
+      ],
+      "year": 2025,
+      "status": "functional",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 42,
+      "cover": "assets/projects/site_scrapper/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "indeed_scrapper",
+      "title": "Indeed job-search automation",
+      "tagline": "A Flask dashboard + Selenium Chrome automation that tracks every Indeed posting through a pipeline, with SQLite persistence.",
+      "categories": [
+        "automation",
+        "web"
+      ],
+      "skills_short": [
+        "Selenium automation",
+        "Flask + SQLite",
+        "Pipeline UX (kanban-style)",
+        "Local-first state"
+      ],
+      "year": 2024,
+      "status": "functional",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 38,
+      "cover": "assets/projects/indeed_scrapper/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "unreal_platformer",
+      "title": "Unreal platformer (school project)",
+      "tagline": "A Blueprint-driven Unreal Engine platformer built for a Game Programming class — the 'cover every Unreal subsystem once' project.",
+      "categories": [
+        "game"
+      ],
+      "skills_short": [
+        "Unreal Engine",
+        "Blueprints",
+        "Gameplay framework",
+        "Animation Blueprints"
+      ],
+      "year": 2021,
+      "status": "completed",
+      "client": null,
+      "role": "Solo developer (school project)",
+      "highlight": false,
+      "rank": 35,
+      "cover": "assets/projects/unreal_platformer/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "html_to_pdf",
+      "title": "HTML → PDF utility",
+      "tagline": "Small Python utility that renders a questionnaire-style HTML file to a PDF.",
+      "categories": [
+        "tools",
+        "docs"
+      ],
+      "skills_short": [
+        "Python",
+        "HTML-to-PDF rendering",
+        "Reproducible builds"
+      ],
+      "year": 2025,
+      "status": "functional",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 25,
+      "cover": "assets/projects/html_to_pdf/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    },
+    {
+      "id": "website_business",
+      "title": "Business-website design resources",
+      "tagline": "A working folder of design documentation and a nascent docs site — reference material for business-website engagements.",
+      "categories": [
+        "web",
+        "docs"
+      ],
+      "skills_short": [
+        "Design-system documentation",
+        "Component inventories",
+        "Static docs scaffolding"
+      ],
+      "year": 2025,
+      "status": "wip",
+      "client": null,
+      "role": "Solo developer",
+      "highlight": false,
+      "rank": 20,
+      "cover": "assets/projects/website_business/cover.webp",
+      "links": {
+        "repo": null,
+        "demo": null
+      }
+    }
+  ]
+}

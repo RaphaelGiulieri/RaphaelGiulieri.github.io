@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Retro CRT post-process · Raphael Giulieri</title>
+<style>
+    html, body { margin: 0; height: 100%; background: #0c0a07; color: #f0ebe0; font-family: "JetBrains Mono", ui-monospace, monospace; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+    .label { position: absolute; bottom: 12px; left: 12px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.78); pointer-events: none; line-height: 1.5; max-width: calc(100% - 24px); text-shadow: 0 1px 6px rgba(0,0,0,0.8); }
+    .label b { color: #ff4b1f; font-weight: 500; }
+    .controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 70%; }
+    .controls button { font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.55); background: rgba(12,10,7,0.55); border: 1px solid rgba(240,235,224,0.18); padding: 4px 8px; cursor: pointer; backdrop-filter: blur(6px); }
+    .controls button.on { color: #ff4b1f; border-color: #ff4b1f; }
+    .err { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 13px; line-height: 1.6; color: #ff4b1f; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="controls">
+    <button data-fx="pixel"  class="on">Pixelate</button>
+    <button data-fx="dither" class="on">Dither</button>
+    <button data-fx="scan"   class="on">Scanlines</button>
+    <button data-fx="chroma" class="on">Chroma shift</button>
+    <button data-fx="vhs"    class="on">VHS bands</button>
+    <button data-fx="grain"  class="on">Grain</button>
+</div>
+<p class="label"><b>Retro post-process · toggle each effect</b><br>Single-pass fragment shader · 256-px pixelation · 4×4 Bayer dither · scanlines · per-channel chromatic shift · VHS jitter bands · port of Remain's final composite</p>
+<script>
+(() => {
+'use strict';
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
+if (!gl) {
+    document.body.innerHTML = '<p class="err">Needs WebGL2. Try a recent Chrome / Firefox / Safari.</p>';
+    return;
+}
+
+const VERT = `#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
+void main() {
+    v_uv = a_pos * 0.5 + 0.5;
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 fragColor;
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform float u_pixel;
+uniform float u_dither;
+uniform float u_scan;
+uniform float u_chroma;
+uniform float u_vhs;
+uniform float u_grain;
+
+// --- Procedural "scene" sampled at any UV ----------------------------------
+// Simple animated landscape: gradient sky, sun, terrain silhouette, moving clouds.
+float h21(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f*f*(3.0-2.0*f);
+    return mix(mix(h21(i), h21(i+vec2(1,0)), f.x),
+               mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), f.x), f.y);
+}
+
+float fbm(vec2 p) {
+    float a = 0.5, r = 0.0;
+    for (int i = 0; i < 5; i++) { r += a*vnoise(p); p *= 2.03; a *= 0.5; }
+    return r;
+}
+
+vec3 sceneAt(vec2 uv) {
+    // Sky gradient
+    vec3 sky = mix(vec3(0.95, 0.42, 0.20), vec3(0.10, 0.06, 0.18), smoothstep(0.0, 1.0, uv.y));
+
+    // Sun
+    vec2 sunPos = vec2(0.5 + 0.18 * sin(u_time * 0.15), 0.55);
+    float sunDist = length((uv - sunPos) * vec2(1.6, 1.0));
+    float sun = smoothstep(0.18, 0.0, sunDist);
+    sky += vec3(1.0, 0.55, 0.18) * sun * 1.8;
+    sky += vec3(1.0, 0.45, 0.16) * pow(smoothstep(0.5, 0.0, sunDist), 1.5) * 0.4;
+
+    // Distant cloud band
+    float cloud = fbm(uv * vec2(4.0, 2.5) + vec2(u_time * 0.06, 0.0));
+    cloud = smoothstep(0.45, 0.7, cloud) * smoothstep(0.85, 0.55, uv.y) * smoothstep(0.30, 0.55, uv.y);
+    sky = mix(sky, vec3(1.0, 0.78, 0.55), cloud * 0.65);
+
+    // Terrain silhouette
+    float terrainH = 0.32 + 0.10 * sin(uv.x * 5.0 + u_time * 0.05) + 0.06 * fbm(vec2(uv.x * 6.0, 1.0));
+    float terrainMask = smoothstep(terrainH, terrainH - 0.005, uv.y);
+    vec3 terrain = mix(vec3(0.22, 0.10, 0.06), vec3(0.05, 0.03, 0.02), smoothstep(0.0, 0.25, uv.y));
+
+    return mix(sky, terrain, terrainMask);
+}
+
+// --- Bayer 4x4 dither matrix -----------------------------------------------
+float bayer4(vec2 p) {
+    int x = int(mod(p.x, 4.0));
+    int y = int(mod(p.y, 4.0));
+    int idx = x + y * 4;
+    float m[16] = float[16](
+         0.0,  8.0,  2.0, 10.0,
+        12.0,  4.0, 14.0,  6.0,
+         3.0, 11.0,  1.0,  9.0,
+        15.0,  7.0, 13.0,  5.0
+    );
+    return m[idx] / 16.0 - 0.5;
+}
+
+void main() {
+    vec2 uv = v_uv;
+
+    // 1. Pixelation: quantise UV to a low-res grid.
+    if (u_pixel > 0.5) {
+        float pix = 220.0;
+        vec2 aspect = vec2(u_resolution.x / u_resolution.y, 1.0);
+        vec2 pUV = floor(uv * pix * aspect) / (pix * aspect);
+        uv = pUV;
+    }
+
+    // 2. Chromatic aberration: sample R/G/B with radial offsets.
+    vec3 col;
+    if (u_chroma > 0.5) {
+        vec2 dir = uv - 0.5;
+        float k = 0.008;
+        vec3 rs = sceneAt(uv + dir * k);
+        vec3 gs = sceneAt(uv);
+        vec3 bs = sceneAt(uv - dir * k);
+        col = vec3(rs.r, gs.g, bs.b);
+    } else {
+        col = sceneAt(uv);
+    }
+
+    // 3. VHS jitter bands: occasional horizontal ripples that displace samples.
+    if (u_vhs > 0.5) {
+        float bandT = u_time * 1.4;
+        float band = smoothstep(0.0, 0.05, sin(uv.y * 30.0 + bandT) * 0.5 + 0.5 - 0.78);
+        // Re-sample with horizontal jitter inside bands
+        if (band > 0.01) {
+            float jitter = (h21(vec2(floor(uv.y * 80.0), floor(bandT * 8.0))) - 0.5) * 0.04;
+            vec3 jcol = sceneAt(uv + vec2(jitter, 0.0));
+            col = mix(col, jcol, band * 0.85);
+            // Bright ringing on band edges
+            float edge = smoothstep(0.7, 1.0, band);
+            col += vec3(1.0, 0.55, 0.20) * edge * 0.18;
+        }
+    }
+
+    // 4. Bayer 4x4 dither: quantise to a small palette and offset by the matrix.
+    if (u_dither > 0.5) {
+        float b = bayer4(gl_FragCoord.xy);
+        // Quantise each channel to ~6 levels so the dither pattern is visible.
+        col += b * (1.0 / 8.0);
+        col = floor(col * 6.0 + 0.5) / 6.0;
+    }
+
+    // 5. Scanlines: alternate-row darkening on actual pixel rows.
+    if (u_scan > 0.5) {
+        float row = mod(gl_FragCoord.y, 2.0);
+        col *= 0.78 + 0.22 * (1.0 - row);
+        // Slot-mask hint: every 3rd column pulls a different channel
+        float slot = mod(gl_FragCoord.x, 3.0);
+        vec3 mask = vec3(1.0);
+        if (slot < 1.0) mask = vec3(1.05, 0.95, 0.95);
+        else if (slot < 2.0) mask = vec3(0.95, 1.05, 0.95);
+        else mask = vec3(0.95, 0.95, 1.05);
+        col *= mask;
+    }
+
+    // 6. Grain
+    if (u_grain > 0.5) {
+        float g = (h21(gl_FragCoord.xy + u_time * 60.0) - 0.5) * 0.06;
+        col += g;
+    }
+
+    // Vignette
+    vec2 vUV = v_uv - 0.5;
+    col *= 1.0 - 0.4 * dot(vUV, vUV);
+
+    fragColor = vec4(col, 1.0);
+}`;
+
+function compile(type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        console.error(gl.getShaderInfoLog(sh));
+        throw new Error('shader compile failed');
+    }
+    return sh;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error('link failed');
+
+const u_res    = gl.getUniformLocation(prog, 'u_resolution');
+const u_time   = gl.getUniformLocation(prog, 'u_time');
+const u_pixel  = gl.getUniformLocation(prog, 'u_pixel');
+const u_dither = gl.getUniformLocation(prog, 'u_dither');
+const u_scan   = gl.getUniformLocation(prog, 'u_scan');
+const u_chroma = gl.getUniformLocation(prog, 'u_chroma');
+const u_vhs    = gl.getUniformLocation(prog, 'u_vhs');
+const u_grain  = gl.getUniformLocation(prog, 'u_grain');
+
+const quadBuf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'a_pos');
+
+const fx = { pixel: 1, dither: 1, scan: 1, chroma: 1, vhs: 1, grain: 1 };
+document.querySelectorAll('.controls button').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const k = btn.dataset.fx;
+        fx[k] = fx[k] ? 0 : 1;
+        btn.classList.toggle('on', fx[k] === 1);
+    });
+});
+
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.6);
+    canvas.width  = Math.floor(canvas.clientWidth  * dpr);
+    canvas.height = Math.floor(canvas.clientHeight * dpr);
+}
+resize();
+new ResizeObserver(resize).observe(canvas);
+
+const start = performance.now();
+function frame() {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.useProgram(prog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    gl.uniform2f(u_res, canvas.width, canvas.height);
+    gl.uniform1f(u_time, (performance.now() - start) * 0.001);
+    gl.uniform1f(u_pixel, fx.pixel);
+    gl.uniform1f(u_dither, fx.dither);
+    gl.uniform1f(u_scan, fx.scan);
+    gl.uniform1f(u_chroma, fx.chroma);
+    gl.uniform1f(u_vhs, fx.vhs);
+    gl.uniform1f(u_grain, fx.grain);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>

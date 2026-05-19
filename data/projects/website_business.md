@@ -1,0 +1,30 @@
+---
+id: website_business
+title: "Business-website design resources"
+tagline: "A working folder of design documentation and a nascent docs site — reference material for business-website engagements."
+categories: [web, docs]
+skills_short:
+  - Design-system documentation
+  - Component inventories
+  - Static docs scaffolding
+year: 2025
+status: wip
+client: null
+role: Solo developer
+highlight: false
+rank: 20
+headline:
+  value: "reference material"
+  label: "for business engagements"
+links:
+  repo: null
+  demo: null
+---
+
+# Business-website design resources
+
+A reference workspace. Design docs, component inventories, and a `docs-site/` folder scaffolded for a standalone documentation site. Not a shipped project — the design material feeds bespoke business-website engagements (like Site Avocat) and is periodically consolidated here for reuse.
+
+## Where it stands
+
+Work-in-progress reference. Sits in the workspace as design-system raw material.

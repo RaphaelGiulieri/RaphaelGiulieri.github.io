@@ -11,7 +11,7 @@ skills_short:
   - L-system / FBM noise
 year: 2024
 year_range: "2021-2026"
-status: active
+status: live R&D
 client: null
 role: Solo developer
 highlight: true

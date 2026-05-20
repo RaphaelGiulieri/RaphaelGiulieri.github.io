@@ -31,3 +31,4 @@ worker/.dev.vars
 # --- Node bookkeeping (in case anything ever installs deps) ---
 node_modules/
 .npm/
+tracks/

@@ -10,7 +10,7 @@ skills_short:
   - Risk-managed sizing
   - Multi-agent automation
 year: 2025
-status: production
+status: shipped
 client: null
 role: Solo developer
 highlight: true

@@ -10,7 +10,7 @@ skills_short:
   - PWA service worker
   - Local-first architecture
 year: 2025
-status: wip
+status: prototype
 client: null
 role: Solo developer
 highlight: false

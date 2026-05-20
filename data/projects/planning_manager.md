@@ -10,7 +10,7 @@ skills_short:
   - Domain-specific UX
   - eTemptation XML import
 year: 2025
-status: production
+status: shipped
 client: "A French workforce-management team"
 role: Solo developer
 highlight: true

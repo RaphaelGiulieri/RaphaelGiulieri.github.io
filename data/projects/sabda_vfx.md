@@ -11,7 +11,7 @@ skills_short:
   - Handpainted asset integration
 year: 2024
 year_range: "2023-2024"
-status: delivered
+status: shipped
 client: "A studio producing immersive 360° exhibitions"
 role: Technical Artist
 highlight: true

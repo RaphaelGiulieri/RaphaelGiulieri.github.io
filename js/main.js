@@ -101,6 +101,45 @@
         return (cats || []).slice(0, 2).map(categoryLabel).join(' · ');
     }
 
+    // ---- Live counts (catalogue / clients / disciplines) ---------
+    // Replaces [data-stat="..."] placeholders in the hero stats panel and
+    // the Work section lede so the numbers track the actual data instead of
+    // being hardcoded in index.html.
+    function renderStats() {
+        const counts = {
+            catalogue: (state.projects || []).length,
+            clients: (state.experiences || []).length,
+            disciplines: (state.research || []).length,
+        };
+        $$('[data-stat]').forEach((el) => {
+            const key = el.getAttribute('data-stat');
+            if (counts[key] != null) el.textContent = String(counts[key]);
+        });
+    }
+
+    // ---- Filter-pill counts -------------------------------------
+    // Append a `(n)` to each filter button so the visitor knows how many
+    // projects are behind each category before clicking. Recomputes from
+    // state.projects so it tracks the actual catalogue.
+    function renderFilterCounts() {
+        const pills = $$('.filter-item');
+        if (!pills.length || !state.projects) return;
+        pills.forEach((btn) => {
+            const key = btn.getAttribute('data-filter');
+            const n = key === 'all'
+                ? state.projects.length
+                : state.projects.filter((p) => (p.categories || []).includes(key)).length;
+            // Replace any prior .filter-count, or append one
+            let count = btn.querySelector('.filter-count');
+            if (!count) {
+                count = document.createElement('span');
+                count.className = 'filter-count';
+                btn.appendChild(count);
+            }
+            count.textContent = ` ${n}`;
+        });
+    }
+
     // ---- Projects grid ------------------------------------------
     function renderProjects() {
         const mount = $('#projectsGrid');
@@ -874,10 +913,12 @@
             if (projectsMount) projectsMount.innerHTML = '<p class="loading">Could not load portfolio data. Check the console.</p>';
             return;
         }
+        renderStats();
         renderProjects();
         renderResearch();
         renderExperience();
         initFilter();
+        renderFilterCounts();
         initArchiveToggle();
         initModal();
         initReveals();

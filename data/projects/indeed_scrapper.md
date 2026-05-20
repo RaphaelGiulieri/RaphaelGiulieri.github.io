@@ -9,7 +9,7 @@ skills_short:
   - Pipeline UX (kanban-style)
   - Local-first state
 year: 2024
-status: functional
+status: live R&D
 client: null
 role: Solo developer
 highlight: false

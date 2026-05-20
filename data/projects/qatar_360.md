@@ -10,7 +10,7 @@ skills_short:
   - Mobile-first PWA
   - Production deployment
 year: 2025
-status: production
+status: shipped
 client: "A Doha creative agency, for a Gulf tourism board"
 role: Solo developer
 highlight: true

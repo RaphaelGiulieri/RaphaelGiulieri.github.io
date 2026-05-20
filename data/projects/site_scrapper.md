@@ -9,7 +9,7 @@ skills_short:
   - Schema-prompted JSON
   - DOM-churn resilience
 year: 2025
-status: functional
+status: live R&D
 client: null
 role: Solo developer
 highlight: false

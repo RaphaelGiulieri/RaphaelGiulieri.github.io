@@ -11,7 +11,7 @@ skills_short:
   - Smooth-min compositing
 year: 2024
 year_range: "2021-2025"
-status: active
+status: live R&D
 client: null
 role: Solo developer
 highlight: false

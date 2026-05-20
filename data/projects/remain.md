@@ -10,7 +10,7 @@ skills_short:
   - Real-time multiplayer
   - Procedural worlds
 year: 2025
-status: functional
+status: live R&D
 client: null
 role: Solo developer
 highlight: true

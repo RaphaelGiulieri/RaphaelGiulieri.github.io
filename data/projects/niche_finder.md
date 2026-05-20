@@ -10,7 +10,7 @@ skills_short:
   - Static-site generation
   - Schema.org SEO
 year: 2025
-status: functional
+status: live R&D
 client: null
 role: Solo developer
 highlight: false

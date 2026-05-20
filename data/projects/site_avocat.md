@@ -10,7 +10,7 @@ skills_short:
   - GDPR-by-architecture
   - Vanilla CSS + JS
 year: 2025
-status: production
+status: shipped
 client: "A Nice-based French lawyer"
 role: Solo developer
 highlight: true

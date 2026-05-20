@@ -10,7 +10,7 @@ skills_short:
   - Always-on-top windowing
   - PyInstaller packaging
 year: 2025
-status: polished
+status: shipped
 client: null
 role: Solo developer
 highlight: false

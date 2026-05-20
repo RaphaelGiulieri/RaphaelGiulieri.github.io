@@ -10,7 +10,7 @@ skills_short:
   - Image-target tracking
 year: 2023
 year_range: "2022-2023"
-status: functional
+status: live R&D
 client: null
 role: Solo developer
 highlight: false

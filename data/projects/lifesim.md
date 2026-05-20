@@ -10,7 +10,7 @@ skills_short:
   - Permadeath systems
   - Memory & relationships
 year: 2025
-status: wip
+status: prototype
 client: null
 role: Solo developer
 highlight: true

@@ -11,7 +11,7 @@ skills_short:
   - Unproject matrices
 year: 2024
 year_range: "2022-2025"
-status: active
+status: live R&D
 client: null
 role: Solo developer
 highlight: false

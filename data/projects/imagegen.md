@@ -10,7 +10,7 @@ skills_short:
   - ControlNet stacking
   - Prompt engineering by shot
 year: 2025
-status: functional
+status: live R&D
 client: null
 role: Solo developer
 highlight: true

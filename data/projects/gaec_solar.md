@@ -10,7 +10,7 @@ skills_short:
   - French regulatory documentation
   - Editorial documentation HTML
 year: 2026
-status: delivered
+status: shipped
 client: "A French dairy farm"
 role: Solo developer
 highlight: true

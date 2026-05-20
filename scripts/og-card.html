@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OG card</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;1,400&family=Geist:wght@400&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #0c0a07; }
+    body {
+        width: 1200px;
+        height: 630px;
+        position: relative;
+        overflow: hidden;
+        font-family: "Geist", system-ui, sans-serif;
+        color: #f0ebe0;
+    }
+    .frame {
+        position: absolute;
+        inset: 40px;
+        border: 1px solid rgba(240, 235, 224, 0.18);
+        padding: 56px 64px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    .head {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 18px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: rgba(240, 235, 224, 0.5);
+        display: flex;
+        justify-content: space-between;
+    }
+    .head .mark { color: #ff4b1f; }
+    .name {
+        font-family: "Fraunces", Georgia, serif;
+        font-weight: 400;
+        font-size: 184px;
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+        color: #f0ebe0;
+        margin: 0;
+    }
+    .name em {
+        font-style: italic;
+        color: #ff4b1f;
+        font-variation-settings: "opsz" 144, "SOFT" 60;
+    }
+    .tag {
+        font-family: "Fraunces", Georgia, serif;
+        font-style: italic;
+        font-size: 28px;
+        color: rgba(240, 235, 224, 0.78);
+        max-width: 760px;
+        line-height: 1.3;
+        margin: 24px 0 0;
+    }
+    .foot {
+        font-family: "JetBrains Mono", monospace;
+        font-size: 14px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: rgba(240, 235, 224, 0.42);
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+    }
+    .foot .dot { color: #ff4b1f; padding: 0 8px; }
+</style>
+</head>
+<body>
+    <div class="frame">
+        <div class="head">
+            <span><span class="mark">§</span>&nbsp;n° 01 — Spring 2026</span>
+            <span>raphaelgiulieri.github.io</span>
+        </div>
+        <div>
+            <h1 class="name">Raphael <em>Giulieri.</em></h1>
+            <p class="tag">A designed catalogue across games, graphics, ML, automation &amp; 3D — set in Fraunces &amp; Geist, drawn and deployed by hand.</p>
+        </div>
+        <div class="foot">
+            <span>Creative technologist</span>
+            <span class="dot">·</span>
+            <span>Nice, France</span>
+            <span class="dot">·</span>
+            <span>Available for freelance</span>
+        </div>
+    </div>
+</body>
+</html>

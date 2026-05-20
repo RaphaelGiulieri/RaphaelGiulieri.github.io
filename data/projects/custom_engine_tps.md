@@ -11,7 +11,7 @@ skills_short:
   - ImGui debug tooling
 year: 2022
 year_range: "2021-2022"
-status: completed
+status: shipped
 client: null
 role: Solo developer (school project)
 highlight: false

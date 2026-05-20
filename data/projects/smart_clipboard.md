@@ -9,7 +9,7 @@ skills_short:
   - JSON persistence
   - System-tray integration
 year: 2025
-status: polished
+status: shipped
 client: null
 role: Solo developer
 highlight: false

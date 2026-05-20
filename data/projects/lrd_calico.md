@@ -10,7 +10,7 @@ skills_short:
   - MaterialPropertyBlock patterns
   - Shader-library architecture
 year: 2023
-status: delivered
+status: shipped
 client: "An indie game studio"
 role: Technical Artist
 highlight: true

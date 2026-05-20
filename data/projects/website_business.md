@@ -8,7 +8,7 @@ skills_short:
   - Component inventories
   - Static docs scaffolding
 year: 2025
-status: wip
+status: prototype
 client: null
 role: Solo developer
 highlight: false

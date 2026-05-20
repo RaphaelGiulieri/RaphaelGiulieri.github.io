@@ -694,6 +694,15 @@ button {
     font-style: normal;
     padding: 0 2px;
 }
+.filter-count {
+    font-family: var(--f-mono);
+    font-size: 0.78em;
+    color: var(--ink-dim);
+    margin-left: 4px;
+    font-style: normal;
+    vertical-align: baseline;
+}
+.filter-item.is-active .filter-count { color: var(--accent); opacity: 0.75; }
 
 /* --- Projects grid ------------------------------------ */
 .projects-grid {

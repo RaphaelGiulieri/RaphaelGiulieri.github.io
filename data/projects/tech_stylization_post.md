@@ -11,7 +11,7 @@ skills_short:
   - Selective bloom
 year: 2024
 year_range: "2021-2025"
-status: active
+status: live R&D
 client: null
 role: Solo developer
 highlight: true

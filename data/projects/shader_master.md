@@ -10,7 +10,7 @@ skills_short:
   - Post-processing
   - Reference-implementation authorship
 year: 2021
-status: completed
+status: shipped
 client: null
 role: Solo developer
 highlight: false

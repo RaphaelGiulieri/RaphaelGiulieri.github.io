@@ -9,7 +9,7 @@ skills_short:
   - Gameplay framework
   - Animation Blueprints
 year: 2021
-status: completed
+status: shipped
 client: null
 role: Solo developer (school project)
 highlight: false

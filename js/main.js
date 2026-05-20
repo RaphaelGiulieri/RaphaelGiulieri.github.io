@@ -165,7 +165,14 @@
             const n = key === 'all'
                 ? state.projects.length
                 : state.projects.filter((p) => (p.categories || []).includes(key)).length;
-            // Replace any prior .filter-count, or append one
+            // Hide pill + its trailing separator if the category is empty
+            // (e.g. Mods after the mod-project cleanup).
+            if (n === 0 && key !== 'all') {
+                btn.style.display = 'none';
+                const sep = btn.nextElementSibling;
+                if (sep && sep.tagName === 'I') sep.style.display = 'none';
+                return;
+            }
             let count = btn.querySelector('.filter-count');
             if (!count) {
                 count = document.createElement('span');

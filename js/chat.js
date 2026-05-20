@@ -42,6 +42,7 @@
         expanded: false,
         busy: false,
         fallback: false,   // sticky once a 5xx / network error / 429 trips it
+        abortController: null,   // in-flight SSE; aborted when panel collapses
     };
 
     let saveTimer = null;
@@ -67,8 +68,19 @@
             const raw = sessionStorage.getItem(CHAT_CONFIG.storageKey);
             if (!raw) return;
             const obj = JSON.parse(raw);
-            if (Array.isArray(obj.messages)) state.messages = obj.messages;
-            if (typeof obj.turnsUsed === 'number') state.turnsUsed = obj.turnsUsed;
+            if (Array.isArray(obj.messages)) {
+                // Shape-check each entry — sessionStorage is user-writable and
+                // older schemas could otherwise crash renderHistory().
+                const ok = obj.messages.every((m) =>
+                    m && typeof m === 'object'
+                    && (m.role === 'user' || m.role === 'assistant')
+                    && typeof m.content === 'string'
+                );
+                if (ok) state.messages = obj.messages;
+            }
+            if (typeof obj.turnsUsed === 'number' && obj.turnsUsed >= 0) {
+                state.turnsUsed = obj.turnsUsed;
+            }
             // Intentionally NOT restoring state.fallback — see save() comment.
         } catch {}
     }
@@ -212,6 +224,12 @@
         panel.hidden = true;
         root.classList.remove('is-expanded');
         collapsedBtn.setAttribute('aria-expanded', 'false');
+        // Cancel any in-flight stream — user closed the panel and has moved on.
+        // Saves Anthropic output tokens on abandoned conversations.
+        if (state.abortController) {
+            try { state.abortController.abort(); } catch {}
+            state.abortController = null;
+        }
         if (lastFocus && document.contains(lastFocus)) lastFocus.focus();
         else collapsedBtn.focus();
     }
@@ -368,6 +386,7 @@
         }
 
         let res;
+        state.abortController = new AbortController();
         try {
             res = await fetch(CHAT_CONFIG.workerUrl, {
                 method: 'POST',
@@ -377,8 +396,17 @@
                         .map((m) => ({ role: m.role, content: m.content })),
                     turnstileToken: turnstileToken || undefined,
                 }),
+                signal: state.abortController.signal,
             });
         } catch (e) {
+            if (e.name === 'AbortError') {
+                // User collapsed before headers arrived — keep partial state,
+                // do NOT trip the sticky fallback (this isn't an outage).
+                state.abortController = null;
+                state.busy = false;
+                save();
+                return;
+            }
             return failOver(assistantIdx, text, 'network');
         }
 
@@ -415,6 +443,7 @@
             // Stream broke mid-flight — keep whatever we got, mark not-busy
         }
         state.busy = false;
+        state.abortController = null;
         refreshTurnstile();   // single-use tokens — get a fresh one for next send
         save();
         renderStatus();
@@ -486,7 +515,7 @@
     function fallbackAnswer(query) {
         const projects = window.RG_PROJECTS || [];
         const q = (query || '').toLowerCase();
-        const tokens = q.split(/[^a-z0-9+]+/).filter((t) => t.length > 2);
+        const tokens = q.split(/[^a-z0-9+]+/).filter((t) => t.length >= 2);
         if (tokens.length === 0 || projects.length === 0) {
             return "The assistant is offline right now. Try [Work](#section:work) or [Contact](#section:contact).";
         }

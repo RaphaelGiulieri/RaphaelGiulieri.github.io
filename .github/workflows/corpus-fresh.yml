@@ -1,0 +1,40 @@
+name: corpus-fresh
+
+# Fails if worker/src/corpus.js is out of sync with data/{projects,research,experiences}.json.
+# This catches the failure mode where someone edits a data JSON, commits, and
+# pushes — GitHub Pages redeploys the site instantly but the Worker still
+# serves the previous corpus until 'npm run deploy-chat' runs.
+
+on:
+  push:
+    paths:
+      - 'data/projects.json'
+      - 'data/research.json'
+      - 'data/experiences.json'
+      - 'worker/src/corpus.js'
+      - 'scripts/build-corpus.mjs'
+      - '.github/workflows/corpus-fresh.yml'
+  pull_request:
+    paths:
+      - 'data/projects.json'
+      - 'data/research.json'
+      - 'data/experiences.json'
+      - 'worker/src/corpus.js'
+      - 'scripts/build-corpus.mjs'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Rebuild corpus
+        run: npm run build-corpus
+      - name: Fail if corpus is stale
+        run: |
+          if ! git diff --exit-code worker/src/corpus.js; then
+            echo "::error file=worker/src/corpus.js::worker/src/corpus.js is stale — run 'npm run deploy-chat' before pushing."
+            exit 1
+          fi

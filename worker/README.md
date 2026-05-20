@@ -27,7 +27,7 @@ Every time `data/projects.json`, `data/research.json`, or `data/experiences.json
 
 ```bash
 # From repo root
-node scripts/build-corpus.mjs       # regenerates worker/src/corpus.js + data/corpus.json
+node scripts/build-corpus.mjs       # regenerates worker/src/corpus.js
 cd worker
 wrangler deploy
 ```

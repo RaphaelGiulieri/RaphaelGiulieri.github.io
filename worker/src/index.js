@@ -189,6 +189,12 @@ export default {
       env.RATE_KV.put(dupKey, '1', { expirationTtl: dupTtl }),
     ]);
 
+    // 20s ceiling on the connect/headers phase only. Streaming itself runs
+    // unbounded once headers arrive, so long answers aren't truncated. If
+    // Anthropic is unreachable, the client sees a real 502 instead of waiting
+    // out the Worker's wall-clock limit.
+    const connectController = new AbortController();
+    const connectTimer = setTimeout(() => connectController.abort(), 20_000);
     let upstream;
     try {
       upstream = await fetch(ANTHROPIC_URL, {
@@ -211,10 +217,14 @@ export default {
           ],
           messages: body.messages.map((m) => ({ role: m.role, content: m.content })),
         }),
+        signal: connectController.signal,
       });
     } catch (err) {
-      return json({ error: 'upstream_unreachable', detail: String(err).slice(0, 200) }, 502, cors);
+      clearTimeout(connectTimer);
+      const reason = err.name === 'AbortError' ? 'upstream_timeout' : 'upstream_unreachable';
+      return json({ error: reason, detail: String(err).slice(0, 200) }, 502, cors);
     }
+    clearTimeout(connectTimer);
 
     if (!upstream.ok || !upstream.body) {
       let text = '';

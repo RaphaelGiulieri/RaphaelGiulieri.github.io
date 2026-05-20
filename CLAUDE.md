@@ -16,7 +16,7 @@ After **any** edit to `data/projects.json`, `data/research.json`, or `data/exper
 npm run deploy-chat
 ```
 
-This runs `scripts/build-corpus.mjs` (regenerates `data/corpus.json` + `worker/src/corpus.js`) then `wrangler deploy`. Forget it and the chat will keep referencing the previous corpus — meaning it may link to deleted dossiers or omit new ones.
+This runs `scripts/build-corpus.mjs` (regenerates `worker/src/corpus.js`) then `wrangler deploy`. Forget it and the chat will keep referencing the previous corpus — meaning it may link to deleted dossiers or omit new ones.
 
 The corpus is byte-stable across runs (sorted keys, fixed indent) so identical data → identical bytes → Anthropic prompt cache stays warm. Don't hand-edit `worker/src/corpus.js` — it's a generated artefact.
 

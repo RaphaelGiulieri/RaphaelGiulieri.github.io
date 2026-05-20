@@ -117,6 +117,42 @@
         });
     }
 
+    // ---- Featured client work -----------------------------------
+    // A short row of 4 hand-picked, named-or-shipped client engagements
+    // that lead the Work section. Recruiter-in-a-hurry path: a small
+    // curated set the visitor can act on before the full filterable grid.
+    // IDs are intentionally hardcoded — this is curation, not ranking.
+    const FEATURED_IDS = ['sabda_vfx', 'lrd_calico', 'qatar_360', 'planning_manager'];
+    function renderFeatured() {
+        const mount = $('#workFeatured');
+        if (!mount || !state.projects) return;
+        const byId = Object.fromEntries(state.projects.map((p) => [p.id, p]));
+        const picks = FEATURED_IDS.map((id) => byId[id]).filter(Boolean);
+        if (!picks.length) { mount.style.display = 'none'; return; }
+
+        mount.innerHTML = `
+            <p class="featured-label">Shipped for clients <span aria-hidden="true">·</span> pick of the catalogue</p>
+            <div class="featured-grid">
+                ${picks.map((p) => {
+                    const pc = primaryCategory(p);
+                    return `
+                    <button class="featured-card" data-project-id="${esc(p.id)}" style="--cat-color: ${catVar(pc)}" aria-label="Case study: ${esc(p.title)}">
+                        <p class="featured-meta">
+                            <span>${esc(p.client || p.role || 'Client engagement')}</span>
+                            <span class="featured-status" data-status="${esc(p.status || '')}">${esc(p.status || '')}</span>
+                        </p>
+                        <h3 class="featured-title">${esc(p.title)}</h3>
+                        <p class="featured-tag">${esc(p.tagline || '')}</p>
+                        <p class="featured-cta">Open dossier <span aria-hidden="true">→</span></p>
+                    </button>`;
+                }).join('')}
+            </div>
+        `;
+        $$('.featured-card', mount).forEach((el) => {
+            el.addEventListener('click', () => openModal(el.dataset.projectId, el));
+        });
+    }
+
     // ---- Filter-pill counts -------------------------------------
     // Append a `(n)` to each filter button so the visitor knows how many
     // projects are behind each category before clicking. Recomputes from
@@ -915,6 +951,7 @@
         }
         renderStats();
         renderProjects();
+        renderFeatured();
         renderResearch();
         renderExperience();
         initFilter();

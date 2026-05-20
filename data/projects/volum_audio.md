@@ -40,9 +40,15 @@ This bridges the gap by calling NirSoft's `SoundVolumeView.exe` under the hood, 
 
 ## Highlights
 
+- **Per-app device dropdowns.** Each running app gets its own routing target; the UI surfaces all of them in one panel.
 - **Two device namespaces reconciled** — pycaw's GUID identifiers and SoundVolumeView's friendly names — into a unified table the UI can drive.
-- **Shells out to NirSoft's CLI** to actually flip per-app routing. Not pretty, but it's the only reliable path.
-- **No auto-refresh.** UI updates only on user action. Background polling causes the dropdowns to flicker as Windows shuffles internal device state.
+- **Master volume + mute** for the default device, in the same panel. The audio-switch use case usually needs both at the same time.
+
+## Decisions worth telling
+
+- **Shell out to NirSoft's CLI for the actual routing flip.** Not pretty, but the only reliable path — Windows doesn't expose a routing API to userspace, and reverse-engineering the protocol would be brittle against monthly OS updates. SoundVolumeView is a stable contract.
+- **No auto-refresh.** UI updates only when the user opens or refocuses the panel. Background polling causes dropdowns to flicker as Windows shuffles internal device state between idle and active. The freeze is a feature.
+- **Tray-resident, not always-visible.** The app lives in the system tray and pops open on click. The audio-routing decision is usually situational ("I'm joining a Discord call now"); a permanent panel would be one more thing to manage.
 
 ## Where it stands
 

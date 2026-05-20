@@ -36,10 +36,11 @@
     <aside class="rail" aria-hidden="true">
         <ol class="rail-list">
             <li data-section="hero"><span>00</span><em>Masthead</em></li>
-            <li data-section="work"><span>01</span><em>Work</em></li>
-            <li data-section="research"><span>02</span><em>Research</em></li>
-            <li data-section="experience"><span>03</span><em>Timeline</em></li>
-            <li data-section="contact"><span>04</span><em>Colophon</em></li>
+            <li data-section="about"><span>01</span><em>About</em></li>
+            <li data-section="work"><span>02</span><em>Work</em></li>
+            <li data-section="research"><span>03</span><em>Research</em></li>
+            <li data-section="experience"><span>04</span><em>Timeline</em></li>
+            <li data-section="contact"><span>05</span><em>Colophon</em></li>
         </ol>
     </aside>
 
@@ -51,10 +52,11 @@
                 <span class="brand-issue">n° 01 · Spring 2026</span>
             </a>
             <nav class="masthead-nav" aria-label="Primary">
-                <a href="#work"><span class="nav-n">01</span>Work</a>
-                <a href="#research"><span class="nav-n">02</span>Research</a>
-                <a href="#experience"><span class="nav-n">03</span>Experience</a>
-                <a href="#contact"><span class="nav-n">04</span>Colophon</a>
+                <a href="#about"><span class="nav-n">01</span>About</a>
+                <a href="#work"><span class="nav-n">02</span>Work</a>
+                <a href="#research"><span class="nav-n">03</span>Research</a>
+                <a href="#experience"><span class="nav-n">04</span>Experience</a>
+                <a href="#contact"><span class="nav-n">05</span>Colophon</a>
             </nav>
             <button class="theme-toggle" id="themeToggle" aria-label="Toggle colour theme">
                 <span class="theme-dot"></span>
@@ -132,19 +134,62 @@
             </section>
 
             <p class="hero-catalogue-link revealable">
-                <a href="#work"><em>The catalogue begins below</em> <span aria-hidden="true">↓</span></a>
+                <a href="#about"><em>About this work</em> <span aria-hidden="true">↓</span></a>
             </p>
         </section>
 
-        <!-- § 01 — Selected Work -->
+        <!-- § 01 — About -->
+        <section id="about" class="section section-about" data-section="about">
+            <header class="section-head">
+                <p class="section-marker">§ 01 / About</p>
+                <h2 class="section-title">About<span class="title-dot">.</span></h2>
+                <p class="section-lede">
+                    Engineer by training, technical artist by trade, generalist by interest. The throughline is being the person who can carry a project across the boundaries — from concept to shader to deployment, from API to algorithm to design.
+                </p>
+            </header>
+            <div class="about-grid">
+                <div class="about-prose">
+                    <p>Four years of engineering school (DUT GEII at IUT Nice, CPGE ATS in Paris, then ESTP) routed into game programming at <em>Isart Digital</em>. The first proper engagements were as Technical Artist — eighteen months at <strong>SABDA</strong> on immersive 360° exhibitions, then six months at <strong>Little Red Dog Games</strong> shipping <em>Calico Inferno</em>'s 70-shader URP library.</p>
+                    <p>Freelance since 2024. Engagements since then have spanned a WebGL 360° tourism campaign for a Gulf tourism board (via a Doha agency), a workforce-scheduling SaaS in production for a French team, a 337 kWc rooftop solar engineering package for a dairy farm, a legal site at Lighthouse 95+, and a body of personal R&amp;D on engines, ML, and procedural systems that feeds into everything else.</p>
+                    <p>Engineering for the parts that need rigour; craft for the parts that need taste. Comfortable as the only technical voice in the room or as one of many. Available across Europe; based in Nice.</p>
+                </div>
+                <aside class="about-meta">
+                    <dl>
+                        <div>
+                            <dt>Training</dt>
+                            <dd>
+                                <span>Isart Digital — Game programming</span>
+                                <span>ESTP Paris — Mechanical &amp; electrical engineering</span>
+                                <span>CPGE ATS — Engineering prep</span>
+                                <span>DUT GEII — Electrical engineering</span>
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Base</dt>
+                            <dd><span>Nice, France</span><span>remote across Europe</span></dd>
+                        </div>
+                        <div>
+                            <dt>Languages</dt>
+                            <dd><span>French — native</span><span>English — C2+</span></dd>
+                        </div>
+                    </dl>
+                </aside>
+            </div>
+        </section>
+
+        <!-- § 02 — Selected Work -->
         <section id="work" class="section section-work" data-section="work">
             <header class="section-head">
-                <p class="section-marker">§ 01 / Selected work</p>
+                <p class="section-marker">§ 02 / Selected work</p>
                 <h2 class="section-title">Work<span class="title-dot">.</span></h2>
                 <p class="section-lede">
                     A catalogue of <span data-stat="catalogue">—</span> projects across client engagements and personal research. Filter by category; click any entry for the full case study. The <em>archive</em> reveals the rest of the catalogue — R&amp;D sketches, utilities, legacy experiments.
                 </p>
             </header>
+
+            <div class="work-featured" id="workFeatured" aria-label="Pick of the catalogue — shipped client work">
+                <!-- rendered by JS -->
+            </div>
 
             <nav class="filter-strip" role="tablist" aria-label="Filter projects">
                 <span class="filter-legend">Filter <span aria-hidden="true">/</span></span>
@@ -180,10 +225,10 @@
             </button>
         </section>
 
-        <!-- § 02 — Research -->
+        <!-- § 03 — Research -->
         <section id="research" class="section section-research" data-section="research">
             <header class="section-head">
-                <p class="section-marker">§ 02 / Most wanted</p>
+                <p class="section-marker">§ 03 / Most wanted</p>
                 <h2 class="section-title">Research I'd love to do next<span class="title-dot">.</span></h2>
                 <p class="section-lede">
                     Nine directions — some are extensions of shipped work, some are open ambitions, a few are invitations to collaborate. Flag the ones that resonate.
@@ -195,10 +240,10 @@
             </div>
         </section>
 
-        <!-- § 03 — Experience -->
+        <!-- § 04 — Experience -->
         <section id="experience" class="section section-experience" data-section="experience">
             <header class="section-head">
-                <p class="section-marker">§ 03 / Timeline</p>
+                <p class="section-marker">§ 04 / Timeline</p>
                 <h2 class="section-title">Experience<span class="title-dot">.</span></h2>
                 <p class="section-lede">
                     Freelance and studio engagements, most recent first. Clients are anonymised by domain; every entry links to the project dossier where applicable.
@@ -210,10 +255,10 @@
             </ol>
         </section>
 
-        <!-- § 04 — Colophon -->
+        <!-- § 05 — Colophon -->
         <section id="contact" class="section section-colophon" data-section="contact">
             <header class="section-head">
-                <p class="section-marker">§ 04 / Colophon</p>
+                <p class="section-marker">§ 05 / Colophon</p>
                 <h2 class="section-title">Get in touch<span class="title-dot">.</span></h2>
                 <p class="section-lede">
                     Available for freelance engagements. Based in Nice, France; happy to work remotely across Europe and further if the project warrants it.
@@ -280,5 +325,12 @@
 
     <script src="js/main.js" defer></script>
     <script src="js/chat.js" defer></script>
+
+    <!-- Cloudflare Web Analytics — privacy-first, no cookies, no PII.
+         Replace TOKEN_HERE with the beacon token from
+         dash.cloudflare.com → Analytics & Logs → Web Analytics → Add a site.
+         Until then this script is harmless (404s the beacon, no errors). -->
+    <script defer src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon='{"token": "TOKEN_HERE"}'></script>
 </body>
 </html>

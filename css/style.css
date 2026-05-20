@@ -18,7 +18,7 @@
     --t-xl:   clamp(22px, 1.28rem + 0.5vw, 28px);
     --t-2xl:  clamp(30px, 1.7rem + 1.2vw, 44px);
     --t-3xl:  clamp(44px, 2.3rem + 2.6vw, 82px);
-    --t-hero: clamp(72px, 3.5rem + 9vw, 220px);
+    --t-hero: clamp(64px, 3rem + 7vw, 160px);
 
     /* Spacing */
     --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
@@ -373,7 +373,7 @@ button {
 
 /* --- Hero --------------------------------------------- */
 .hero {
-    padding: clamp(var(--s-8), 12vh, var(--s-10)) var(--gutter) var(--s-8);
+    padding: clamp(var(--s-7), 8vh, var(--s-9)) var(--gutter) var(--s-7);
     position: relative;
     border-bottom: 1px solid var(--rule);
 }
@@ -646,6 +646,113 @@ button {
     color: var(--ink);
     font-variation-settings: "opsz" 24;
 }
+
+/* --- Featured client work ----------------------------
+   A curated row of 4 named-client cards leading the Work section.
+   Recruiter-in-a-hurry path. Same click behaviour as the main grid
+   cards (open dossier modal) but visually distinct — accent border,
+   slightly tighter card with status pill + CTA chip. */
+.work-featured {
+    margin-bottom: var(--s-7);
+    padding-top: var(--s-2);
+}
+.featured-label {
+    font-family: var(--f-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin: 0 0 var(--s-4);
+}
+.featured-label span { color: var(--accent); padding: 0 4px; }
+.featured-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+}
+@media (max-width: 980px) {
+    .featured-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+    .featured-grid { grid-template-columns: 1fr; }
+}
+
+.featured-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s-2);
+    padding: var(--s-5) var(--s-4) var(--s-4);
+    background: var(--bg-elev);
+    text-align: left;
+    color: inherit;
+    cursor: pointer;
+    position: relative;
+    border-top: 2px solid var(--cat-color, var(--accent));
+    transition: background var(--dur-fast) var(--ease-out),
+                border-top-color var(--dur-fast) var(--ease-out);
+    min-height: 180px;
+}
+.featured-card:hover, .featured-card:focus-visible {
+    background: var(--bg-card-hov);
+    outline: none;
+}
+
+.featured-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--s-2);
+    font-family: var(--f-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin: 0;
+}
+.featured-meta > span:first-child {
+    color: var(--ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+.featured-status {
+    color: var(--accent);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+
+.featured-title {
+    font-family: var(--f-display);
+    font-size: var(--t-lg);
+    font-weight: 400;
+    letter-spacing: -0.012em;
+    line-height: 1.15;
+    margin: 0;
+    color: var(--ink);
+}
+.featured-tag {
+    font-family: var(--f-body);
+    font-size: var(--t-sm);
+    line-height: 1.45;
+    color: var(--ink-muted);
+    margin: 0;
+    flex: 1;
+}
+.featured-cta {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    margin: 0;
+    transition: color var(--dur-fast) var(--ease-out);
+}
+.featured-card:hover .featured-cta,
+.featured-card:focus-visible .featured-cta { color: var(--accent); }
 
 /* --- Filter strip ------------------------------------- */
 .filter-strip {
@@ -1113,6 +1220,64 @@ button {
     .timeline-year { border-left: 0; padding-left: 0; padding-top: 0; font-size: var(--t-lg); }
     .timeline-body { padding-right: 0; }
 }
+
+/* --- About --------------------------------------------
+   Section between Hero and Work. Two-column on desktop:
+   prose on the left, structured meta-strip on the right.
+   Stacks on mobile. */
+.about-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    gap: var(--s-8);
+    max-width: var(--w-wide);
+    margin: 0 auto;
+    padding-right: var(--rail-w);
+}
+@media (max-width: 980px) {
+    .about-grid { grid-template-columns: 1fr; gap: var(--s-6); padding-right: 0; }
+}
+.about-prose p {
+    font-family: var(--f-body);
+    font-size: var(--t-base);
+    line-height: 1.65;
+    color: var(--ink);
+    margin: 0 0 var(--s-4);
+    max-width: 60ch;
+}
+.about-prose p:last-child { margin-bottom: 0; }
+.about-prose strong {
+    font-weight: 500;
+    color: var(--ink);
+}
+.about-prose em {
+    font-style: italic;
+    color: var(--accent);
+}
+
+.about-meta {
+    border-left: 1px solid var(--rule);
+    padding-left: var(--s-5);
+}
+@media (max-width: 980px) {
+    .about-meta { border-left: 0; padding-left: 0; border-top: 1px solid var(--rule); padding-top: var(--s-5); }
+}
+.about-meta dl { margin: 0; display: grid; gap: var(--s-5); }
+.about-meta > dl > div { display: grid; gap: var(--s-2); }
+.about-meta dt {
+    font-family: var(--f-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+}
+.about-meta dd { margin: 0; display: grid; gap: 2px; }
+.about-meta dd span {
+    font-family: var(--f-body);
+    font-size: var(--t-sm);
+    color: var(--ink-muted);
+    line-height: 1.45;
+}
+.about-meta dd span:first-child { color: var(--ink); }
 
 /* --- Colophon ---------------------------------------- */
 .section-colophon .section-head { margin-bottom: var(--s-8); }
@@ -2046,7 +2211,9 @@ button {
 
 .chat {
     position: fixed;
-    right: var(--s-5);
+    /* Sit clear of the right-rail (which is 56px wide on desktop, hidden on mobile).
+       The mobile override below restores a tighter offset. */
+    right: calc(var(--rail-w) + var(--s-3));
     bottom: var(--s-5);
     z-index: 150;
     font-family: var(--f-body);
@@ -2067,10 +2234,32 @@ button {
     letter-spacing: 0.06em;
     text-transform: uppercase;
     cursor: pointer;
+    position: relative;
     transition: background var(--dur) var(--ease-out),
                 border-color var(--dur) var(--ease-out),
                 color var(--dur) var(--ease-out);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+/* First-visit attention pulse — a single subtle accent halo that fires
+   once on page load (~3 s), then quiets down. Suppressed on the second
+   visit by the .has-seen-chat class set in chat.js via localStorage. */
+.chat:not(.has-seen-chat) .chat-collapsed::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border: 1px solid var(--accent);
+    border-radius: 2px;
+    opacity: 0;
+    pointer-events: none;
+    animation: chat-attention 1.6s var(--ease-out) 1s 2;
+}
+@keyframes chat-attention {
+    0%   { opacity: 0;   transform: scale(1); }
+    25%  { opacity: 0.7; transform: scale(1); }
+    100% { opacity: 0;   transform: scale(1.08); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .chat:not(.has-seen-chat) .chat-collapsed::before { animation: none; }
 }
 .chat-collapsed:hover {
     background: var(--bg-card-hov);

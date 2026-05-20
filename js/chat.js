@@ -172,6 +172,11 @@
                 </div>
             </div>
         `;
+        // Suppress the first-visit attention pulse on subsequent visits.
+        // The CSS pulse is gated on `.chat:not(.has-seen-chat)`.
+        try {
+            if (localStorage.getItem('rg-chat-seen')) root.classList.add('has-seen-chat');
+        } catch {}
         document.body.appendChild(root);
 
         collapsedBtn = root.querySelector('.chat-collapsed');
@@ -211,6 +216,8 @@
         state.expanded = true;
         panel.hidden = false;
         root.classList.add('is-expanded');
+        root.classList.add('has-seen-chat');
+        try { localStorage.setItem('rg-chat-seen', '1'); } catch {}
         collapsedBtn.setAttribute('aria-expanded', 'true');
         renderHistory();
         mountTurnstile();   // no-op if no site key configured

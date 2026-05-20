@@ -41,9 +41,15 @@ The expanded mode is for when the default isn't right — output folder picker, 
 
 ## Highlights
 
-- **ffmpeg auto-installed** on first run via `imageio-ffmpeg`. No 100 MB binary in the bundle; small download when needed; nothing for the user to configure.
-- **Two UI modes, deliberate.** Compact cube for "right now"; expanded for "batch / custom". Same app, different commitments.
+- **Drag-and-drop is the verb.** Drop one file → converted file, no dialog. The 76 × 76 always-on-top cube collapses the whole "open app · pick file · pick format · pick output · click convert" sequence into a single gesture.
+- **8 × 8 × 8 formats covered.** Eight image, eight audio, eight video formats — PNG/JPEG/WebP/BMP/TIFF/GIF/ICO/HEIC; MP3/WAV/FLAC/AAC/M4A/OGG/OPUS/WMA; MP4/MKV/MOV/AVI/WEBM/FLV/WMV/MPEG — plus PDF in and out. Covers ~95 % of what you'd actually need.
 - **Background-thread conversion** with progress callbacks. UI stays responsive during a 2 GB MKV transcode.
+
+## Decisions worth telling
+
+- **ffmpeg auto-installed on first run, not bundled.** Bundling adds 100 MB to the binary; `imageio-ffmpeg` downloads it on demand, ~30 MB, cached forever. Smaller release, less to package, nothing for the user to manage.
+- **Flet over Electron / Tauri.** Single Python process, no embedded Chromium, ~40 MB binary instead of ~120 MB. The downside is a smaller component vocabulary; for a single-cube UI, that's a feature.
+- **Two UI modes are a commitment, not a setting.** The compact cube is the entire app surface for the common case; the expanded panel is a separate mental mode. Trying to merge them produced a worse version of both — chose the discontinuity over the compromise.
 
 ## Where it stands
 

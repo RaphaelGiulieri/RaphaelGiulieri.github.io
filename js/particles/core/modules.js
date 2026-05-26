@@ -1119,6 +1119,10 @@ export function sdfAttract({ strength = 200, insideRepel = 30, wander = 8 } = {}
     insideRepel: { type: 'float', min: 0,   max: 200,  step: 1,   bindable: true },
     wander:      { type: 'float', min: 0,   max: 50,   step: 0.5, bindable: true },
   };
+  // Band-based attraction: each particle picks a random target depth a few px
+  // inside the silhouette via a deterministic hash on its index. Attraction
+  // converges to that target distance, not d=0, so the swarm forms a thick
+  // band rather than collapsing onto the centreline.
   apply.wgslSnippet = (paramRefs) => `
 {
   let xy = vec2<f32>(p.pos.x, p.pos.y);
@@ -1127,20 +1131,30 @@ export function sdfAttract({ strength = 200, insideRepel = 30, wander = 8 } = {}
   let dy = sample_sdf(xy + vec2<f32>(0.0, 1.0)) - sample_sdf(xy - vec2<f32>(0.0, 1.0));
   let grad = vec2<f32>(dx, dy) * 0.5;
   let grad_len = max(length(grad), 0.0001);
-  let dir = -grad / grad_len;
+  let dir_inward = -grad / grad_len;
 
   let strength     = eval_bound(module_params.${paramRefs.strength}, p, i);
   let inside_repel = eval_bound(module_params.${paramRefs.insideRepel}, p, i);
   let wander       = eval_bound(module_params.${paramRefs.wander}, p, i);
 
-  let attract_mag = strength * tanh(abs(d) * 0.05);
-  accel.x = accel.x + dir.x * attract_mag;
-  accel.y = accel.y + dir.y * attract_mag;
+  // Per-particle target depth — 4 to 12 px inside the silhouette.
+  // Hash gives each particle a slightly different settle distance, producing a band.
+  let h_target = fract(sin(f32(i) * 17.9 + 3.4) * 43758.5453);
+  let band_depth = -4.0 - h_target * 8.0;
+  let d_signed = d - band_depth;
 
-  if (d < -2.0) {
+  // Force pulls particles toward d == band_depth from either side.
+  let attract_mag = strength * tanh(abs(d_signed) * 0.05);
+  let attract_sign = select(-1.0, 1.0, d_signed < 0.0);
+  accel.x = accel.x + dir_inward.x * attract_mag * attract_sign;
+  accel.y = accel.y + dir_inward.y * attract_mag * attract_sign;
+
+  // Hard floor — if a particle ends up REALLY deep inside (numerical drift,
+  // entrance overshoot), shove it back out. Independent of the band logic.
+  if (d < -25.0) {
     let push = inside_repel * (-d * 0.05);
-    accel.x = accel.x + (-dir.x) * push;
-    accel.y = accel.y + (-dir.y) * push;
+    accel.x = accel.x + (-dir_inward.x) * push;
+    accel.y = accel.y + (-dir_inward.y) * push;
   }
 
   let h  = fract(sin(f32(i) * 12.9898 + u.time * 7.7)  * 43758.5453);

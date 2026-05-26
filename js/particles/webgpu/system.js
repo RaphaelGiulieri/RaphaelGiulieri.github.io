@@ -227,15 +227,15 @@ export class WebGPUParticleSystem {
       magFilter: 'linear', minFilter: 'linear',
       addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge',
     });
-    // SdfUniforms buffer: [width, height, radius, padding] × f32 = 16 bytes.
-    // Default 1×1 with radius=1 → sample_sdf() returns ≈0 everywhere (null case).
+    // SdfUniforms buffer: [width, height, radius, offsetX, offsetY, pad×3] × f32 = 32 bytes.
+    // Default 1×1 at origin with radius=1 → sample_sdf() returns ≈0 everywhere (null case).
     this._sdfUniformsBuffer = device.createBuffer({
       label: 'sdf uniforms',
-      size: 16,   // 4 × f32
+      size: 32,   // 8 × f32
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     device.queue.writeBuffer(this._sdfUniformsBuffer, 0,
-      new Float32Array([1, 1, 1, 0]));
+      new Float32Array([1, 1, 1, 0, 0, 0, 0, 0]));  // default: 1×1 at origin
 
     // ---- Bind group layouts ----
     this.uniformLayout = device.createBindGroupLayout({
@@ -284,7 +284,7 @@ export class WebGPUParticleSystem {
         // Null/fallback textures are bound for emitters that don't use SDF.
         { binding: 4, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float', viewDimension: '2d', multisampled: false } },
         { binding: 5, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
-        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', hasDynamicOffset: false, minBindingSize: 16 } },
+        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', hasDynamicOffset: false, minBindingSize: 32 } },
       ],
     });
 
@@ -1584,9 +1584,9 @@ export class WebGPUParticleSystem {
     this._sdfTexture = tex ?? this._nullSdfTexture;
   }
 
-  updateSdfUniforms(width, height, radius) {
+  updateSdfUniforms(width, height, radius, offsetX = 0, offsetY = 0) {
     this.device.queue.writeBuffer(this._sdfUniformsBuffer, 0,
-      new Float32Array([width, height, radius, 0]));
+      new Float32Array([width, height, radius, offsetX, offsetY, 0, 0, 0]));
   }
 
   render({ view, proj, pixelScale = 1.0, debugColors = false, bgColor = [0.047, 0.039, 0.027, 1.0], postfx } = {}) {

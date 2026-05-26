@@ -418,7 +418,14 @@ button {
 /* Hero name stage — wraps H1 + particle canvas with cross-fade states. */
 .hero-name-stage {
     position: relative;
-    /* Lay out by H1; canvas absolutely overlays. */
+    /* Stage is the visual home for the particle swarm — give it serious vertical
+       presence so the canvas reads as a hero-band, not a strip. The H1 inside
+       sits centred via flex; on .is-live it fades to 0 and the canvas takes over. */
+    min-height: clamp(280px, 50vh, 560px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
 }
 .hero-particles {
     position: absolute;

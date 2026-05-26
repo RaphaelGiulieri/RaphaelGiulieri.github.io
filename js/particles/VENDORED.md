@@ -21,7 +21,7 @@ Vendored on: 2026-05-20
 2. `cp -r <source>/particles/* js/particles/` then re-delete `core/audio.js`.
 3. Re-apply the local additions listed above (they should be flagged in upstream diffs).
 
-- `webgpu/system.js`, `webgpu/shaders/eval_bound.wgsl` — adds the global SDF binding at `@group(2) bindings 4-6` (texture, sampler, SdfUniforms buffer) + the `sample_sdf()` helper. Mirrors the curve/gradient LUT pattern; required for the `sdfAttract` portfolio module in Task 3.3. Null fallback `_nullSdfTexture` (1×1 rgba8unorm, R=128) ensures bind groups stay complete for emitters that don't use SDF.
+- `webgpu/system.js`, `webgpu/shaders/eval_bound.wgsl` — adds the global SDF binding at `@group(2) bindings 4-6` (texture, sampler, SdfUniforms buffer) + the `sample_sdf()` helper. Mirrors the curve/gradient LUT pattern; required for the `sdfAttract` portfolio module in Task 3.3. Null fallback `_nullSdfTexture` (1×1 rgba8unorm, R=128) ensures bind groups stay complete for emitters that don't use SDF. In Task 4.4 the `SdfUniforms` struct grew from 16 bytes (4 × f32: width, height, radius, padding) to 32 bytes (8 × f32: width, height, radius, offsetX, offsetY, pad×3) to support centered SDF positioning within a larger canvas; `minBindingSize` on binding 6 updated to 32 accordingly, and `updateSdfUniforms` gained `offsetX`/`offsetY` optional parameters.
 
 ## SDF binding strategy
 

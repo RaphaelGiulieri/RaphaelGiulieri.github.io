@@ -36,16 +36,10 @@
         const isMobile = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`).matches;
         const particleCount = isMobile ? PARTICLE_COUNT_MOBILE : PARTICLE_COUNT_DESKTOP;
 
-        // 4. Adapter + device.
-        let adapter, device;
-        try {
-            adapter = await navigator.gpu.requestAdapter();
-            if (!adapter) { log('no adapter'); return; }
-            device = await adapter.requestDevice();
-            if (!device) { log('no device'); return; }
-        } catch (e) { log('adapter/device fail', e); return; }
-
-        // 5. SDF asset load + timeout.
+        // 4. SDF asset load + timeout.
+        //    (Adapter/device creation removed — the engine creates its own in
+        //     createParticleSystem. We use ps.device after mount to create the
+        //     SDF texture on the same GPUDevice. Path 1 from Task 4.4 spec.)
         let sdfImage, sdfMeta;
         try {
             const [imgBlob, metaJson] = await Promise.all([
@@ -56,12 +50,104 @@
             sdfMeta  = metaJson;
         } catch (e) { log('sdf load failed', e); return; }
 
-        // 6. Engine mount happens in Task 4.4. For now, just flip state class so we can
-        //    confirm the detection path works visually.
-        log('detection passed', { particleCount, sdfMeta });
+        // 5. Engine mount.
+        const canvas = stage.querySelector('canvas.hero-particles');
+        canvas.width  = stage.clientWidth  * (window.devicePixelRatio || 1);
+        canvas.height = stage.clientHeight * (window.devicePixelRatio || 1);
+
+        const { createParticleSystem, Emitter, shapes, modules } = await import('./particles/index.js');
+        let ps;
+        try {
+            ps = await createParticleSystem({
+                canvas,
+                backend: 'webgpu',
+                maxParticles: particleCount,
+                blend: 'additive',
+            });
+        } catch (e) { log('createParticleSystem failed', e); return; }
+
+        // Use the engine's own GPUDevice to create the SDF texture so it lands
+        // on the same device that the bind group references. (Path 1.)
+        const device = ps.device;
+
+        const sdfTexture = device.createTexture({
+            size: [sdfImage.width, sdfImage.height, 1],
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.TEXTURE_BINDING
+                 | GPUTextureUsage.COPY_DST
+                 | GPUTextureUsage.RENDER_ATTACHMENT,
+        });
+        device.queue.copyExternalImageToTexture(
+            { source: sdfImage },
+            { texture: sdfTexture },
+            { width: sdfImage.width, height: sdfImage.height });
+
+        // Position the SDF text centered horizontally in the canvas, slightly
+        // above vertical centre (so it sits where the H1 was, not floating low).
+        const SDF_W = sdfImage.width;
+        const SDF_H = sdfImage.height;
+        const SDF_OFFSET_X = (canvas.width  - SDF_W) / 2;
+        const SDF_OFFSET_Y = (canvas.height - SDF_H) / 2;
+
+        // Push the SDF texture + uniforms into the engine's bind group.
+        ps.updateSdfTexture(sdfTexture);
+        ps.updateSdfUniforms(
+            SDF_W, SDF_H, sdfMeta.distance_radius_px,
+            SDF_OFFSET_X, SDF_OFFSET_Y);
+
+        // One emitter per name-line, coloured per the type split.
+        // Each emitter's spawn region is the FULL CANVAS (not just the half-band)
+        // so particles fly in from across the hero, then attract to their SDF region.
+        for (const line of sdfMeta.lines) {
+            const colorRgba = hexToRgba(line.color, 1.0);
+            await ps.addEmitter(new Emitter({
+                position: [canvas.width / 2, canvas.height / 2, 0],
+                shape: shapes.box({
+                    // Spawn across the full canvas, biased toward the line's vertical half.
+                    size: [canvas.width, canvas.height / 2, 0],
+                }),
+                rate: 0,
+                bursts: [{ time: 0, count: Math.floor(particleCount / 2) }],
+                initial: {
+                    lifetime: { min: 10_000, max: 10_000 },
+                    speed:    { min: 0, max: 0 },
+                    size:     { min: 1.5, max: 2.5 },
+                    color:    colorRgba,
+                },
+                modules: [
+                    modules.sdfAttract({ strength: 250, insideRepel: 40, wander: 6 }),
+                    modules.drag(0.5),
+                ],
+            }));
+        }
+
+        // Animation loop (idle steady state; Phase 5 adds the coalesce intro).
+        const viewProj = mat4Identity();
+        let last = performance.now();
+        function loop(now) {
+            const dt = Math.min(0.05, (now - last) / 1000); last = now;
+            ps.update(dt);
+            ps.render({ view: viewProj, proj: viewProj, bgColor: [0, 0, 0, 0] });
+            requestAnimationFrame(loop);
+        }
         stage.classList.remove('is-static');
-        stage.classList.add('is-live');   // (skips coalesce for now; Phase 5 adds it)
-        // Phase 4.4 fills in the actual engine mount here.
+        stage.classList.add('is-live');
+        requestAnimationFrame(loop);
+
+        log('engine mounted', { particles: particleCount, sdf: [SDF_W, SDF_H], offset: [SDF_OFFSET_X, SDF_OFFSET_Y] });
+    }
+
+    function hexToRgba(hex, alpha) {
+        const m = hex.replace('#', '');
+        return [
+            parseInt(m.substr(0, 2), 16) / 255,
+            parseInt(m.substr(2, 2), 16) / 255,
+            parseInt(m.substr(4, 2), 16) / 255,
+            alpha,
+        ];
+    }
+    function mat4Identity() {
+        return new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
     }
 
     function withTimeout(promise, ms) {

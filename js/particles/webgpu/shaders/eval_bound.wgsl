@@ -91,8 +91,12 @@ fn apply_normalise(raw: f32, b: Bound) -> f32 {
 struct SdfUniforms {
   width:    f32,   // SDF texture width in pixels
   height:   f32,   // SDF texture height in pixels
-  radius:   f32,   // distance_radius_px from the bake script (default 40)
-  _padding: f32,
+  radius:   f32,   // distance_radius_px from the bake script
+  offsetX:  f32,   // x-position of the SDF top-left within the canvas
+  offsetY:  f32,   // y-position of the SDF top-left within the canvas
+  _padding1: f32,
+  _padding2: f32,
+  _padding3: f32,
 };
 @group(2) @binding(6) var<uniform> sdf_uniforms : SdfUniforms;
 
@@ -100,7 +104,8 @@ struct SdfUniforms {
 // Returns signed distance in pixels: negative inside the text, positive outside.
 // The baked PNG encodes (raw - 0.5) * 2 * radius = signed distance in the R channel.
 fn sample_sdf(world_xy: vec2<f32>) -> f32 {
-  let uv = world_xy / vec2<f32>(sdf_uniforms.width, sdf_uniforms.height);
+  let local = world_xy - vec2<f32>(sdf_uniforms.offsetX, sdf_uniforms.offsetY);
+  let uv = local / vec2<f32>(sdf_uniforms.width, sdf_uniforms.height);
   let raw = textureSampleLevel(sdf_tex, sdf_sampler, uv, 0.0).r;
   return (raw - 0.5) * 2.0 * sdf_uniforms.radius;
 }

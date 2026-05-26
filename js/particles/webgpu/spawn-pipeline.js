@@ -14,12 +14,13 @@ export class SpawnPipelineCache {
   async getOrBuild() {
     if (this._pipeline) return { pipeline: this._pipeline, bindGroupLayout: this._layout };
 
+    const load = f => fetch(new URL(`./shaders/${f}`, import.meta.url).href).then(r => r.text());
     const wgsl = await Promise.all([
-      fetch('/particles/webgpu/shaders/spawn_rng.wgsl').then(r => r.text()),
-      fetch('/particles/webgpu/shaders/sample_shape.wgsl').then(r => r.text()),
-      fetch('/particles/webgpu/shaders/direction_override.wgsl').then(r => r.text()),
-      fetch('/particles/webgpu/shaders/spawn_descriptor.wgsl').then(r => r.text()),
-      fetch('/particles/webgpu/shaders/cs_spawn.wgsl').then(r => r.text()),
+      load('spawn_rng.wgsl'),
+      load('sample_shape.wgsl'),
+      load('direction_override.wgsl'),
+      load('spawn_descriptor.wgsl'),
+      load('cs_spawn.wgsl'),
     ]).then(parts => parts.join('\n'));
 
     const module = this.device.createShaderModule({ label: 'cs_spawn', code: wgsl });

@@ -82,8 +82,9 @@ export class Grid {
   }
 
   async _loadPipelines() {
+    const load = f => fetch(new URL(`./shaders/${f}`, import.meta.url).href).then(r => r.text());
     // ── grid_clear ──
-    const clearWgsl = await fetch('/particles/webgpu/shaders/grid_clear.wgsl').then(r => r.text());
+    const clearWgsl = await load('grid_clear.wgsl');
     const clearLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
@@ -108,7 +109,7 @@ export class Grid {
     });
 
     // ── grid_cell_id ──
-    const cellIdWgsl = await fetch('/particles/webgpu/shaders/grid_cell_id.wgsl').then(r => r.text());
+    const cellIdWgsl = await load('grid_cell_id.wgsl');
     const cellIdLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
@@ -125,7 +126,7 @@ export class Grid {
     });
 
     // ── grid_scan ──
-    const scanWgsl = await fetch('/particles/webgpu/shaders/grid_scan.wgsl').then(r => r.text());
+    const scanWgsl = await load('grid_scan.wgsl');
     const scanLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
@@ -148,7 +149,7 @@ export class Grid {
     });
 
     // ── grid_scatter ──
-    const scatterWgsl = await fetch('/particles/webgpu/shaders/grid_scatter.wgsl').then(r => r.text());
+    const scatterWgsl = await load('grid_scatter.wgsl');
     const scatterLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },

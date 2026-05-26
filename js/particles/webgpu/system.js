@@ -812,10 +812,10 @@ export class WebGPUParticleSystem {
   async _ensureCompactPipelines() {
     if (this._compactPipelines) return this._compactPipelines;
     const [tplWgsl, localWgsl, globalWgsl, scatterWgsl] = await Promise.all([
-      fetch('/particles/webgpu/shaders/update.template.wgsl').then(r => r.text()),
-      fetch('/particles/webgpu/shaders/cs_compact_scan_local.wgsl').then(r => r.text()),
-      fetch('/particles/webgpu/shaders/cs_compact_scan_global.wgsl').then(r => r.text()),
-      fetch('/particles/webgpu/shaders/cs_compact_scatter.wgsl').then(r => r.text()),
+      loadWGSL('update.template.wgsl'),
+      loadWGSL('cs_compact_scan_local.wgsl'),
+      loadWGSL('cs_compact_scan_global.wgsl'),
+      loadWGSL('cs_compact_scatter.wgsl'),
     ]);
     // Extract just the Particle struct from the update template so the
     // compaction shaders can reference the same layout without us redefining it.

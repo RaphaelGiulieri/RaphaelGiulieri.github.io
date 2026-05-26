@@ -32,3 +32,6 @@ worker/.dev.vars
 node_modules/
 .npm/
 tracks/
+
+# --- Local scratch / dev verification (not committed) ---
+scratch/

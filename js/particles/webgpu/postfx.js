@@ -8,9 +8,10 @@
 
 const QUAD_VERT_COUNT = 3;
 
-async function loadShader(path) {
-  const r = await fetch(path);
-  if (!r.ok) throw new Error(`failed to load ${path}: ${r.status}`);
+async function loadShader(filename) {
+  const url = new URL(`./shaders/${filename}`, import.meta.url).href;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`failed to load ${url}: ${r.status}`);
   return r.text();
 }
 
@@ -38,9 +39,9 @@ export class PostFXPipeline {
     if (this._ready) return;
     const dev = this.device;
     const [brightWgsl, blurWgsl, compositeWgsl] = await Promise.all([
-      loadShader('/particles/webgpu/shaders/postfx_bright.wgsl'),
-      loadShader('/particles/webgpu/shaders/postfx_blur.wgsl'),
-      loadShader('/particles/webgpu/shaders/postfx_composite.wgsl'),
+      loadShader('postfx_bright.wgsl'),
+      loadShader('postfx_blur.wgsl'),
+      loadShader('postfx_composite.wgsl'),
     ]);
 
     this._sampler = dev.createSampler({

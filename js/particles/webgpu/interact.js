@@ -30,9 +30,10 @@ export class Interact {
   }
 
   async _loadBoids() {
+    const load = f => fetch(new URL(`./shaders/${f}`, import.meta.url).href).then(r => r.text());
     const [common, body] = await Promise.all([
-      fetch('/particles/webgpu/shaders/interact_common.wgsl').then(r => r.text()),
-      fetch('/particles/webgpu/shaders/interact_boids.wgsl').then(r => r.text()),
+      load('interact_common.wgsl'),
+      load('interact_boids.wgsl'),
     ]);
     const wgsl = common + '\n' + body;
     const paramsLayout = this.device.createBindGroupLayout({
@@ -85,10 +86,11 @@ export class Interact {
   }
 
   async _loadSph() {
+    const load = f => fetch(new URL(`./shaders/${f}`, import.meta.url).href).then(r => r.text());
     const [common, dens, force] = await Promise.all([
-      fetch('/particles/webgpu/shaders/interact_common.wgsl').then(r => r.text()),
-      fetch('/particles/webgpu/shaders/interact_sph_density.wgsl').then(r => r.text()),
-      fetch('/particles/webgpu/shaders/interact_sph_force.wgsl').then(r => r.text()),
+      load('interact_common.wgsl'),
+      load('interact_sph_density.wgsl'),
+      load('interact_sph_force.wgsl'),
     ]);
     const paramsLayout = this.device.createBindGroupLayout({
       entries: [{ binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }],

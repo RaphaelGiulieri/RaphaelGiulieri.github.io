@@ -1,0 +1,226 @@
+<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<title>particles · headless</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0c0a07; color: #cfd2d6; font-family: ui-monospace, monospace; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #dump { position: fixed; left: 0; bottom: 0; max-width: 100%; max-height: 40%; overflow: auto; padding: 8px; margin: 0; font-size: 10px; background: rgba(0,0,0,0.6); display: none; }
+  #dump.show { display: block; }
+</style>
+</head><body>
+<canvas id="c"></canvas>
+<pre id="dump"></pre>
+<script type="module">
+// Headless test driver. URL params select an initial spawn layout, set
+// initial velocities, run N frames with a fixed dt, then render once and
+// emit JSON state into <pre id="dump"> + document.title.
+//
+// Examples:
+//   ?count=20&shape=ring                 → 20 particles in a ring at t=0
+//   ?count=20&vx=1&frames=60&dt=0.01666  → same, after 1 simulated second
+//   ?count=20&shape=line&vx=1&frames=60  → line moved right by 1 unit
+
+import {
+  createParticleSystem, Emitter,
+  shapes, modules, Curve, Gradient,
+  mat4LookAt, mat4Perspective,
+} from './index.js';
+
+const params = new URLSearchParams(location.search);
+const num = (k, d) => parseFloat(params.get(k) ?? d);
+const flag = (k, d = false) => {
+  const v = params.get(k);
+  if (v === null) return d;
+  return v !== '0' && v !== 'off' && v !== 'false';
+};
+
+const COUNT  = parseInt(params.get('count') || '20', 10);
+const SHAPE  = params.get('shape') || 'ring';
+const RADIUS = num('radius', 3);
+const VX = num('vx', 0), VY = num('vy', 0), VZ = num('vz', 0);
+const LIFE   = num('life', 10);
+const SIZE   = num('size', 0.25);
+const FRAMES = parseInt(params.get('frames') || '0', 10);
+const DT     = num('dt', 1 / 60);
+const SEED   = parseInt(params.get('seed') || '42', 10);
+const BACKEND = params.get('backend') || 'auto';   // 'webgpu' | 'webgl2' | 'auto'
+const DEBUG_COLORS = flag('debugColors', true);
+const SHOW_DUMP    = flag('showDump',     true);
+
+const canvas = document.getElementById('c');
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width  = Math.floor(canvas.clientWidth  * dpr);
+  canvas.height = Math.floor(canvas.clientHeight * dpr);
+}
+resize();
+new ResizeObserver(resize).observe(canvas);
+
+// ---- Build system + spawn initial particles --------------------------------
+const ps = await createParticleSystem({
+  canvas,
+  backend: BACKEND,
+  maxParticles: Math.max(COUNT, 1024),
+  blend: 'additive',
+  seed: SEED,
+});
+window.__pSystem = ps;
+
+function spawnLayout() {
+  for (let i = 0; i < COUNT; i++) {
+    let x = 0, y = 0, z = 0;
+    if (SHAPE === 'ring') {
+      const a = (i / COUNT) * Math.PI * 2;
+      x = Math.cos(a) * RADIUS;
+      z = Math.sin(a) * RADIUS;
+    } else if (SHAPE === 'grid') {
+      const cols = Math.ceil(Math.sqrt(COUNT));
+      x = (i % cols - cols / 2) * 0.8;
+      y = (Math.floor(i / cols) - cols / 2) * 0.8;
+    } else if (SHAPE === 'line') {
+      x = (i / Math.max(1, COUNT - 1) - 0.5) * RADIUS * 2;
+    } else {
+      x = (ps.rng.next() - 0.5) * RADIUS * 2;
+      y = (ps.rng.next() - 0.5) * RADIUS * 2;
+      z = (ps.rng.next() - 0.5) * RADIUS * 2;
+    }
+    const slot = ps._spawnOne(0, x, y, z);
+    if (slot < 0) break;
+    ps.vel[slot * 3]     = VX;
+    ps.vel[slot * 3 + 1] = VY;
+    ps.vel[slot * 3 + 2] = VZ;
+    ps.size[slot] = SIZE;
+    ps.life[slot] = LIFE;
+    ps.color[slot * 4]     = 1.0;
+    ps.color[slot * 4 + 1] = 0.42;
+    ps.color[slot * 4 + 2] = 0.15;
+    ps.color[slot * 4 + 3] = 1.0;
+  }
+}
+
+function buildShapeFromParams() {
+  const s = params.get('emitterShape') || 'point';
+  if (s === 'point')  return shapes.point();
+  if (s === 'sphere') return shapes.sphere({ radius: num('radius', 1), surface: flag('surface', false) });
+  if (s === 'cone')   return shapes.cone({ radius: num('radius', 0.2), halfAngle: num('halfAngle', Math.PI / 8) });
+  if (s === 'box')    return shapes.box({ size: [num('sx', 1), num('sy', 1), num('sz', 1)] });
+  if (s === 'ring')   return shapes.ring({ radius: num('radius', 1), thickness: num('thickness', 0), height: num('height', 0) });
+  if (s === 'line')   return shapes.line({ length: num('length', 2) });
+  if (s === 'disc')   return shapes.disc({ radius: num('radius', 1) });
+  throw new Error('unknown shape: ' + s);
+}
+
+function parseFloats(s) {
+  return s.split(',').map(parseFloat);
+}
+
+function buildModulesFromParams() {
+  const mods = [];
+  if (params.has('gravity')) {
+    const g = parseFloats(params.get('gravity'));
+    mods.push(modules.gravity([g[0] || 0, g[1] || 0, g[2] || 0]));
+  }
+  if (params.has('drag')) mods.push(modules.drag(parseFloat(params.get('drag'))));
+  if (params.has('attractor')) {
+    const a = parseFloats(params.get('attractor'));
+    mods.push(modules.attractor({ position: [a[0]||0, a[1]||0, a[2]||0], strength: a[3] || 1 }));
+  }
+  if (params.has('swirl')) {
+    mods.push(modules.velocityOverLifetime({ swirl: parseFloat(params.get('swirl')) }));
+  }
+  if (params.has('curlNoise')) {
+    const c = parseFloats(params.get('curlNoise'));
+    mods.push(modules.curlNoise({
+      frequency: c[0] || 0.4,
+      amplitude: c[1] || 1,
+      evolveSpeed: c[2] || 0.2,
+    }));
+  }
+  if (params.has('colorOverLife')) {
+    // default test gradient: white -> orange -> transparent black
+    const grad = new Gradient([
+      [0.0, [1, 1, 1, 1]],
+      [0.5, [1, 0.5, 0.1, 1]],
+      [1.0, [0, 0, 0, 0]],
+    ]);
+    mods.push(modules.colorOverLifetime(grad));
+  }
+  if (params.has('sizeOverLife')) {
+    const c = new Curve([[0, 0.05], [0.3, 0.4], [1.0, 0.0]]);
+    mods.push(modules.sizeOverLifetime(c));
+  }
+  if (params.has('boundary')) {
+    // boundary=sphere,radius,kill or box,size,bounce
+    const b = params.get('boundary').split(',');
+    if (b[0] === 'sphere') {
+      mods.push(modules.boundary({ shape: 'sphere', radius: parseFloat(b[1] || '5'), mode: b[2] || 'kill' }));
+    } else if (b[0] === 'box') {
+      const s = parseFloat(b[1] || '5');
+      mods.push(modules.boundary({ shape: 'box', size: [s,s,s], mode: b[2] || 'kill' }));
+    }
+  }
+  return mods;
+}
+
+const DRIVER = params.get('driver') || 'direct';
+let emitter = null;
+if (DRIVER === 'emitter') {
+  emitter = new Emitter({
+    position: [num('ex', 0), num('ey', 0), num('ez', 0)],
+    shape: buildShapeFromParams(),
+    rate: num('rate', 0),
+    bursts: parseInt(params.get('burstCount') || '0', 10) > 0
+      ? [{ time: 0, count: parseInt(params.get('burstCount'), 10) }]
+      : [],
+    initial: {
+      lifetime: num('life', 10),
+      speed:    num('speed', 0),
+      size:     num('size', SIZE),
+      color:    [1, 0.42, 0.15, 1],
+    },
+    modules: buildModulesFromParams(),
+  });
+  await ps.addEmitter(emitter);
+} else {
+  spawnLayout();
+  // For direct mode, we wrap modules in a fake emitter so they apply.
+  const mods = buildModulesFromParams();
+  if (mods.length > 0) {
+    const e = new Emitter({ shape: shapes.point(), modules: mods });
+    await ps.addEmitter(e);
+    // Re-tag all existing direct-spawned particles to belong to this emitter.
+    for (let i = 0; i < ps.alive; i++) ps.emitterId[i] = e.id;
+  }
+}
+
+// ---- Run integrator headlessly --------------------------------------------
+// In emitter mode: always run at least 1 frame so t=0 bursts fire.
+const runN = (DRIVER === 'emitter' && FRAMES === 0) ? 1 : FRAMES;
+if (runN > 0) ps.runFrames(runN, DT);
+
+// ---- Render one frame ------------------------------------------------------
+const view = mat4LookAt([0, 4, 10], [0, 0, 0], [0, 1, 0]);
+const proj = mat4Perspective(Math.PI / 3.4, canvas.width / canvas.height, 0.5, 100);
+ps.render({
+  view, proj,
+  pixelScale: Math.min(window.devicePixelRatio || 1, 2),
+  debugColors: DEBUG_COLORS,
+  bgColor: [0.047, 0.039, 0.027, 1.0],
+});
+
+// ---- Emit JSON dump --------------------------------------------------------
+const state = ps.dump({ debugColors: DEBUG_COLORS });
+state.config = {
+  count: COUNT, shape: SHAPE, radius: RADIUS,
+  vx: VX, vy: VY, vz: VZ, life: LIFE,
+  frames: FRAMES, dt: DT, seed: SEED,
+  debugColors: DEBUG_COLORS,
+};
+const dumpEl = document.getElementById('dump');
+dumpEl.textContent = JSON.stringify(state, null, 2);
+if (SHOW_DUMP) dumpEl.classList.add('show');
+document.title = `READY/${ps.frame}/${ps.alive}`;
+</script>
+</body></html>

@@ -1,0 +1,1097 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Scene Inspector · prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Major+Mono+Display&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep:  #050402;
+  --bg:       #0c0a07;
+  --bg-1:     #14110c;
+  --bg-2:     #1c1812;
+  --bg-3:     #2a241a;
+  --text:     #f0ebe0;
+  --text-dim: rgba(240,235,224,0.55);
+  --text-faint: rgba(240,235,224,0.25);
+  --accent:   #ff4b1f;
+  --accent-d: #c23a17;
+  --accent-soft: rgba(255,75,31,0.10);
+  --line:     rgba(240,235,224,0.08);
+  --line-2:   rgba(240,235,224,0.18);
+  --green:    #9ee37d;
+  --warn:     #f4d35e;
+
+  --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
+  --display: 'Major Mono Display', 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--mono);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'tnum' 1, 'cv11' 1;
+}
+body {
+  display: flex;
+  align-items: stretch;
+  justify-content: flex-end;
+  padding: 28px;
+  /* dot-grid background — instrument panel feel */
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(240,235,224,0.04) 1px, transparent 0);
+  background-size: 18px 18px;
+  position: relative;
+  overflow: hidden;
+}
+body::before {
+  /* corner accent */
+  content: '';
+  position: absolute; left: 28px; top: 28px;
+  width: 240px; height: 1px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  opacity: 0.5;
+}
+body::after {
+  content: 'scene inspector / mod-1';
+  position: absolute; left: 28px; top: 36px;
+  font: 400 10px/1 var(--display);
+  letter-spacing: 0.16em; text-transform: lowercase;
+  color: var(--text-faint);
+}
+
+/* ============================================================ panel */
+.panel {
+  width: 360px;
+  max-height: calc(100vh - 56px);
+  background: var(--bg);
+  border: 1px solid var(--line-2);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  position: relative;
+  box-shadow:
+    0 0 0 1px rgba(255,75,31,0.04),
+    0 28px 56px rgba(0,0,0,0.55);
+}
+.panel::before {
+  /* a hairline accent rail at the top */
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent-d) 70%, transparent);
+  z-index: 1;
+}
+
+/* tabs — two groups separated by a hairline:
+     SCENE      [post-fx] [audio]
+     EMITTERS   [ambient] [sparks] [+ new]
+   Group label sits above the strip at 8px caps. */
+.tab-group-row {
+  display: flex;
+  background: linear-gradient(180deg, var(--bg-1), var(--bg));
+  border-bottom: 1px solid var(--line);
+  align-items: stretch;
+}
+.tab-group-row.last { border-bottom: 1px solid var(--line-2); position: relative; }
+.tab-group-row.last::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: var(--accent); opacity: 0.45;
+}
+.tab-group-label {
+  flex: 0 0 auto;
+  padding: 12px 12px;
+  font: 600 8px/1 var(--mono);
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  background: var(--bg-deep);
+  border-right: 1px solid var(--line);
+  display: flex; align-items: center;
+  min-width: 78px;
+}
+
+.tabs {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+  position: relative;
+  flex: 1 1 auto;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+  background: var(--accent); opacity: 0.45;
+}
+.tab {
+  font: 600 9px/1 var(--mono);
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--text-dim);
+  background: transparent; border: 0; cursor: pointer;
+  padding: 12px 14px;
+  border-bottom: 2px solid transparent;
+  position: relative;
+  transition: color 120ms, background 120ms;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab.tab-em {
+  padding-left: 18px;
+}
+.tab.tab-em::before {
+  content: '';
+  position: absolute; left: 8px; top: 10px; bottom: 10px;
+  width: 3px;
+  background: var(--c, var(--accent));
+  box-shadow: 0 0 6px var(--c, var(--accent));
+}
+.tab.selected {
+  color: var(--text);
+  background: var(--accent-soft);
+  border-bottom-color: var(--accent);
+}
+.tab .badge {
+  display: inline-block; margin-left: 6px;
+  font: 500 9px/1 var(--mono);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.tab.selected .badge { color: var(--accent); }
+.tab.tab-add {
+  color: var(--accent);
+  font-weight: 700;
+  border-left: 1px solid var(--line);
+}
+.tab-divider {
+  width: 1px;
+  background: var(--line-2);
+  margin: 8px 0;
+}
+
+/* editor body */
+.editor {
+  overflow-y: auto;
+  padding: 14px 14px 18px;
+  position: relative;
+}
+.editor::-webkit-scrollbar { width: 6px; }
+.editor::-webkit-scrollbar-thumb { background: var(--line-2); }
+
+.editor.swap > * {
+  animation: tabSwap 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes tabSwap {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* footer status bar */
+.footer {
+  border-top: 1px solid var(--line);
+  padding: 6px 12px;
+  font: 400 9px/1.4 var(--mono);
+  letter-spacing: 0.10em;
+  color: var(--text-faint);
+  display: flex;
+  justify-content: space-between;
+  background: var(--bg-1);
+}
+.footer b { color: var(--accent); font-weight: 500; }
+
+/* ============================================================ emitter header */
+.em-head {
+  display: grid;
+  grid-template-columns: 22px 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 4px 2px 14px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.em-color {
+  width: 20px; height: 20px;
+  border: 1px solid var(--line-2);
+  position: relative;
+  background: var(--bg-2);
+}
+.em-color::after {
+  content: '';
+  position: absolute; inset: 2px;
+  background: var(--c, var(--accent));
+  box-shadow: inset 0 0 8px rgba(0,0,0,0.35);
+}
+.em-name {
+  font: 500 14px/1 var(--mono);
+  background: transparent; border: 0;
+  color: var(--text);
+  padding: 4px 0;
+  border-bottom: 1px dashed transparent;
+  outline: none;
+  width: 100%;
+}
+.em-name:hover { border-bottom-color: var(--line-2); }
+.em-name:focus { border-bottom-color: var(--accent); }
+
+.em-stats {
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.em-stats b { color: var(--accent); font-weight: 500; }
+
+.em-del {
+  background: transparent; border: 0;
+  color: var(--text-faint); cursor: pointer;
+  font: 400 12px/1 var(--mono);
+  padding: 4px 6px;
+}
+.em-del:hover { color: var(--accent); }
+
+/* ============================================================ sub-sections */
+.sub {
+  border: 1px solid var(--line);
+  margin-bottom: 8px;
+  background: var(--bg-1);
+  position: relative;
+}
+.sub::before {
+  /* minor left accent line so cards feel modular */
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0; width: 1px;
+  background: var(--line-2);
+}
+.sub > header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px 8px 12px;
+  font: 500 9px/1 var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  background: linear-gradient(90deg, var(--bg-2), transparent 70%);
+  border-bottom: 1px solid var(--line);
+}
+.sub > header:hover { color: var(--text); }
+.sub > header .chev {
+  display: inline-block;
+  color: var(--accent);
+  transition: transform 150ms;
+  font-size: 10px;
+  width: 10px;
+}
+.sub.collapsed > header .chev { transform: rotate(-90deg); }
+.sub.collapsed > header { border-bottom-color: transparent; }
+.sub > header .meta {
+  margin-left: auto;
+  color: var(--text-faint);
+  letter-spacing: 0.06em;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.sub-body { padding: 8px 12px 10px; display: grid; gap: 4px; }
+.sub.collapsed .sub-body { display: none; }
+
+/* ============================================================ rows */
+.row {
+  display: grid;
+  grid-template-columns: 64px 1fr 38px;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 0;
+}
+.row > label {
+  font: 400 9px/1 var(--mono);
+  color: var(--text-dim);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+.row .v {
+  font: 400 9px/1 var(--mono);
+  color: var(--accent);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.row.row-axis-label > label {
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+input[type=range] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 2px;
+  background: var(--line-2);
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 8px; height: 14px; border: 0; cursor: pointer;
+  background: var(--accent);
+}
+input[type=range]::-moz-range-thumb {
+  width: 8px; height: 14px; border: 0; cursor: pointer;
+  background: var(--accent);
+}
+
+.field {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line-2);
+  font: 400 10px/1.4 var(--mono);
+  padding: 4px 6px;
+}
+.btn {
+  background: var(--bg);
+  color: var(--text-dim);
+  border: 1px solid var(--line-2);
+  font: 500 9px/1 var(--mono);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn-add {
+  display: block; width: 100%;
+  font: 600 9px/1 var(--mono);
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: rgba(255,75,31,0.06);
+  border: 1px dashed rgba(255,75,31,0.4);
+  padding: 8px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.btn-add:hover { background: rgba(255,75,31,0.18); }
+
+input[type=checkbox] {
+  appearance: -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-2);
+  cursor: pointer;
+  position: relative;
+}
+input[type=checkbox]:checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+input[type=checkbox]:checked::after {
+  content: '';
+  position: absolute; left: 3px; top: 0px;
+  width: 4px; height: 8px;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* ============================================================ modules */
+.mod {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--c, var(--accent));
+  margin-bottom: 4px;
+}
+.mod-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 8px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.mod-head:hover { background: var(--bg-3); }
+.mod-chev {
+  display: inline-block;
+  width: 10px;
+  font-size: 10px;
+  color: var(--accent);
+  transition: transform 150ms;
+}
+.mod.collapsed .mod-chev { transform: rotate(-90deg); }
+.mod-name {
+  font: 500 10px/1.1 var(--mono);
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+.mod-name .ns { color: var(--text-faint); }
+.mod-kind {
+  font: 500 8px/1 var(--mono);
+  color: var(--c, var(--accent));
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border: 1px solid var(--c, var(--accent));
+  background: rgba(255,255,255,0.02);
+}
+.mod-del {
+  background: transparent; border: 0;
+  color: var(--text-faint); cursor: pointer;
+  font-size: 10px;
+  padding: 4px;
+}
+.mod-del:hover { color: var(--accent); }
+.mod-body {
+  border-top: 1px solid var(--line);
+  padding: 8px 10px 10px 18px;
+  background: var(--bg-1);
+  display: grid;
+  gap: 4px;
+}
+.mod.collapsed .mod-body { display: none; }
+
+/* ============================================================ phase dividers */
+/* Two phases inside an emitter editor:
+     01 / SPAWN  — evaluated when a particle is born (rules / initial / shape)
+     02 / UPDATE — evaluated every frame on each living particle (modules)   */
+.phase {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin: 14px 0 8px;
+  position: relative;
+}
+.phase:first-of-type { margin-top: 4px; }
+.phase .ph-num {
+  font: 700 9px/1 var(--mono);
+  color: var(--accent);
+  letter-spacing: 0.10em;
+  background: var(--bg-deep);
+  padding: 5px 7px;
+  border: 1px solid var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.phase .ph-name {
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.phase .ph-name .sub {
+  display: block;
+  font: 400 8px/1.4 var(--mono);
+  letter-spacing: 0.14em;
+  color: var(--text-faint);
+  margin-top: 4px;
+  text-transform: lowercase;
+}
+.phase .ph-line {
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  opacity: 0.6;
+}
+
+/* ============================================================ audio panel */
+.player-card {
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  padding: 12px;
+  margin-bottom: 10px;
+}
+.player-card audio {
+  width: 100%; height: 32px;
+  filter: invert(0.85) hue-rotate(-20deg) saturate(0.5);
+  margin: 6px 0;
+}
+.player-card .row-controls {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.player-card .field { width: 100%; }
+.audio-status {
+  font: 400 9px/1.4 var(--mono);
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.audio-status.ready { color: var(--green); }
+
+/* source activity bars */
+.src-line {
+  display: grid;
+  grid-template-columns: 1fr 96px 36px;
+  gap: 8px; align-items: center;
+  padding: 3px 0;
+  font-size: 9px;
+}
+.src-name {
+  color: var(--text-dim);
+  font: 500 9px/1 var(--mono);
+  letter-spacing: 0.04em;
+}
+.src-bar {
+  height: 8px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  position: relative;
+  overflow: hidden;
+}
+.src-fill {
+  height: 100%;
+  background: linear-gradient(90deg, transparent, var(--accent));
+  transition: width 80ms linear;
+}
+.src-v {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  font-size: 9px;
+}
+
+/* on/off mini chip */
+.chip {
+  display: inline-block;
+  font: 500 8px/1 var(--mono);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-2);
+  color: var(--text-faint);
+}
+.chip.on { color: var(--accent); border-color: var(--accent); }
+
+/* ============================================================ stage tab decoration */
+.preset-card {
+  background: linear-gradient(180deg, var(--bg-1), var(--bg));
+  border: 1px solid var(--line);
+  padding: 14px 12px;
+  margin-bottom: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+.preset-card h2 {
+  font: 400 14px/1 var(--display);
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  color: var(--text);
+}
+.preset-card .meta {
+  font: 400 9px/1.4 var(--mono);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: 6px;
+}
+.preset-card .meta b { color: var(--accent); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<aside class="panel">
+  <nav id="tab-nav"></nav>
+  <main class="editor swap" id="editor"></main>
+  <footer class="footer" id="footer">
+    <span>SIM <b id="fStat">240</b> ALIVE · <b id="fStat2">0.4</b> MS</span>
+    <span><b>60</b> FPS</span>
+  </footer>
+</aside>
+
+<script>
+// ---- Mock state ----------------------------------------------------------
+const state = {
+  active: { type: 'em', idx: 0 },
+  stage:  { grid: true, bloom: true, threshold: 0.85, intensity: 0.7, exposure: 1.0, vignette: 0.30 },
+  audio:  { loaded: false, bpm: 0, t: 0, duration: 0 },
+  emitters: [
+    {
+      name: 'ambient',
+      alive: 220,
+      color: [1.00, 0.55, 0.10, 1.0],
+      position: [0, 0, 0],
+      rate: 200,
+      lifetime: { min: 1.5, max: 3.0 },
+      speed:    { min: 0.5, max: 2.0 },
+      shape: { type: 'disc', radius: 4 },
+      modules: [
+        { name: 'force.curl',     kind: 'force-field', params: { frequency: 0.40, amplitude: 1.5, evolveSpeed: 0.20, octaves: 2 } },
+        { name: 'set.size',       kind: 'set',         params: { curve: 'curve' } },
+        { name: 'set.color',      kind: 'set',         params: { gradient: 'gradient' } },
+        { name: 'mul.intensity',  kind: 'mul',         params: { value: 1.0 } },
+        { name: 'emit.onTrigger', kind: 'emit',        params: { source: 'audio.beat.flash', threshold: 0.85, target: 'sparks', count: 25 } },
+      ],
+    },
+    {
+      name: 'sparks',
+      alive: 38,
+      color: [1.00, 0.85, 0.40, 1.0],
+      position: [0, 0, 0],
+      rate: 0,
+      lifetime: { min: 0.4, max: 0.8 },
+      speed:    { min: 6, max: 14 },
+      shape: { type: 'sphere', radius: 0.05 },
+      modules: [
+        { name: 'force.gravity', kind: 'force', params: { x: 0, y: -10, z: 0 } },
+        { name: 'force.drag',    kind: 'force', params: { coefficient: 2.0 } },
+        { name: 'set.size',      kind: 'set',   params: { curve: 'curve' } },
+        { name: 'set.color',     kind: 'set',   params: { gradient: 'gradient' } },
+      ],
+    },
+  ],
+  modOpen: { 'ambient/0': true },   // module body open state, keyed by emName/idx
+  collapsed: { },
+};
+
+// ---- Helpers --------------------------------------------------------------
+function el(tag, props = {}, kids = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v == null) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k === 'style' && typeof v === 'object') for (const sk of Object.keys(v)) e.style.setProperty(sk, v[sk]);
+    else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of kids) {
+    if (c == null) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+const rgb = c => `rgb(${(Math.min(1, c[0])*255)|0},${(Math.min(1, c[1])*255)|0},${(Math.min(1, c[2])*255)|0})`;
+
+// ---- Tabs -----------------------------------------------------------------
+// Tabs are split into two GROUPS, each with its own row + label:
+//   "scene"    — post-fx + audio (these are not part of the particle system,
+//                they're stage-level concerns)
+//   "emitters" — one tab per emitter + add-new
+function renderTabs() {
+  const nav = document.getElementById('tab-nav');
+  nav.innerHTML = '';
+
+  // SCENE row
+  const scene = el('div', { class: 'tab-group-row' });
+  scene.appendChild(el('div', { class: 'tab-group-label' }, ['scene']));
+  const sceneTabs = el('div', { class: 'tabs' });
+  sceneTabs.appendChild(tab('post-fx', { type: 'fx' }));
+  sceneTabs.appendChild(tab('audio',   { type: 'audio' }));
+  scene.appendChild(sceneTabs);
+  nav.appendChild(scene);
+
+  // EMITTERS row
+  const ems = el('div', { class: 'tab-group-row last' });
+  ems.appendChild(el('div', { class: 'tab-group-label' }, ['emitters']));
+  const emTabs = el('div', { class: 'tabs' });
+  state.emitters.forEach((em, i) => {
+    emTabs.appendChild(tab(em.name, { type: 'em', idx: i }, {
+      em: true, color: rgb(em.color), badge: em.alive,
+    }));
+  });
+  emTabs.appendChild(el('button', { class: 'tab tab-add', onclick: addEmitter }, ['+ NEW']));
+  ems.appendChild(emTabs);
+  nav.appendChild(ems);
+}
+function tab(label, target, opts = {}) {
+  const isActive = sameTab(target, state.active);
+  const cls = ['tab'];
+  if (opts.em) cls.push('tab-em');
+  if (isActive) cls.push('selected');
+  const props = { class: cls.join(' '), onclick: () => { state.active = target; render(true); } };
+  if (opts.color) props.style = { '--c': opts.color };
+  const kids = [label];
+  if (opts.badge != null) kids.push(el('span', { class: 'badge' }, [String(opts.badge)]));
+  return el('button', props, kids);
+}
+function sameTab(a, b) {
+  if (a.type !== b.type) return false;
+  if (a.type === 'em')   return a.idx === b.idx;
+  return true;
+}
+
+// ---- Editor body ----------------------------------------------------------
+function renderEditor() {
+  const host = document.getElementById('editor');
+  host.innerHTML = '';
+  if (state.active.type === 'fx')    return renderFX(host);
+  if (state.active.type === 'audio') return renderAudio(host);
+  if (state.active.type === 'em')    return renderEmitter(host, state.emitters[state.active.idx]);
+}
+
+function renderFX(host) {
+  host.appendChild(el('div', { class: 'preset-card' }, [
+    el('div', {}, [
+      el('h2', {}, ['post-process']),
+      el('div', { class: 'meta', html: 'BLOOM <b>' + (state.stage.bloom ? 'ON' : 'OFF') + '</b> · GRID <b>' + (state.stage.grid ? 'ON' : 'OFF') + '</b>' }),
+    ]),
+    el('span', { class: 'chip ' + (state.stage.bloom ? 'on' : '') }, [state.stage.bloom ? 'live' : 'idle']),
+  ]));
+  host.appendChild(sub('Bloom', 'fx-bloom', () => [
+    rowToggle('Enabled',  state.stage, 'bloom'),
+    rowSlider('Threshold',state.stage, 'threshold', 0, 3, 0.01),
+    rowSlider('Intens.',  state.stage, 'intensity', 0, 3, 0.01),
+    rowSlider('Soft knee',state.stage, 'softKnee',  0, 1, 0.01, 0.7),
+  ]));
+  host.appendChild(sub('Tonemap', 'fx-tone', () => [
+    rowSlider('Exposure', state.stage, 'exposure', 0.1, 3, 0.01),
+    rowSlider('Vignette', state.stage, 'vignette', 0,   1, 0.01),
+  ]));
+  host.appendChild(sub('Reference grid', 'fx-grid', () => [
+    rowToggle('XZ grid', state.stage, 'grid'),
+  ]));
+}
+
+function renderAudio(host) {
+  // Player card
+  const card = el('div', { class: 'player-card' });
+  card.appendChild(el('div', { html:
+    '<div style="font:500 9px/1 var(--mono); letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-faint);">playback / track feed</div>'
+  }));
+  const audio = el('audio', { controls: 'controls', preload: 'metadata' });
+  card.appendChild(audio);
+  card.appendChild(el('div', { class: 'row-controls' }, [
+    el('select', { class: 'field' }, [
+      el('option', { value: '' }, ['— pick a track —']),
+      el('option', { value: 'a' }, ['Queen — Bohemian Rhapsody']),
+      el('option', { value: 'b' }, ['Mobb Deep — Shook Ones, Pt. II']),
+      el('option', { value: 'c' }, ['Beatles — Michelle']),
+    ]),
+    el('button', { class: 'btn', onclick: () => { state.audio.loaded = !state.audio.loaded; state.audio.bpm = state.audio.loaded ? 70.6 : 0; render(); } }, ['load']),
+    el('button', { class: 'btn' }, ['unload']),
+  ]));
+  card.appendChild(el('div', { class: 'audio-status' + (state.audio.loaded ? ' ready' : '') },
+    [state.audio.loaded ? `✓ ready · ${state.audio.bpm.toFixed(1)} bpm · 360 s` : 'no track loaded · audio.* sources return 0']));
+  host.appendChild(card);
+
+  host.appendChild(sub('Source activity', 'audio-src', () => [
+    sourceLine('audio.rms', 0),
+    sourceLine('audio.flux', 0),
+    sourceLine('audio.bands.bass', 0),
+    sourceLine('audio.bands.mid', 0),
+    sourceLine('audio.beat.flash', 0),
+    sourceLine('audio.onsets.drums.flash', 0),
+    sourceLine('audio.chroma.A', 0),
+  ]));
+}
+
+function sourceLine(name, mockBase) {
+  const fill = el('div', { class: 'src-fill', style: { width: '0%' } });
+  const v = el('span', { class: 'src-v' }, ['0.00']);
+  const w = el('div', { class: 'src-line' }, [
+    el('span', { class: 'src-name' }, [name]),
+    el('div', { class: 'src-bar' }, [fill]),
+    v,
+  ]);
+  w.dataset.source = name;
+  return w;
+}
+
+function renderEmitter(host, em) {
+  // Header
+  const head = el('header', { class: 'em-head' }, [
+    el('div', { class: 'em-color', style: { '--c': rgb(em.color) } }),
+    el('input', {
+      class: 'em-name',
+      value: em.name,
+      onchange: (e) => { em.name = e.target.value; renderTabs(); },
+    }),
+    el('span', { class: 'em-stats', html: `<b>${em.alive}</b> ALIVE` }),
+    el('button', { class: 'em-del', title: 'delete emitter',
+      onclick: () => deleteEmitter(state.active.idx),
+    }, ['✕']),
+  ]);
+  host.appendChild(head);
+
+  // ─── 01 / SPAWN ─── (sampled once when a particle is born)
+  host.appendChild(phaseDivider('01', 'spawn', 'evaluated once at birth'));
+
+  host.appendChild(sub('Spawn rules', `em-${em.name}-rules`,
+    () => [
+      rowVec3('position', em.position),
+      rowSlider('Rate /s', em, 'rate', 0, 5000, 1),
+      el('button', { class: 'btn-add' }, ['+ burst']),
+    ],
+    `${em.rate}/S`,
+  ));
+
+  host.appendChild(sub('Initial values', `em-${em.name}-init`, () => [
+    rowRange('lifetime', em.lifetime, 0.05, 30),
+    rowRange('speed',    em.speed,    0,    50),
+    rowConst('size',     0.30, 0.01, 5),
+    rowColor(em),
+  ]));
+
+  host.appendChild(sub(`Spawn shape — ${em.shape.type}`, `em-${em.name}-shape`, () => [
+    el('div', { class: 'row' }, [
+      el('label', {}, ['type']),
+      el('select', { class: 'field' }, [
+        el('option', { value: em.shape.type, selected: 'selected' }, [em.shape.type]),
+      ]),
+      el('span'),
+    ]),
+    rowConst('radius', em.shape.radius, 0.01, 30),
+  ]));
+
+  // ─── 02 / UPDATE ─── (per-frame modules acting on existing particles)
+  host.appendChild(phaseDivider('02', 'update', 'evaluated every frame'));
+
+  host.appendChild(sub(`Modules`, `em-${em.name}-mods`, () => [
+    ...em.modules.map((m, i) => modRow(em, m, i)),
+    el('button', { class: 'btn-add' }, ['+ add module']),
+  ], `${em.modules.length} ACTIVE`));
+}
+
+function phaseDivider(num, name, subtitle) {
+  return el('div', { class: 'phase' }, [
+    el('span', { class: 'ph-num' }, [num]),
+    el('div', { class: 'ph-name' }, [name, el('span', { class: 'sub' }, [subtitle])]),
+    el('span', { class: 'ph-line' }),
+  ]);
+}
+
+// ---- Builders -------------------------------------------------------------
+function sub(title, id, kidsFn, headMeta) {
+  const collapsed = !!state.collapsed[id];
+  const w = el('section', { class: 'sub' + (collapsed ? ' collapsed' : '') });
+  w.appendChild(el('header', {
+    onclick: () => { state.collapsed[id] = !state.collapsed[id]; render(); },
+  }, [
+    el('span', { class: 'chev' }, ['▾']),
+    title.toUpperCase(),
+    headMeta != null ? el('span', { class: 'meta' }, [headMeta]) : null,
+  ]));
+  const body = el('div', { class: 'sub-body' });
+  for (const k of kidsFn()) if (k) body.appendChild(k);
+  w.appendChild(body);
+  return w;
+}
+function rowSlider(label, target, key, min, max, step = 0.01, fallback) {
+  const cur = target[key] != null ? target[key] : (fallback != null ? fallback : (min + max) / 2);
+  if (target[key] == null) target[key] = cur;
+  const v = el('span', { class: 'v' }, [(+cur).toFixed(step >= 1 ? 0 : 2)]);
+  const inp = el('input', { type: 'range', min, max, step, value: cur,
+    oninput: e => { target[key] = +e.target.value; v.textContent = (+target[key]).toFixed(step >= 1 ? 0 : 2); }});
+  return el('div', { class: 'row' }, [el('label', {}, [label]), inp, v]);
+}
+function rowConst(label, val, min, max, step = 0.01) {
+  const v = el('span', { class: 'v' }, [val.toFixed(2)]);
+  const inp = el('input', { type: 'range', min, max, step, value: val,
+    oninput: e => { v.textContent = (+e.target.value).toFixed(2); }});
+  return el('div', { class: 'row' }, [el('label', {}, [label]), inp, v]);
+}
+function rowToggle(label, target, key) {
+  const cb = el('input', { type: 'checkbox' });
+  cb.checked = !!target[key];
+  cb.addEventListener('change', e => { target[key] = e.target.checked; render(); });
+  return el('div', { class: 'row' }, [
+    el('label', {}, [label]),
+    cb,
+    el('span', { class: 'v' }, [target[key] ? 'on' : 'off']),
+  ]);
+}
+function rowVec3(label, arr) {
+  const wrap = el('div', { class: 'vec3' });
+  wrap.appendChild(el('div', { class: 'row' }, [el('label', {}, [label]), el('span'), el('span')]));
+  ['x','y','z'].forEach((axis, i) => {
+    const v = el('span', { class: 'v' }, [arr[i].toFixed(2)]);
+    const inp = el('input', { type: 'range', min: -25, max: 25, step: 0.1, value: arr[i],
+      oninput: e => { arr[i] = +e.target.value; v.textContent = arr[i].toFixed(2); }});
+    wrap.appendChild(el('div', { class: 'row row-axis-label' }, [el('label', {}, [axis]), inp, v]));
+  });
+  return wrap;
+}
+function rowRange(label, range, min, max) {
+  const w = el('div', { class: 'rng' });
+  w.appendChild(el('div', { class: 'row' }, [
+    el('label', {}, [label]),
+    el('span', { class: 'v', style: { color: 'var(--text-faint)' } }, ['range']),
+    el('span'),
+  ]));
+  ['min', 'max'].forEach(key => {
+    const v = el('span', { class: 'v' }, [range[key].toFixed(2)]);
+    const inp = el('input', { type: 'range', min, max, step: 0.01, value: range[key],
+      oninput: e => { range[key] = +e.target.value; v.textContent = range[key].toFixed(2); }});
+    w.appendChild(el('div', { class: 'row row-axis-label' }, [el('label', {}, [key]), inp, v]));
+  });
+  return w;
+}
+function rowColor(em) {
+  const swatch = el('div', { class: 'em-color', style: { '--c': rgb(em.color), width: '100%', height: '14px' } });
+  return el('div', { class: 'row' }, [el('label', {}, ['color']), swatch, el('span', { class: 'v' }, [`${em.color[3].toFixed(1)}α`])]);
+}
+function modRow(em, m, idx) {
+  const key = em.name + '/' + idx;
+  const open = !!state.modOpen[key];
+  const wrap = el('div', {
+    class: 'mod' + (open ? '' : ' collapsed'),
+    style: { '--c': rgb(em.color) },
+  });
+  const head = el('div', { class: 'mod-head', onclick: () => {
+    state.modOpen[key] = !state.modOpen[key]; render();
+  }}, [
+    el('span', { class: 'mod-chev' }, ['▾']),
+    el('span', { class: 'mod-name', html: '<span class="ns">' + m.name.split('.')[0] + '.</span>' + m.name.split('.')[1] }),
+    el('span', { class: 'mod-kind' }, [m.kind]),
+    el('button', { class: 'mod-del', title: 'remove module',
+      onclick: (e) => { e.stopPropagation(); em.modules.splice(idx, 1); delete state.modOpen[key]; render(); }
+    }, ['✕']),
+  ]);
+  wrap.appendChild(head);
+  // Body: render param sliders/placeholders based on the module's params object
+  const body = el('div', { class: 'mod-body' });
+  buildModParams(body, m);
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function buildModParams(body, m) {
+  const p = m.params || {};
+  for (const key of Object.keys(p)) {
+    const v = p[key];
+    if (typeof v === 'number') {
+      // Sensible default ranges by name; in the real codebase these come from the schema.
+      const [min, max, step] = paramRange(key, v);
+      body.appendChild(rowSliderObj(key, p, key, min, max, step));
+    } else if (v === 'curve') {
+      body.appendChild(el('div', { class: 'row' }, [
+        el('label', {}, [key]),
+        el('span', { class: 'v', style: { color: 'var(--text-faint)', fontSize: '8px', textAlign: 'left' } }, ['curve · 3 keys']),
+        el('span', { class: 'v' }, ['edit']),
+      ]));
+    } else if (v === 'gradient') {
+      const swatch = el('div', { style: {
+        flex: '1', height: '14px',
+        background: 'linear-gradient(90deg,#fff,#ff8a3c,transparent)',
+        border: '1px solid var(--line-2)',
+      }});
+      body.appendChild(el('div', { class: 'row' }, [
+        el('label', {}, [key]),
+        swatch,
+        el('span', { class: 'v' }, ['edit']),
+      ]));
+    } else if (typeof v === 'string') {
+      body.appendChild(el('div', { class: 'row' }, [
+        el('label', {}, [key]),
+        el('input', { class: 'field', value: v,
+          oninput: e => { p[key] = e.target.value; }}),
+        el('span'),
+      ]));
+    }
+  }
+  if (Object.keys(p).length === 0) {
+    body.appendChild(el('div', { style: { color: 'var(--text-faint)', fontSize: '9px', letterSpacing: '0.10em', textTransform: 'uppercase' } }, ['no params']));
+  }
+}
+function rowSliderObj(label, target, key, min, max, step) {
+  const v = el('span', { class: 'v' }, [(+target[key]).toFixed(step >= 1 ? 0 : 2)]);
+  const inp = el('input', { type: 'range', min, max, step, value: target[key],
+    oninput: e => { target[key] = +e.target.value; v.textContent = (+target[key]).toFixed(step >= 1 ? 0 : 2); }});
+  return el('div', { class: 'row' }, [el('label', {}, [label]), inp, v]);
+}
+function paramRange(name, currentVal) {
+  // crude per-name defaults; real codebase reads from module.schema
+  switch (name) {
+    case 'frequency':   return [0.05, 4, 0.01];
+    case 'amplitude':   return [0, 20, 0.05];
+    case 'evolveSpeed': return [0, 2, 0.01];
+    case 'octaves':     return [1, 4, 1];
+    case 'coefficient': return [0, 10, 0.05];
+    case 'threshold':   return [0, 1, 0.01];
+    case 'count':       return [0, 200, 1];
+    case 'value':       return [0, 5, 0.01];
+    case 'x': case 'y': case 'z': return [-50, 50, 0.1];
+    default: return [0, Math.max(2, currentVal * 2), 0.01];
+  }
+}
+
+// ---- emitter management ----------------------------------------------------
+function addEmitter() {
+  const palette = [[1, 0.55, 0.10, 1], [1, 0.85, 0.40, 1], [0.40, 0.78, 1.0, 1], [0.65, 0.40, 1.0, 1], [0.40, 1.0, 0.60, 1]];
+  const i = state.emitters.length;
+  state.emitters.push({
+    name: 'em_' + (i + 1),
+    alive: 0,
+    color: palette[i % palette.length],
+    position: [0, 0, 0],
+    rate: 100,
+    lifetime: { min: 1, max: 2 },
+    speed:    { min: 1, max: 5 },
+    shape: { type: 'point', radius: 0 },
+    modules: [],
+  });
+  state.active = { type: 'em', idx: i };
+  render(true);
+}
+function deleteEmitter(idx) {
+  if (state.emitters.length <= 1) return;
+  state.emitters.splice(idx, 1);
+  state.active = { type: 'em', idx: 0 };
+  render(true);
+}
+
+// ---- Render & live mock ---------------------------------------------------
+function render(swap) {
+  renderTabs();
+  renderEditor();
+  if (swap) {
+    const ed = document.getElementById('editor');
+    ed.classList.remove('swap');
+    void ed.offsetWidth;
+    ed.classList.add('swap');
+  }
+}
+
+// Mock alive-count drift + audio source values
+let tick = 0;
+setInterval(() => {
+  tick++;
+  for (const em of state.emitters) {
+    em.alive = Math.max(0, Math.round(em.alive + (Math.random() - 0.5) * 6));
+  }
+  // Update tab badges in place (no re-render to avoid focus loss)
+  document.querySelectorAll('.tab.tab-em .badge').forEach((b, i) => {
+    if (state.emitters[i]) b.textContent = state.emitters[i].alive;
+  });
+  // Update emitter-head stats
+  if (state.active.type === 'em') {
+    const stats = document.querySelector('.em-stats');
+    if (stats) stats.innerHTML = `<b>${state.emitters[state.active.idx].alive}</b> ALIVE`;
+  }
+  // Footer
+  const fAlive = state.emitters.reduce((a, e) => a + e.alive, 0);
+  const fStat = document.getElementById('fStat');
+  const fStat2 = document.getElementById('fStat2');
+  if (fStat) fStat.textContent = fAlive;
+  if (fStat2) fStat2.textContent = (0.3 + Math.random() * 0.4).toFixed(1);
+
+  // Audio source bars (only when audio tab visible)
+  if (state.active.type === 'audio') {
+    const lines = document.querySelectorAll('.src-line');
+    lines.forEach((line, i) => {
+      const baseFreq = (i + 1) * 0.0011;
+      const v = state.audio.loaded
+        ? Math.max(0, Math.sin(tick * baseFreq * 30 + i) * 0.4 + 0.5 + Math.random() * 0.05)
+        : 0;
+      const fill = line.querySelector('.src-fill');
+      const num  = line.querySelector('.src-v');
+      if (fill) fill.style.width = (v * 100) + '%';
+      if (num)  num.textContent = v.toFixed(2);
+    });
+  }
+}, 100);
+
+render();
+</script>
+</body>
+</html>

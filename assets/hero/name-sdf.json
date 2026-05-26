@@ -1,0 +1,33 @@
+{
+  "generated_at": "2026-05-26T14:24:50.613Z",
+  "width": 1024,
+  "height": 256,
+  "zero_isoline": 128,
+  "far_inside": 0,
+  "far_outside": 255,
+  "distance_radius_px": 40,
+  "lines": [
+    {
+      "name": "Raphael",
+      "region": "top",
+      "color": "#f0ebe0",
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "w": 1024,
+        "h": 128
+      }
+    },
+    {
+      "name": "Giulieri.",
+      "region": "bottom",
+      "color": "#ff4b1f",
+      "bounds": {
+        "x": 0,
+        "y": 128,
+        "w": 1024,
+        "h": 128
+      }
+    }
+  ]
+}

@@ -1098,3 +1098,57 @@ export {
   _origSizeOverLifetime     as _alias_sizeOverLifetime,
   _origRotationOverLifetime as _alias_rotationOverLifetime,
 };
+
+// ───────────────────────── portfolio addition: sdfAttract ─────────────────────────
+// Per-particle attraction toward the zero-isoline of a baked SDF texture.
+// Mirrors webgpu/shaders/sdf_attract.wgsl — keep both files in sync.
+// The system must be created with `updateSdfTexture(...)` + `updateSdfUniforms(...)`
+// for this to do anything; without those, the null texture (neutral midpoint = 0
+// distance everywhere) is sampled and the force is zero.
+export function sdfAttract({ strength = 200, insideRepel = 30, wander = 8 } = {}) {
+  const params = { strength, insideRepel, wander };
+  const apply = (sys, i, dt) => {
+    // CPU/WebGL2 fallback not used in the portfolio; no-op.
+  };
+  apply.moduleName = 'sdfAttract';
+  apply.kind = 'force';
+  apply.forceMode = 'add';
+  apply.params = params;
+  apply.schema = {
+    strength:    { type: 'float', min: 0,   max: 1000, step: 1,   bindable: true },
+    insideRepel: { type: 'float', min: 0,   max: 200,  step: 1,   bindable: true },
+    wander:      { type: 'float', min: 0,   max: 50,   step: 0.5, bindable: true },
+  };
+  apply.wgslSnippet = (paramRefs) => `
+{
+  let xy = vec2<f32>(p.pos.x, p.pos.y);
+  let d  = sample_sdf(xy);
+  let dx = sample_sdf(xy + vec2<f32>(1.0, 0.0)) - sample_sdf(xy - vec2<f32>(1.0, 0.0));
+  let dy = sample_sdf(xy + vec2<f32>(0.0, 1.0)) - sample_sdf(xy - vec2<f32>(0.0, 1.0));
+  let grad = vec2<f32>(dx, dy) * 0.5;
+  let grad_len = max(length(grad), 0.0001);
+  let dir = -grad / grad_len;
+
+  let strength     = eval_bound(module_params.${paramRefs.strength}, p, i);
+  let inside_repel = eval_bound(module_params.${paramRefs.insideRepel}, p, i);
+  let wander       = eval_bound(module_params.${paramRefs.wander}, p, i);
+
+  let attract_mag = strength * tanh(abs(d) * 0.05);
+  accel.x = accel.x + dir.x * attract_mag;
+  accel.y = accel.y + dir.y * attract_mag;
+
+  if (d < -2.0) {
+    let push = inside_repel * (-d * 0.05);
+    accel.x = accel.x + (-dir.x) * push;
+    accel.y = accel.y + (-dir.y) * push;
+  }
+
+  let h  = fract(sin(f32(i) * 12.9898 + u.time * 7.7)  * 43758.5453);
+  let h2 = fract(sin(f32(i) * 78.233  + u.time * 11.3) * 43758.5453);
+  accel.x = accel.x + (h  - 0.5) * wander;
+  accel.y = accel.y + (h2 - 0.5) * wander;
+}`;
+  return apply;
+}
+register({ name: 'sdfAttract', category: 'Forces', factory: sdfAttract,
+  doc: 'Attracts particles toward the zero-isoline of a baked SDF texture (system.updateSdfTexture).' });

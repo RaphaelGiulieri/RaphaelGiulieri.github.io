@@ -20,3 +20,11 @@ Vendored on: 2026-05-20
 1. Update `Source SHA` above with the new upstream SHA.
 2. `cp -r <source>/particles/* js/particles/` then re-delete `core/audio.js`.
 3. Re-apply the local additions listed above (they should be flagged in upstream diffs).
+
+- `webgpu/system.js`, `webgpu/shaders/eval_bound.wgsl` — adds the global SDF binding at `@group(2) bindings 4-6` (texture, sampler, SdfUniforms buffer) + the `sample_sdf()` helper. Mirrors the curve/gradient LUT pattern; required for the `sdfAttract` portfolio module in Task 3.3. Null fallback `_nullSdfTexture` (1×1 rgba8unorm, R=128) ensures bind groups stay complete for emitters that don't use SDF.
+
+## SDF binding strategy
+
+Picked path B: module-codegen has no per-module binding hook — modules only contribute WGSL via `wgslSnippet(paramRefs) → string` spliced into one of five marker buckets, with all params funnelled through the single `ModuleParams` uniform struct emitted by `bound-codegen.js`. Adding a global SDF binding to `@group(2)` mirrors how the curve/gradient LUTs are already wired (declared in `eval_bound.wgsl`, built unconditionally in `system.js` with fallback textures for emitters that don't sample them), so the change is one extra entry on `moduleParamsLayout` + one declaration in the template — no codegen surgery.
+- Texture slot @binding(4) in @group(2)  — `var sdf_tex: texture_2d<f32>` (sampleType `'float'` so a filtering sampler can read it for gradient lookups)
+- Sampler slot @binding(5) in @group(2)  — `var sdf_samp: sampler` (filtering, clamp-to-edge — exact address mode locked in by Task 3.2 when wiring the actual sampler)

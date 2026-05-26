@@ -206,6 +206,37 @@ export class WebGPUParticleSystem {
     this._audioUniformsScratch = new Float32Array(128);
     this._audioSourceTable = null;   // lazy-loaded on first _writeAudioUniforms call
 
+    // ---- SDF texture binding (Task 3.2) ----
+    // A 1×1 null texture bound for emitters that don't use SDF, so the bind
+    // group stays complete. The R channel holds 0.5 (= midpoint encode for
+    // zero signed distance). rgba8unorm matches what copyExternalImageToTexture
+    // produces when loading the baked name-sdf.png asset.
+    this._nullSdfTexture = device.createTexture({
+      label: 'null sdf texture',
+      size: [1, 1, 1], format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    device.queue.writeTexture(
+      { texture: this._nullSdfTexture },
+      new Uint8Array([128, 128, 128, 255]),  // R=0.5 encodes zero signed distance
+      { bytesPerRow: 4 }, { width: 1, height: 1 }
+    );
+    this._sdfTexture = this._nullSdfTexture;
+    this._sdfSampler = device.createSampler({
+      label: 'sdf sampler',
+      magFilter: 'linear', minFilter: 'linear',
+      addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge',
+    });
+    // SdfUniforms buffer: [width, height, radius, padding] × f32 = 16 bytes.
+    // Default 1×1 with radius=1 → sample_sdf() returns ≈0 everywhere (null case).
+    this._sdfUniformsBuffer = device.createBuffer({
+      label: 'sdf uniforms',
+      size: 16,   // 4 × f32
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    device.queue.writeBuffer(this._sdfUniformsBuffer, 0,
+      new Float32Array([1, 1, 1, 0]));
+
     // ---- Bind group layouts ----
     this.uniformLayout = device.createBindGroupLayout({
       label: 'particles uniforms layout',
@@ -249,6 +280,11 @@ export class WebGPUParticleSystem {
         // filtering sampler here is fine for both.
         { binding: 2, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
         { binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float', viewDimension: '2d-array' } },
+        // SDF bindings 4-6 — global SDF texture for sdfAttract module.
+        // Null/fallback textures are bound for emitters that don't use SDF.
+        { binding: 4, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float', viewDimension: '2d', multisampled: false } },
+        { binding: 5, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
+        { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform', hasDynamicOffset: false, minBindingSize: 16 } },
       ],
     });
 
@@ -1350,6 +1386,10 @@ export class WebGPUParticleSystem {
           { binding: 1, resource: (this._curveLUT ?? this._fallbackCurveTexture()).createView({ dimension: '2d-array' }) },
           { binding: 2, resource: this._lutSampler ?? this._fallbackSampler() },
           { binding: 3, resource: (this._gradientLUT ?? this._fallbackGradientTexture()).createView({ dimension: '2d-array' }) },
+          // SDF bindings 4-6 — null texture when no SDF is active.
+          { binding: 4, resource: this._sdfTexture.createView() },
+          { binding: 5, resource: this._sdfSampler },
+          { binding: 6, resource: { buffer: this._sdfUniformsBuffer } },
         ],
       });
       const storageRWBG = this._buildStorageRWBindGroupForFrame();
@@ -1535,6 +1575,18 @@ export class WebGPUParticleSystem {
       });
     }
     return this._fallbackSamplerObj;
+  }
+
+  // SDF texture setters — called by the hero demo once the baked PNG is uploaded.
+  // The bind group is rebuilt from _sdfTexture every frame (new createBindGroup
+  // each dispatch) so the new texture is picked up on the very next update() call.
+  updateSdfTexture(tex) {
+    this._sdfTexture = tex ?? this._nullSdfTexture;
+  }
+
+  updateSdfUniforms(width, height, radius) {
+    this.device.queue.writeBuffer(this._sdfUniformsBuffer, 0,
+      new Float32Array([width, height, radius, 0]));
   }
 
   render({ view, proj, pixelScale = 1.0, debugColors = false, bgColor = [0.047, 0.039, 0.027, 1.0], postfx } = {}) {

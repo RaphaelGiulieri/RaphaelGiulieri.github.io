@@ -84,6 +84,27 @@ fn apply_normalise(raw: f32, b: Bound) -> f32 {
 @group(2) @binding(2) var lut_sampler:  sampler;
 @group(2) @binding(3) var gradient_lut: texture_2d_array<f32>;
 
+// SDF texture + sampler + uniforms at group(2) bindings 4-6.
+@group(2) @binding(4) var sdf_tex     : texture_2d<f32>;
+@group(2) @binding(5) var sdf_sampler : sampler;
+
+struct SdfUniforms {
+  width:    f32,   // SDF texture width in pixels
+  height:   f32,   // SDF texture height in pixels
+  radius:   f32,   // distance_radius_px from the bake script (default 40)
+  _padding: f32,
+};
+@group(2) @binding(6) var<uniform> sdf_uniforms : SdfUniforms;
+
+// Sample the SDF at canvas-space pixel coords (x, y).
+// Returns signed distance in pixels: negative inside the text, positive outside.
+// The baked PNG encodes (raw - 0.5) * 2 * radius = signed distance in the R channel.
+fn sample_sdf(world_xy: vec2<f32>) -> f32 {
+  let uv = world_xy / vec2<f32>(sdf_uniforms.width, sdf_uniforms.height);
+  let raw = textureSampleLevel(sdf_tex, sdf_sampler, uv, 0.0).r;
+  return (raw - 0.5) * 2.0 * sdf_uniforms.radius;
+}
+
 fn apply_curve(value: f32, curve_id: u32) -> f32 {
     if (curve_id == 0u) { return value; }
     let t = clamp(value, 0.0, 1.0);

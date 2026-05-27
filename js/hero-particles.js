@@ -311,10 +311,14 @@
             }
             ps.reset();
         }
-        const cycleTimer = setInterval(advanceFrame, FRAME_CYCLE_MS);
+        let cycleTimer = null;
 
-        // Pause the rAF loop when the hero scrolls out of view. Saves ~80k
-        // particle updates per frame when the visitor is reading further down.
+        // Pause both the rAF loop AND the phrase-cycle timer when the hero
+        // scrolls out of view — the rAF loop alone would be skipped by the
+        // browser, but setInterval keeps firing and ps.reset() still submits
+        // a GPU clearBuffer every cycle. Stopping both means ~zero hero work
+        // while the visitor is reading further down the page; everything
+        // resumes when the masthead scrolls back into the viewport.
         const io = new IntersectionObserver((entries) => {
             for (const e of entries) {
                 const visible = e.intersectionRatio >= 0.1;
@@ -322,8 +326,10 @@
                     running = true;
                     last = performance.now();
                     requestAnimationFrame(loop);
+                    if (!cycleTimer) cycleTimer = setInterval(advanceFrame, FRAME_CYCLE_MS);
                 } else if (!visible && running) {
                     running = false;
+                    if (cycleTimer) { clearInterval(cycleTimer); cycleTimer = null; }
                 }
             }
         }, { threshold: [0, 0.1] });

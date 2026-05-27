@@ -101,13 +101,19 @@ struct SdfUniforms {
 @group(2) @binding(6) var<uniform> sdf_uniforms : SdfUniforms;
 
 // Sample the SDF at canvas-space pixel coords (x, y).
+// The baked PNG packs two signed-distance fields: R for one word, G for another.
+// `channel` is 0.0 for R, 1.0 for G; `step(0.5, channel)` picks the right one.
 // Returns signed distance in pixels: negative inside the text, positive outside.
-// The baked PNG encodes (raw - 0.5) * 2 * radius = signed distance in the R channel.
-fn sample_sdf(world_xy: vec2<f32>) -> f32 {
+fn sample_sdf_ch(world_xy: vec2<f32>, channel: f32) -> f32 {
   let local = world_xy - vec2<f32>(sdf_uniforms.offsetX, sdf_uniforms.offsetY);
   let uv = local / vec2<f32>(sdf_uniforms.width, sdf_uniforms.height);
-  let raw = textureSampleLevel(sdf_tex, sdf_sampler, uv, 0.0).r;
+  let rg = textureSampleLevel(sdf_tex, sdf_sampler, uv, 0.0).rg;
+  let raw = mix(rg.r, rg.g, step(0.5, channel));
   return (raw - 0.5) * 2.0 * sdf_uniforms.radius;
+}
+// Backwards-compatible alias — samples the R channel.
+fn sample_sdf(world_xy: vec2<f32>) -> f32 {
+  return sample_sdf_ch(world_xy, 0.0);
 }
 
 fn apply_curve(value: f32, curve_id: u32) -> f32 {

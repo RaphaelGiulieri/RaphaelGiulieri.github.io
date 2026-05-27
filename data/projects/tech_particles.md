@@ -30,10 +30,10 @@ gallery:
   - src: assets/projects/tech_particles/03-boids.webp
     alt: "A herd of boid-driven creatures wandering near the player in Remain"
     caption: "CPU boids on the herd in Remain — separation, alignment, cohesion, with one loner that approaches."
-  - src: demos/curl-noise-particles.html
+  - src: demos/particle-playground.html
     type: shader
-    alt: "Live curl-noise GPGPU particle field"
-    caption: "Live demo · 65k particles · positions in a floating-point texture, advected each frame by the curl of a simplex-noise potential"
+    alt: "Live particle playground — full GPGPU engine, browser-side authoring"
+    caption: "Live tool · WebGPU only · sixteen presets (fountain, explosion, snow, galaxy, boids, fluid, stress 1M…), every emitter parameter exposed, post-FX stack, copy-JSON to share. The same engine that drives the masthead, with the inspector open."
 headline:
   value: "4 engines"
   label: "same problem, four physics"

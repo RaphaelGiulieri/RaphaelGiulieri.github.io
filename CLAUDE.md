@@ -28,7 +28,11 @@ Client work is referenced by sector, not by company name. SABDA, LRD/Calico, and
 
 ## Shader rule
 
-GLSL shaders live in their own `.glsl` files under `demos/shaders/<demo>/`, loaded via `fetch`. **Never** embed shader strings inline in HTML/JS — see `demos/curl-noise-particles.html` or `demos/boids.html` for the loader pattern.
+GLSL shaders live in their own `.glsl` files under `demos/shaders/<demo>/`, loaded via `fetch`. **Never** embed shader strings inline in HTML/JS — see `demos/boids.html` for the loader pattern.
+
+## Particle playground
+
+`demos/particle-playground.html` exposes the full vendored WebGPU particle engine (`js/particles/`) — sixteen presets, every emitter param editable, copy-JSON to share. WebGPU-only (page renders a notice + back-link if `navigator.gpu` is missing). It's a thin wrapper over `js/particles/index.js`; no inline shaders, no duplicated UI logic. The engine source (`C:/Users/Legion/Desktop/AudioReactiveProject/particles/demo.html`) is where it came from — re-vendor by copying that file again and re-applying the same patches: change the import path to `../js/particles/index.js`, drop the `AudioFeed` named import (audio is out of scope for the portfolio), delete the `<aside id="audio-panel">`, and keep the WebGPU gate at the top of the module.
 
 ## Tech-art subsite
 

@@ -436,16 +436,19 @@ button {
     opacity: 0;
     transition: opacity 400ms var(--ease-out);
 }
-.hero-name-stage.is-coalescing .hero-particles,
-.hero-name-stage.is-live        .hero-particles { opacity: 1; }
-.hero-name-stage.is-coalescing .hero-name,
-.hero-name-stage.is-live        .hero-name {
-    transition: opacity 800ms var(--ease-out);
+.hero-name-stage.is-live .hero-particles { opacity: 1; }
+/* H1 is hidden whenever the engine is mounting / mounted — the particle swarm
+   IS the typography. The H1 stays in the DOM for a11y/SEO, but is visually
+   suppressed even when the page-wide `.revealable.is-in` animation tries to
+   fade it in (hence `!important` — we're deliberately overriding that system).
+   On the fallback path (no WebGPU / reduced motion / SDF fail) the JS swaps
+   to `.is-fallback`, which restores the H1 as the static text. */
+.hero-name-stage .hero-name { opacity: 0 !important; visibility: hidden; }
+.hero-name-stage.is-fallback .hero-name {
+    opacity: 1 !important;
+    visibility: visible;
+    transition: opacity 400ms var(--ease-out);
 }
-.hero-name-stage.is-coalescing .hero-name { opacity: 0.6; }
-.hero-name-stage.is-live        .hero-name { opacity: 0; }
-/* When the canvas is mounted and visible, the H1 stays in the DOM for a11y
-   but is no longer the visual. Pointer events still hit the H1 — see js/hero-particles.js. */
 
 .hero-name {
     font-family: var(--f-display);

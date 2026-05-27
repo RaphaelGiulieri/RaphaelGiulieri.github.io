@@ -14,15 +14,25 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const OUT_DIR = resolve(ROOT, 'assets/hero');
 
-const WIDTH  = 1024;
-const HEIGHT = 256;
+const WIDTH  = 1100;
+const HEIGHT = 440;
 const FONT   = 'italic 220px "Fraunces", Georgia, serif';
-const TEXT_LINES = [
-  { text: 'Raphael',   y: 100, color: '#f0ebe0', region: 'top' },
-  { text: 'Giulieri.', y: 220, color: '#ff4b1f', region: 'bottom' },
-];
+const TEXT_X = 70;   // left margin so italic swashes don't kiss the canvas edge
 
-// 1. Serve a tiny HTML that draws the text and exposes pixel data.
+// Each frame is a pair of lines (top / bottom). Line 1 always renders in the
+// off-white emitter, line 2 always in the vermilion emitter — runtime keeps
+// per-emitter colours fixed across frames; only the text silhouette changes.
+// Baselines: top line y=210 (clears Fraunces italic ascenders + R-swash),
+// bottom line y=395 (descenders + period of e.g. "Giulieri." sit safely inside).
+const TEXT_FRAMES = [
+  [ { text: 'Multi',      y: 210 }, { text: 'Discipline',  y: 395 } ],
+  [ { text: 'Games',      y: 210 }, { text: 'Shaders',     y: 395 } ],
+  [ { text: 'Web',        y: 210 }, { text: 'ML',          y: 395 } ],
+  [ { text: '3D',         y: 210 }, { text: 'Automation',  y: 395 } ],
+];
+const COLORS = ['#f0ebe0', '#ff4b1f'];   // fixed per emitter, all frames
+
+// 1. Serve a tiny HTML that draws every frame and exposes pixel data for all.
 const HTML = `<!doctype html><html><head><meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,400&display=swap" rel="stylesheet">
 <style>html,body{margin:0;background:#000;font:${FONT}}canvas{display:block}</style></head>
@@ -32,14 +42,40 @@ window.__ready = (async () => {
   await document.fonts.load('${FONT}');
   await document.fonts.ready;
   const c = document.getElementById('c'), ctx = c.getContext('2d');
-  ctx.fillStyle = '#000'; ctx.fillRect(0,0,${WIDTH},${HEIGHT});
   ctx.font = '${FONT}'; ctx.textBaseline = 'alphabetic';
-  ${TEXT_LINES.map(l => `ctx.fillStyle='#fff'; ctx.fillText(${JSON.stringify(l.text)}, 20, ${l.y});`).join('\n  ')}
-  const img = ctx.getImageData(0, 0, ${WIDTH}, ${HEIGHT});
-  // Reduce to a single-channel mask: 1 if any RGB > 80, else 0.
-  const mask = new Uint8Array(${WIDTH} * ${HEIGHT});
-  for (let i = 0; i < mask.length; i++) mask[i] = (img.data[i*4] > 80) ? 1 : 0;
-  return { mask: Array.from(mask), w: ${WIDTH}, h: ${HEIGHT} };
+
+  // Bake one mask per (frame × line). Each line rendered alone on a fresh
+  // canvas so neighbouring text doesn't bleed into the other channel's SDF.
+  const frames = ${JSON.stringify(TEXT_FRAMES.map(pair => pair.map(l => ({ text: l.text, y: l.y }))))};
+  const colors = ${JSON.stringify(COLORS)};
+  const out = [];
+  for (let f = 0; f < frames.length; f++) {
+    const lines = frames[f];
+    const masks = [];
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li];
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ${WIDTH}, ${HEIGHT});
+      ctx.fillStyle = '#fff'; ctx.fillText(line.text, ${TEXT_X}, line.y);
+      const img = ctx.getImageData(0, 0, ${WIDTH}, ${HEIGHT});
+      const mask = new Uint8Array(${WIDTH} * ${HEIGHT});
+      for (let i = 0; i < mask.length; i++) mask[i] = (img.data[i*4] > 80) ? 1 : 0;
+      const m = ctx.measureText(line.text);
+      masks.push({
+        name: line.text,
+        region: li === 0 ? 'top' : 'bottom',
+        color: colors[li],
+        mask: Array.from(mask),
+        bounds: {
+          x: ${TEXT_X} - Math.ceil(m.actualBoundingBoxLeft || 0),
+          y: line.y - Math.ceil(m.actualBoundingBoxAscent),
+          w: Math.ceil((m.actualBoundingBoxLeft || 0) + (m.actualBoundingBoxRight || m.width)),
+          h: Math.ceil(m.actualBoundingBoxAscent + m.actualBoundingBoxDescent),
+        },
+      });
+    }
+    out.push({ frame: f, masks });
+  }
+  return { frames: out, w: ${WIDTH}, h: ${HEIGHT} };
 })();
 </script></body></html>`;
 
@@ -90,34 +126,42 @@ if (marker < 0) throw new Error('no __BAKE__ in subprocess output');
 const bakeRaw = stdout.slice(marker + 8);
 const jsonEnd = bakeRaw.indexOf('\n');
 const jsonStr = jsonEnd >= 0 ? bakeRaw.slice(0, jsonEnd) : bakeRaw;
-const { mask, w, h } = JSON.parse(jsonStr);
-console.log(`Mask received: ${w}×${h}, ${mask.filter(Boolean).length} on-pixels`);
-
-// 3. Two-pass distance transform (naive O(n × radius²) — fine for 1024×256).
-//    Output greyscale where 128 = zero-isoline, 0 = far inside, 255 = far outside.
-const RADIUS = 40;
-const sdf = new Uint8Array(w * h);
-for (let y = 0; y < h; y++) {
-  for (let x = 0; x < w; x++) {
-    const inside = mask[y*w + x] === 1;
-    let minDist = RADIUS;
-    for (let dy = -RADIUS; dy <= RADIUS; dy++) {
-      const yy = y + dy; if (yy < 0 || yy >= h) continue;
-      for (let dx = -RADIUS; dx <= RADIUS; dx++) {
-        const xx = x + dx; if (xx < 0 || xx >= w) continue;
-        if ((mask[yy*w + xx] === 1) !== inside) {
-          const d = Math.hypot(dx, dy);
-          if (d < minDist) minDist = d;
-        }
-      }
-    }
-    const signed = inside ? -minDist : minDist;
-    const v = 128 + Math.round((signed / RADIUS) * 127);
-    sdf[y*w + x] = Math.max(0, Math.min(255, v));
+const { frames: bakedFrames, w, h } = JSON.parse(jsonStr);
+console.log(`Bake received: ${w}×${h}, ${bakedFrames.length} frames`);
+for (const f of bakedFrames) {
+  for (const m of f.masks) {
+    console.log(`  frame ${f.frame} — ${m.name}: ${m.mask.filter(Boolean).length} on-pixels, bounds (${m.bounds.x},${m.bounds.y}) ${m.bounds.w}×${m.bounds.h}`);
   }
 }
 
-// 4. Encode as 8-bit greyscale PNG (no deps — hand-built IHDR/IDAT/IEND chunks).
+// 3. Per-line distance transform → one SDF channel per line.
+//    Each frame produces its own RGBA8 PNG with R = top line, G = bottom line.
+const RADIUS = 40;
+function maskToSdf(mask) {
+  const sdf = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const inside = mask[y*w + x] === 1;
+      let minDist = RADIUS;
+      for (let dy = -RADIUS; dy <= RADIUS; dy++) {
+        const yy = y + dy; if (yy < 0 || yy >= h) continue;
+        for (let dx = -RADIUS; dx <= RADIUS; dx++) {
+          const xx = x + dx; if (xx < 0 || xx >= w) continue;
+          if ((mask[yy*w + xx] === 1) !== inside) {
+            const d = Math.hypot(dx, dy);
+            if (d < minDist) minDist = d;
+          }
+        }
+      }
+      const signed = inside ? -minDist : minDist;
+      const v = 128 + Math.round((signed / RADIUS) * 127);
+      sdf[y*w + x] = Math.max(0, Math.min(255, v));
+    }
+  }
+  return sdf;
+}
+
+// 4. PNG encoder — hand-built IHDR/IDAT/IEND chunks, no deps.
 function crc32(buf) {
   let c = 0xffffffff;
   for (let i = 0; i < buf.length; i++) {
@@ -132,32 +176,58 @@ function chunk(type, data) {
   const c = Buffer.alloc(4); c.writeUInt32BE(crc32(Buffer.concat([t, data])), 0);
   return Buffer.concat([len, t, data, c]);
 }
-const ihdr = Buffer.alloc(13);
-ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
-ihdr[8] = 8;   // bit depth
-ihdr[9] = 0;   // greyscale
-ihdr[10] = 0;  // compression
-ihdr[11] = 0;  // filter
-ihdr[12] = 0;  // interlace
-const rows = Buffer.alloc(h * (w + 1));
-for (let y = 0; y < h; y++) {
-  rows[y * (w + 1)] = 0;
-  for (let x = 0; x < w; x++) rows[y * (w + 1) + 1 + x] = sdf[y*w + x];
+function encodePng(sdfR, sdfG) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;   // bit depth per channel
+  ihdr[9] = 6;   // colour type 6 = RGBA
+  ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const rows = Buffer.alloc(h * (1 + w * 4));
+  for (let y = 0; y < h; y++) {
+    const off = y * (1 + w * 4);
+    rows[off] = 0;   // filter type none
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const o = off + 1 + x * 4;
+      rows[o]     = sdfR[i];
+      rows[o + 1] = sdfG[i];
+      rows[o + 2] = 0;
+      rows[o + 3] = 255;
+    }
+  }
+  const idat = deflateSync(rows);
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  return Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0))]);
 }
-const idat = deflateSync(rows);
-const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-const png = Buffer.concat([sig, chunk('IHDR', ihdr), chunk('IDAT', idat), chunk('IEND', Buffer.alloc(0))]);
 
 await mkdir(OUT_DIR, { recursive: true });
-await writeFile(resolve(OUT_DIR, 'name-sdf.png'), png);
 
-// 5. Metadata: per-line bounding boxes (hard-coded vertical split since the bake controls layout).
-const lineRegions = TEXT_LINES.map((line) => {
-  const yMin = line.region === 'top' ? 0 : Math.floor(h / 2);
-  const yMax = line.region === 'top' ? Math.floor(h / 2) : h;
-  return { name: line.text, region: line.region, color: line.color,
-           bounds: { x: 0, y: yMin, w, h: yMax - yMin } };
-});
+// 5. Bake each frame → PNG + metadata entry.
+const metaFrames = [];
+for (const f of bakedFrames) {
+  const sdfR = maskToSdf(f.masks[0].mask);
+  const sdfG = f.masks.length > 1 ? maskToSdf(f.masks[1].mask) : new Uint8Array(w * h).fill(255);
+  const png = encodePng(sdfR, sdfG);
+  const filename = `name-sdf-${f.frame}.png`;
+  await writeFile(resolve(OUT_DIR, filename), png);
+  console.log(`✓ ${filename} (${(png.length/1024).toFixed(1)} KB) — ${f.masks.map(m => m.name).join(' / ')}`);
+  metaFrames.push({
+    frame: f.frame,
+    png: filename,
+    lines: f.masks.map((m, idx) => ({
+      name: m.name,
+      region: m.region,
+      color: m.color,
+      channel: idx,
+      bounds: m.bounds,
+      center: {
+        x: m.bounds.x + m.bounds.w / 2,
+        y: m.bounds.y + m.bounds.h / 2,
+      },
+    })),
+  });
+}
+
 const meta = {
   generated_at: new Date().toISOString(),
   width: w,
@@ -166,9 +236,7 @@ const meta = {
   far_inside: 0,
   far_outside: 255,
   distance_radius_px: RADIUS,
-  lines: lineRegions,
+  frames: metaFrames,
 };
 await writeFile(resolve(OUT_DIR, 'name-sdf.json'), JSON.stringify(meta, null, 2) + '\n');
-
-console.log(`✓ SDF written: ${OUT_DIR}/name-sdf.png (${(png.length/1024).toFixed(1)} KB)`);
-console.log(`✓ Meta written: ${OUT_DIR}/name-sdf.json`);
+console.log(`✓ Meta written: ${OUT_DIR}/name-sdf.json (${metaFrames.length} frames)`);

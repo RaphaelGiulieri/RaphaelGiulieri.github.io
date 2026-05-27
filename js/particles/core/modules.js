@@ -1105,8 +1105,27 @@ export {
 // The system must be created with `updateSdfTexture(...)` + `updateSdfUniforms(...)`
 // for this to do anything; without those, the null texture (neutral midpoint = 0
 // distance everywhere) is sampled and the force is zero.
-export function sdfAttract({ strength = 200, insideRepel = 30, wander = 8 } = {}) {
-  const params = { strength, insideRepel, wander };
+export function sdfAttract({
+  strength = 200,
+  insideRepel = 30,
+  wander = 8,
+  channel = 0,         // 0 = sample R, 1 = sample G
+  centerX = 0,         // px in canvas-space — long-distance pull target
+  centerY = 0,
+  farPull = 30,        // strength of the constant center-pull when far-field
+  boundsX = 0,         // word bounding-box top-left (canvas px) — per-particle target XY span
+  boundsY = 0,
+  boundsW = 0,
+  boundsH = 0,
+  spread = 0,          // lateral spring strength toward the per-particle target XY
+  expCoef = 0.0022,    // exponential growth rate of far-pull w.r.t. distance
+  expCap  = 8,         // cap on the exponential multiplier (prevents runaway)
+  flow    = 0,         // tangential drift along the silhouette — keeps settled particles moving
+  speedJitter = 0,     // 0..1 — per-particle speed multiplier amplitude (0 = uniform, 1 = 0.5x..1.5x)
+} = {}) {
+  const params = { strength, insideRepel, wander, channel, centerX, centerY, farPull,
+                   boundsX, boundsY, boundsW, boundsH, spread, expCoef, expCap,
+                   flow, speedJitter };
   const apply = (sys, i, dt) => {
     // CPU/WebGL2 fallback not used in the portfolio; no-op.
   };
@@ -1118,49 +1137,160 @@ export function sdfAttract({ strength = 200, insideRepel = 30, wander = 8 } = {}
     strength:    { type: 'float', min: 0,   max: 1000, step: 1,   bindable: true },
     insideRepel: { type: 'float', min: 0,   max: 200,  step: 1,   bindable: true },
     wander:      { type: 'float', min: 0,   max: 50,   step: 0.5, bindable: true },
+    channel:     { type: 'float', min: 0,   max: 1,    step: 1,   bindable: true },
+    centerX:     { type: 'float', min: -4096, max: 4096, step: 1, bindable: true },
+    centerY:     { type: 'float', min: -4096, max: 4096, step: 1, bindable: true },
+    farPull:     { type: 'float', min: 0,   max: 500,  step: 1,   bindable: true },
+    boundsX:     { type: 'float', min: -4096, max: 4096, step: 1, bindable: true },
+    boundsY:     { type: 'float', min: -4096, max: 4096, step: 1, bindable: true },
+    boundsW:     { type: 'float', min: 0,   max: 4096, step: 1,   bindable: true },
+    boundsH:     { type: 'float', min: 0,   max: 4096, step: 1,   bindable: true },
+    spread:      { type: 'float', min: 0,   max: 500,  step: 1,   bindable: true },
+    expCoef:     { type: 'float', min: 0,   max: 0.02, step: 0.0001, bindable: true },
+    expCap:      { type: 'float', min: 1,   max: 50,   step: 0.5, bindable: true },
+    flow:        { type: 'float', min: 0,   max: 500,  step: 1,   bindable: true },
+    speedJitter: { type: 'float', min: 0,   max: 1,    step: 0.01, bindable: true },
   };
-  // Band-based attraction: each particle picks a random target depth a few px
-  // inside the silhouette via a deterministic hash on its index. Attraction
-  // converges to that target distance, not d=0, so the swarm forms a thick
-  // band rather than collapsing onto the centreline.
+  // Per-particle target-depth attraction: each particle picks a deterministic
+  // pseudo-random target distance from the silhouette and converges to THAT
+  // distance, not to d=0. The hash spreads target depths across the stroke
+  // body, so the swarm fills the letters instead of stacking on the outline.
+  //
+  // Tuning intent: most particles target a few px INSIDE the silhouette (so
+  // the letter looks solid); a small minority target just OUTSIDE (light
+  // "halo" around the letter). The `inside_repel` param caps how deep the
+  // band can go — below that, anti-collapse pushes particles back out.
   apply.wgslSnippet = (paramRefs) => `
 {
   let xy = vec2<f32>(p.pos.x, p.pos.y);
-  let d  = sample_sdf(xy);
-  let dx = sample_sdf(xy + vec2<f32>(1.0, 0.0)) - sample_sdf(xy - vec2<f32>(1.0, 0.0));
-  let dy = sample_sdf(xy + vec2<f32>(0.0, 1.0)) - sample_sdf(xy - vec2<f32>(0.0, 1.0));
-  let grad = vec2<f32>(dx, dy) * 0.5;
-  let grad_len = max(length(grad), 0.0001);
-  let dir_inward = -grad / grad_len;
-
   let strength     = eval_bound(module_params.${paramRefs.strength}, p, i);
   let inside_repel = eval_bound(module_params.${paramRefs.insideRepel}, p, i);
   let wander       = eval_bound(module_params.${paramRefs.wander}, p, i);
+  let channel      = eval_bound(module_params.${paramRefs.channel}, p, i);
+  let center_x     = eval_bound(module_params.${paramRefs.centerX}, p, i);
+  let center_y     = eval_bound(module_params.${paramRefs.centerY}, p, i);
+  let far_pull     = eval_bound(module_params.${paramRefs.farPull}, p, i);
+  let bounds_x     = eval_bound(module_params.${paramRefs.boundsX}, p, i);
+  let bounds_y     = eval_bound(module_params.${paramRefs.boundsY}, p, i);
+  let bounds_w     = eval_bound(module_params.${paramRefs.boundsW}, p, i);
+  let bounds_h     = eval_bound(module_params.${paramRefs.boundsH}, p, i);
+  let spread       = eval_bound(module_params.${paramRefs.spread}, p, i);
+  let exp_coef     = eval_bound(module_params.${paramRefs.expCoef}, p, i);
+  let exp_cap      = eval_bound(module_params.${paramRefs.expCap}, p, i);
+  let flow         = eval_bound(module_params.${paramRefs.flow}, p, i);
+  let speed_jitter = eval_bound(module_params.${paramRefs.speedJitter}, p, i);
 
-  // Per-particle target depth — 4 to 12 px inside the silhouette.
-  // Hash gives each particle a slightly different settle distance, producing a band.
-  let h_target = fract(sin(f32(i) * 17.9 + 3.4) * 43758.5453);
-  let band_depth = -4.0 - h_target * 8.0;
-  let d_signed = d - band_depth;
+  // Per-particle speed multiplier (deterministic R2 hash) — every particle
+  // has its own pace, so the swarm doesn't move as a monolith. With
+  // speed_jitter=1, factors span 0.5x .. 1.5x; with 0, all uniform.
+  let h_speed = fract(f32(i) * 0.32471795724474602 + 0.41421356237);
+  let speed_mult = 1.0 + speed_jitter * (h_speed - 0.5);
 
-  // Force pulls particles toward d == band_depth from either side.
-  let attract_mag = strength * tanh(abs(d_signed) * 0.05);
-  let attract_sign = select(-1.0, 1.0, d_signed < 0.0);
-  accel.x = accel.x + dir_inward.x * attract_mag * attract_sign;
-  accel.y = accel.y + dir_inward.y * attract_mag * attract_sign;
+  // Sample THIS emitter's channel of the packed RG SDF.
+  let d  = sample_sdf_ch(xy, channel);
+  let dx = sample_sdf_ch(xy + vec2<f32>(1.0, 0.0), channel) - sample_sdf_ch(xy - vec2<f32>(1.0, 0.0), channel);
+  let dy = sample_sdf_ch(xy + vec2<f32>(0.0, 1.0), channel) - sample_sdf_ch(xy - vec2<f32>(0.0, 1.0), channel);
+  let grad = vec2<f32>(dx, dy) * 0.5;
+  let grad_len = length(grad);
+  let dir_outward = select(vec2<f32>(0.0, 0.0), grad / max(grad_len, 0.0001), grad_len > 0.0001);
 
-  // Hard floor — if a particle ends up REALLY deep inside (numerical drift,
-  // entrance overshoot), shove it back out. Independent of the band logic.
-  if (d < -25.0) {
-    let push = inside_repel * (-d * 0.05);
-    accel.x = accel.x + (-dir_inward.x) * push;
-    accel.y = accel.y + (-dir_inward.y) * push;
+  // -------- Far-field center pull (exponential in distance) --------
+  // When the gradient is near-zero (particle is outside the SDF's effective
+  // range — the texture clamps to a constant value out there), no useful
+  // direction can be derived from the SDF. Pull such particles toward the
+  // word's centre so they enter the SDF's gradient zone. Force grows
+  // exponentially with distance so distant particles converge fast; near
+  // particles aren't yanked. Capped to prevent runaway.
+  let to_center = vec2<f32>(center_x, center_y) - xy;
+  let to_center_len = max(length(to_center), 0.0001);
+  let to_center_dir = to_center / to_center_len;
+  // Blend: far-pull weight is 1.0 when grad ≈ 0 (out of range) and ≈ 0 when
+  // close enough to use SDF gradient.
+  let far_w = 1.0 - smoothstep(0.001, 0.05, grad_len);
+  // Exponential growth in distance — close-in particles get ~1×, distant get ~cap×.
+  // Capped to prevent runaway acceleration at canvas-corner spawns.
+  let exp_factor = min(exp(to_center_len * exp_coef), exp_cap);
+  accel.x = accel.x + to_center_dir.x * far_pull * far_w * exp_factor;
+  accel.y = accel.y + to_center_dir.y * far_pull * far_w * exp_factor;
+
+  // -------- Per-particle target XY, projected onto the silhouette --------
+  // Each particle gets a deterministic (x, y) target via the R2 plastic-number
+  // quasi-random sequence (low-discrepancy — no clumping like sin-hash gives).
+  // Raw R2 targets are uniform across the bbox rectangle, but most of the bbox
+  // is white space between strokes. We project the target onto the nearest
+  // silhouette using the local SDF gradient: target_xy → target_xy - grad * d
+  // walks the point to the d=0 isoline, then biases slightly inside by 2px so
+  // particles settle on the visible stroke. Targets in the SDF "dead zone"
+  // (clamped, no gradient) drop their spring force via the target_valid weight.
+  let fi = f32(i);
+  let h_tx = fract(fi * 0.7548776662466927);   // 1 / phi2
+  let h_ty = fract(fi * 0.5698402909980532);   // 1 / phi2^2
+  let target_raw = vec2<f32>(bounds_x + h_tx * bounds_w, bounds_y + h_ty * bounds_h);
+  // SDF probe at the raw target — 4 extra samples per particle per frame.
+  let td  = sample_sdf_ch(target_raw, channel);
+  let tdx = sample_sdf_ch(target_raw + vec2<f32>(2.0, 0.0), channel) - sample_sdf_ch(target_raw - vec2<f32>(2.0, 0.0), channel);
+  let tdy = sample_sdf_ch(target_raw + vec2<f32>(0.0, 2.0), channel) - sample_sdf_ch(target_raw - vec2<f32>(0.0, 2.0), channel);
+  let tgrad = vec2<f32>(tdx, tdy) * 0.25;
+  let tgrad_len = length(tgrad);
+  let tgrad_dir = select(vec2<f32>(0.0, 0.0), tgrad / max(tgrad_len, 0.0001), tgrad_len > 0.0001);
+  // Project onto silhouette + bias 2px inside. tgrad_dir points OUTWARD, so
+  // walking BACKWARDS by td moves toward d=0, then further to -2 goes inside.
+  let target_xy = target_raw - tgrad_dir * (td + 2.0);
+  // Validity: only apply the spring if the raw target was inside the SDF's
+  // gradient zone — otherwise the projection is meaningless.
+  let target_valid = smoothstep(0.001, 0.05, tgrad_len);
+  let to_target = target_xy - xy;
+  let to_target_len = length(to_target);
+  let to_target_dir = select(vec2<f32>(0.0, 0.0), to_target / max(to_target_len, 0.0001), to_target_len > 0.001);
+  let spread_mag = spread * tanh(to_target_len * 0.02) * target_valid;
+  accel.x = accel.x + to_target_dir.x * spread_mag;
+  accel.y = accel.y + to_target_dir.y * spread_mag;
+
+  // -------- SDF gradient attraction (per-particle target depth) --------
+  // ~80% target a narrow band JUST inside the silhouette (where the gradient
+  // is sharp and well-defined), ~20% target a thin halo outside. Targeting
+  // deeper than ~-6 hits the medial axis where the gradient collapses and
+  // particles stagnate.
+  let h_target = fract(sin(f32(i) * 17.913 + 3.4) * 43758.5453);
+  let target_d = select(h_target * 2.5, -6.0 + h_target * 5.0 / 0.80, h_target < 0.80);
+  let diff = d - target_d;
+  let attract_mag = strength * tanh(abs(diff) * 0.04) * (1.0 - far_w);
+  accel.x = accel.x - dir_outward.x * attract_mag * sign(diff);
+  accel.y = accel.y - dir_outward.y * attract_mag * sign(diff);
+
+  // Anti-collapse hard floor.
+  if (d < -inside_repel) {
+    let push = (-d - inside_repel) * 4.0;
+    accel.x = accel.x + dir_outward.x * push;
+    accel.y = accel.y + dir_outward.y * push;
   }
 
+  // Wander noise — small amplitude for subtle breathing.
   let h  = fract(sin(f32(i) * 12.9898 + u.time * 7.7)  * 43758.5453);
   let h2 = fract(sin(f32(i) * 78.233  + u.time * 11.3) * 43758.5453);
   accel.x = accel.x + (h  - 0.5) * wander;
   accel.y = accel.y + (h2 - 0.5) * wander;
+
+  // -------- Tangential flow along the silhouette --------
+  // Once particles settle on the letter, all forces above go to zero and
+  // they freeze. The tangential flow keeps them sliding along the outline:
+  // tangent is perpendicular to the SDF gradient; per-particle sign + speed
+  // give half the swarm a left-flow, half a right-flow, with varied paces.
+  // Only active in the silhouette band (|d| < ~10 px) and the SDF zone.
+  let tangent = vec2<f32>(-dir_outward.y, dir_outward.x);
+  let h_flow = fract(f32(i) * 0.5698402909980532 + 0.13);
+  let flow_sign = select(-1.0, 1.0, h_flow < 0.5);
+  let in_band = 1.0 - smoothstep(0.0, 10.0, abs(d));
+  let flow_mag = flow * flow_sign * in_band * (1.0 - far_w) * (0.4 + h_flow * 1.2);
+  accel.x = accel.x + tangent.x * flow_mag;
+  accel.y = accel.y + tangent.y * flow_mag;
+
+  // -------- Per-particle speed multiplier --------
+  // Scales every force this module contributed this frame. Drag is applied
+  // by a separate module and not scaled here — that's intentional so the
+  // damping is uniform while the *drive* varies per particle.
+  accel.x = accel.x * speed_mult;
+  accel.y = accel.y * speed_mult;
 }`;
   return apply;
 }

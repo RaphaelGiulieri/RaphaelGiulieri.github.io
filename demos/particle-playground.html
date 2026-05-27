@@ -1,0 +1,4249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>particles · playground</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0c0a07; color: #f0ebe0; font-family: "JetBrains Mono", ui-monospace, monospace; overflow: hidden;
+    user-select: none; -webkit-user-select: none; -moz-user-select: none;
+  }
+  /* Allow selection inside fields the user actually types into. */
+  input, textarea, select { user-select: text; -webkit-user-select: text; -moz-user-select: text; }
+  canvas#c { display: block; width: 100%; height: 100%; cursor: crosshair; }
+  .topbar { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; max-width: calc(100% - 360px); }
+  .topbar button, .topbar .pop {
+    font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: rgba(240,235,224,0.85); background: rgba(12,10,7,0.55);
+    border: 1px solid rgba(240,235,224,0.2); padding: 5px 10px;
+    cursor: pointer; backdrop-filter: blur(6px);
+  }
+  .topbar button:hover, .topbar button.on { border-color: #ff4b1f; color: #ff4b1f; }
+  .topbar .gap { width: 12px; }
+  .label { position: absolute; bottom: 12px; left: 12px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.4); pointer-events: none; line-height: 1.5; max-width: calc(100% - 360px); }
+  .label b { color: #ff4b1f; font-weight: 500; }
+  /* Stats overlay sits bottom-left so the right inspector panel never
+     obstructs it. Toggleable via stage.showStats (General tab). */
+  .stats { position: absolute; bottom: 36px; left: 12px; font-size: 10px; letter-spacing: 0.05em; color: rgba(240,235,224,0.55); text-align: left; line-height: 1.5; pointer-events: none; }
+  .stats.hidden { display: none; }
+  .stats b { color: #ff4b1f; font-weight: 500; }
+  .stat-backend { font-weight: bold; }
+  .stat-backend.backend-webgl2 { color: #5fb4f4; }
+  .stat-backend.backend-webgpu { color: #9ee37d; }
+  .stats .info { color: rgba(240,235,224,0.35); font-size: 9px; }
+
+  /* ----- right inspector panel ----- */
+  #panel {
+    position: absolute; top: 12px; right: 12px;
+    width: min(400px, calc(100vw - 24px));
+    max-height: calc(100% - 24px);
+    background: rgba(12,10,7,0.92); border: 1px solid rgba(240,235,224,0.18);
+    backdrop-filter: blur(8px);
+    font-size: 10px; letter-spacing: 0.04em;
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+    z-index: 50;
+  }
+  /* Independent audio panel anchored top-left, below the topbar — kept fully
+     separate from the inspector so the native <select>'s intrinsic width
+     can never re-flow the inspector layout. */
+  #audio-panel {
+    position: fixed; top: 60px; left: 12px;
+    width: min(340px, calc(100vw - 24px));
+    background: rgba(12,10,7,0.92); border: 1px solid rgba(240,235,224,0.18);
+    backdrop-filter: blur(8px);
+    padding: 8px 10px 10px;
+    display: flex; flex-direction: column; gap: 6px;
+    z-index: 50;
+  }
+  #audio-panel::before {
+    content: 'AUDIO';
+    color: rgba(240,235,224,0.35);
+    font: 600 8px/1 ui-monospace, monospace;
+    letter-spacing: 0.20em; text-transform: uppercase;
+    padding-bottom: 2px;
+  }
+  #audio-panel audio {
+    /* Native browser controls hidden — we render our own UI in this panel
+       and treat the <audio> element as a headless playback engine. */
+    display: none;
+  }
+
+  /* ── Track header: round play button + title + volume control ─────── */
+  #audio-panel .audio-head {
+    display: grid;
+    grid-template-columns: 26px 1fr auto;
+    gap: 8px; align-items: center;
+    margin-top: 2px;
+  }
+  /* Compact volume control on the right of the header. Click icon toggles
+     mute; the slider adjusts level. Browser-default range chrome dropped
+     in favor of a flat orange thumb on a dim track. */
+  #audio-panel .audio-vol {
+    display: flex; gap: 4px; align-items: center;
+  }
+  #audio-panel .audio-vol-icon {
+    font-size: 11px; line-height: 1; cursor: pointer;
+    color: rgba(240,235,224,0.55);
+    user-select: none;
+  }
+  #audio-panel .audio-vol-icon:hover { color: #f0ebe0; }
+  #audio-panel .audio-vol-slider {
+    -webkit-appearance: none; appearance: none;
+    width: 56px; height: 3px;
+    background: rgba(240,235,224,0.18);
+    outline: none; cursor: pointer; padding: 0; margin: 0;
+  }
+  #audio-panel .audio-vol-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #ff4b1f; border: 0; cursor: pointer;
+  }
+  #audio-panel .audio-vol-slider::-moz-range-thumb {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: #ff4b1f; border: 0; cursor: pointer;
+  }
+  #audio-panel .audio-play {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(255,75,31,0.18); color: #ff4b1f;
+    border: 1px solid rgba(255,75,31,0.55);
+    font-size: 10px; cursor: pointer; line-height: 1;
+    padding: 0; display: flex; align-items: center; justify-content: center;
+    transition: background 0.1s;
+  }
+  #audio-panel .audio-play:hover { background: rgba(255,75,31,0.32); }
+  #audio-panel.has-track .audio-play { color: #f0ebe0; border-color: #ff4b1f; }
+  #audio-panel .audio-title {
+    color: #f0ebe0; font-size: 11px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Stat row: BPM | KEY | LUFS ────────────────────────────────────── */
+  #audio-panel .audio-stats {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 4px;
+  }
+  #audio-panel .audio-stat {
+    background: rgba(255,75,31,0.05);
+    border: 1px solid rgba(255,75,31,0.18);
+    padding: 4px 6px; text-align: center;
+  }
+  #audio-panel .audio-stat-value {
+    color: #ff4b1f; font-size: 14px; font-weight: 500;
+    line-height: 1.1; letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  #audio-panel.has-track .audio-stat-value { color: #ff7a4f; }
+  #audio-panel .audio-stat-unit {
+    color: rgba(240,235,224,0.45); font-size: 8px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    margin-top: 1px;
+  }
+
+  /* ── Progress scrubber + time row ──────────────────────────────────── */
+  #audio-panel .audio-progress {
+    height: 14px; cursor: pointer; padding: 5px 0;
+    position: relative;
+  }
+  #audio-panel .audio-progress-track {
+    height: 4px; background: rgba(240,235,224,0.10);
+    border-radius: 2px; position: relative; overflow: hidden;
+  }
+  #audio-panel .audio-progress-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #ff4b1f, #ff7a4f);
+    box-shadow: 0 0 6px rgba(255,75,31,0.55);
+    transition: width 0.05s linear;
+  }
+  #audio-panel .audio-time-row {
+    display: flex; justify-content: space-between;
+    font-size: 9px; color: rgba(240,235,224,0.55);
+    font-variant-numeric: tabular-nums;
+    margin-top: -2px;
+  }
+
+  /* ── Live row: 7-band EQ bars + drum onset lights ──────────────────── */
+  #audio-panel .audio-eq-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px; align-items: end;
+    height: 32px;
+    padding: 4px 2px 0;
+    border-top: 1px dashed rgba(240,235,224,0.10);
+    margin-top: 2px;
+  }
+  #audio-panel .audio-eq {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px; height: 100%; align-items: end;
+  }
+  #audio-panel .audio-eq-bar {
+    height: 2%;
+    background: linear-gradient(0deg, #ff4b1f, #ff7a4f 60%, #ffe1d2);
+    border-radius: 1px 1px 0 0;
+    transition: height 0.05s linear;
+    min-height: 1px;
+  }
+  #audio-panel .audio-drum-lights {
+    display: flex; gap: 3px; align-items: end; padding-bottom: 1px;
+  }
+  /* Drum onset lights — fully bound to the flash value via the --lit
+     custom property (0..1). updateAudioDockLive() writes it every frame
+     and the CSS interpolates colour/glow continuously. Smooth pulse
+     instead of a binary class toggle so the eye reads the decay tail. */
+  #audio-panel .audio-drum {
+    width: 14px; height: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; font-weight: 600; letter-spacing: 0;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, calc(0.30 + 0.70 * var(--lit, 0)));
+    background: rgba(255, 75, 31,  calc(var(--lit, 0) * 0.65 + 0.04));
+    border: 1px solid rgba(255, 75, 31, calc(0.14 + var(--lit, 0) * 0.86));
+    box-shadow: 0 0 calc(8px * var(--lit, 0)) rgba(255, 122, 79, 0.7);
+  }
+
+  /* ── Foot row: track picker + load / unload buttons ────────────────── */
+  #audio-panel .audio-foot {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 4px; align-items: center;
+    border-top: 1px dashed rgba(240,235,224,0.10);
+    padding-top: 6px; margin-top: 2px;
+  }
+  #audio-panel .audio-track {
+    background: rgba(12,10,7,0.7); color: #f0ebe0;
+    border: 1px solid rgba(240,235,224,0.18);
+    font: inherit; font-size: 10px; padding: 3px 6px;
+    min-width: 0;
+  }
+  #audio-panel .audio-foot .grad-btn { font-size: 9px; padding: 3px 8px; }
+
+  /* When no track loaded, hide the data-driven sections to avoid empty
+     stat cards / meaningless EQ bars. */
+  #audio-panel:not(.has-track) .audio-stats,
+  #audio-panel:not(.has-track) .audio-progress,
+  #audio-panel:not(.has-track) .audio-time-row,
+  #audio-panel:not(.has-track) .audio-eq-row { display: none; }
+  #audio-panel:not(.has-track) .audio-title { color: rgba(240,235,224,0.45); }
+
+  /* Beat-pulse on the BPM stat card. Driven by an envelope (fast attack,
+     slow release) computed in updateAudioDockLive — written into the
+     --beat custom property so the box-shadow halo and value brightness
+     interpolate continuously. Reads as a clear "tap your foot here" cue. */
+  #audio-panel .audio-stat.bpm {
+    box-shadow:
+      0 0 calc(14px * var(--beat, 0)) rgba(255, 75, 31, calc(var(--beat, 0) * 0.55)),
+      inset 0 0 calc(8px * var(--beat, 0)) rgba(255, 75, 31, calc(var(--beat, 0) * 0.18));
+    border-color: rgba(255, 75, 31, calc(0.18 + 0.62 * var(--beat, 0)));
+  }
+  #audio-panel .audio-stat.bpm .audio-stat-value {
+    color: rgb(
+      calc(255 - 0 * var(--beat, 0)),
+      calc(122 + 50 * var(--beat, 0)),
+      calc(79  + 80 * var(--beat, 0))
+    );
+    text-shadow: 0 0 calc(8px * var(--beat, 0)) rgba(255, 200, 150, calc(var(--beat, 0) * 0.7));
+  }
+
+  /* Status line kept around for back-compat with code paths that read it,
+     but visually demoted to invisible — the new UI conveys all state. */
+  #audio-panel .audio-status { display: none; }
+  #panel::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, #ff4b1f 30%, #c23a17 70%, transparent);
+    z-index: 1;
+  }
+  #editor {
+    overflow-y: auto;
+    padding: 12px 12px 16px;
+  }
+  #editor::-webkit-scrollbar { width: 6px; }
+  #editor::-webkit-scrollbar-thumb { background: rgba(240,235,224,0.18); }
+  #status-bar {
+    border-top: 1px solid rgba(240,235,224,0.10);
+    padding: 5px 12px;
+    font: 400 9px/1.4 ui-monospace, monospace;
+    letter-spacing: 0.10em;
+    color: rgba(240,235,224,0.40);
+    background: rgba(12,10,7,0.7);
+    display: flex; justify-content: space-between;
+  }
+  #status-bar b { color: #ff4b1f; font-weight: 500; }
+
+  /* tab-nav: two rows, scene + emitters with labelled gutters */
+  #tab-nav { display: flex; flex-direction: column; }
+  .tab-group-row {
+    display: flex; flex-direction: column; align-items: stretch; min-width: 0;
+    background: linear-gradient(180deg, #14110c, #0c0a07);
+    border-bottom: 1px solid rgba(240,235,224,0.08);
+  }
+  .tab-group-row.last { border-bottom: 1px solid rgba(240,235,224,0.18); position: relative; }
+  .tab-group-row.last::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+    background: #ff4b1f; opacity: 0.45;
+  }
+  .tab-group-label {
+    flex: 0 0 auto;
+    padding: 6px 12px 2px;
+    font: 600 8px/1 ui-monospace, monospace;
+    letter-spacing: 0.20em;
+    text-transform: uppercase;
+    color: rgba(240,235,224,0.30);
+    background: #050402;
+    border-right: 0;
+    display: flex; align-items: center;
+  }
+  .tab-strip {
+    display: flex; flex: 1 1 auto; min-width: 0; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  /* When the strip can grow tall (emitters), wrap onto multiple rows
+     instead of scrolling off-screen. Each row stays single-line. */
+  .tab-strip.wrap {
+    flex-wrap: wrap; overflow-x: visible;
+    align-content: flex-start;
+  }
+  .tab-strip::-webkit-scrollbar { display: none; }
+  .tab {
+    font: 600 9px/1 ui-monospace, monospace;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: rgba(240,235,224,0.55);
+    background: transparent; border: 0; cursor: pointer;
+    padding: 9px 9px;
+    border-bottom: 2px solid transparent;
+    position: relative;
+    transition: color 120ms, background 120ms;
+    flex: 0 0 auto;
+    max-width: 130px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* In wrap mode each tab claims at least 200px so only 2 fit per row
+     (strip width ~400px → 2×200=400 just fits, 3×200=600 wraps). Each tab
+     ends up ~190-200px wide — comfortably more than any name + badge. */
+  .tab-strip.wrap .tab {
+    flex: 1 1 200px; min-width: 0; max-width: none;
+    text-align: left;
+  }
+  .tab-strip.wrap .tab.tab-add { flex: 0 0 auto; }
+  .tab:hover { color: #f0ebe0; }
+  .tab.tab-em { padding-left: 16px; }
+  .tab.tab-em::before {
+    content: ''; position: absolute; left: 6px; top: 9px; bottom: 9px; width: 3px;
+    background: var(--c, #ff4b1f);
+    box-shadow: 0 0 6px var(--c, #ff4b1f);
+  }
+  .tab.selected {
+    color: #f0ebe0;
+    background: rgba(255,75,31,0.10);
+    border-bottom-color: #ff4b1f;
+  }
+  .tab .tab-badge {
+    display: inline-block; margin-left: 6px;
+    font: 500 9px/1 ui-monospace, monospace;
+    color: rgba(240,235,224,0.25);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+  }
+  .tab.selected .tab-badge { color: #ff4b1f; }
+  .tab-add {
+    color: #ff4b1f; font-weight: 700;
+    border-left: 1px solid rgba(240,235,224,0.08);
+  }
+
+  /* emitter header */
+  .em-head {
+    display: grid;
+    grid-template-columns: 22px 1fr auto auto auto;
+    gap: 10px;
+    align-items: center;
+    padding: 4px 2px 12px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid rgba(240,235,224,0.08);
+  }
+  .em-head .em-power {
+    background: transparent;
+    border: 1px solid var(--c, #ff4b1f);
+    color: var(--c, #ff4b1f);
+    cursor: pointer;
+    padding: 3px 7px;
+    font: 600 9px/1 ui-monospace, monospace;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .em-head .em-power:hover { background: rgba(255,75,31,0.12); }
+  /* disabled emitter visual treatment */
+  .em-head.disabled .em-color::after { opacity: 0.30; }
+  .em-head.disabled .em-name { color: rgba(240,235,224,0.45); }
+  .em-head.disabled .em-power {
+    border-color: rgba(240,235,224,0.30);
+    color: rgba(240,235,224,0.45);
+    background: rgba(240,235,224,0.04);
+  }
+  /* dim a disabled emitter's tab */
+  .tab.tab-em.disabled { opacity: 0.45; }
+  .tab.tab-em.disabled::before {
+    background: rgba(240,235,224,0.30);
+    box-shadow: none;
+  }
+  .em-head .em-color {
+    width: 20px; height: 20px;
+    border: 1px solid rgba(240,235,224,0.18);
+    background: rgba(240,235,224,0.04);
+    position: relative;
+  }
+  .em-head .em-color::after {
+    content: ''; position: absolute; inset: 2px;
+    background: var(--c, #ff4b1f);
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.35);
+  }
+  .em-head .em-name {
+    font: 500 13px/1 ui-monospace, monospace;
+    background: transparent; border: 0; color: #f0ebe0;
+    padding: 4px 0;
+    border-bottom: 1px dashed transparent;
+    outline: none; width: 100%;
+  }
+  .em-head .em-name:hover { border-bottom-color: rgba(240,235,224,0.18); }
+  .em-head .em-name:focus { border-bottom-color: #ff4b1f; }
+  .em-head .em-stats {
+    font-size: 9px; letter-spacing: 0.10em;
+    color: rgba(240,235,224,0.55);
+    font-variant-numeric: tabular-nums; text-align: right;
+  }
+  .em-head .em-stats b { color: #ff4b1f; font-weight: 500; }
+  .em-head .em-del {
+    background: transparent; border: 0;
+    color: rgba(240,235,224,0.25); cursor: pointer;
+    font: 400 12px/1 ui-monospace, monospace;
+    padding: 4px 6px;
+  }
+  .em-head .em-del:hover { color: #ff4b1f; }
+
+  /* phase dividers — clickable to collapse the whole phase */
+  .phase-block {}
+  .phase-block .phase-body { display: grid; gap: 0; }
+  .phase-block.collapsed .phase-body { display: none; }
+  .phase {
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 10px; align-items: center;
+    margin: 14px 0 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 120ms;
+  }
+  .phase:hover { opacity: 0.85; }
+  .phase-block.collapsed .phase { opacity: 0.55; margin-bottom: 4px; }
+  .phase-block:first-of-type .phase { margin-top: 4px; }
+  .phase .ph-num {
+    font: 700 9px/1 ui-monospace, monospace;
+    color: #ff4b1f;
+    letter-spacing: 0.10em;
+    background: #050402;
+    padding: 5px 7px;
+    border: 1px solid #ff4b1f;
+    font-variant-numeric: tabular-nums;
+    transition: background 120ms;
+  }
+  .phase:hover .ph-num { background: rgba(255,75,31,0.12); }
+  .phase .ph-name {
+    font: 600 10px/1 ui-monospace, monospace;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: #f0ebe0;
+  }
+  .phase .ph-name .ph-sub {
+    display: block;
+    font: 400 8px/1.4 ui-monospace, monospace;
+    letter-spacing: 0.14em;
+    color: rgba(240,235,224,0.30);
+    margin-top: 4px;
+    text-transform: lowercase;
+  }
+  .phase .ph-chev {
+    font: 500 11px/1 ui-monospace, monospace;
+    color: #ff4b1f;
+    display: inline-block;
+    transition: transform 150ms;
+    padding-left: 4px;
+  }
+  .phase-block.collapsed .ph-chev { transform: rotate(-90deg); }
+  .phase .ph-line {
+    height: 1px;
+    background: linear-gradient(90deg, #ff4b1f, transparent);
+    opacity: 0.6;
+  }
+
+  /* updated module cards: header row + collapsible body */
+  .mod {
+    background: rgba(255,75,31,0.04);
+    border: 1px solid rgba(240,235,224,0.10);
+    border-left: 2px solid var(--c, #ff4b1f);
+    margin-bottom: 4px;
+    transition: opacity 120ms, border-left-color 120ms;
+  }
+  .mod.disabled { opacity: 0.40; border-left-color: rgba(240,235,224,0.20); }
+  .mod-head {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto auto;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    cursor: pointer;
+    transition: background 120ms;
+    background: transparent;
+  }
+  .mod-head .pip {
+    width: 10px; height: 10px;
+    border: 1px solid var(--c, #ff4b1f);
+    background: var(--c, #ff4b1f);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 120ms;
+  }
+  .mod.disabled .mod-head .pip {
+    background: transparent;
+    border-color: rgba(240,235,224,0.30);
+  }
+  .mod-head .pip:hover { box-shadow: 0 0 0 1px var(--c, #ff4b1f); }
+  .mod-head:hover { background: rgba(255,75,31,0.10); }
+  .mod-head .mod-chev {
+    display: inline-block; width: 10px;
+    font-size: 10px; color: #ff4b1f;
+    transition: transform 150ms;
+  }
+  .mod.collapsed .mod-chev { transform: rotate(-90deg); }
+  .mod-head .name {
+    font: 500 10px/1.1 ui-monospace, monospace;
+    color: #f0ebe0; flex: 1; letter-spacing: 0.04em;
+  }
+  .mod-head .name .ns { color: rgba(240,235,224,0.40); }
+  .mod-head .kind {
+    font: 500 8px/1 ui-monospace, monospace;
+    color: var(--c, #ff4b1f);
+    letter-spacing: 0.16em; text-transform: uppercase;
+    padding: 2px 6px;
+    border: 1px solid var(--c, #ff4b1f);
+    background: rgba(255,255,255,0.02);
+  }
+  .mod-head .del {
+    background: transparent; border: 0;
+    color: rgba(240,235,224,0.25); cursor: pointer;
+    font-size: 10px; padding: 4px;
+  }
+  .mod-head .del:hover { color: #ff4b1f; }
+  .mod-body {
+    border-top: 1px solid rgba(240,235,224,0.08);
+    padding: 8px 10px 10px 14px;
+    background: rgba(12,10,7,0.5);
+    display: grid; gap: 4px;
+  }
+  .mod.collapsed .mod-body { display: none; }
+
+  /* sub-section card refresh — high-specificity to beat #panel h3 base rule */
+  #editor .section {
+    border: 1px solid rgba(240,235,224,0.08);
+    margin-bottom: 8px;
+    background: rgba(20,17,12,0.5);
+    position: relative;
+  }
+  #editor .section h3 {
+    margin: 0;
+    padding: 8px 10px;
+    background: linear-gradient(90deg, rgba(28,24,18,0.7), transparent 70%);
+    border-bottom: 1px solid rgba(240,235,224,0.08);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(240,235,224,0.55);
+    font-weight: 500;
+  }
+  #editor .section h3.collapsible.collapsed { border-bottom-color: transparent; color: rgba(240,235,224,0.30); }
+  #editor .section .section-body { padding: 8px 10px 10px; display: grid; gap: 4px; }
+  #editor .section .section-body:empty { display: none; }
+  /* The "Modules" body should not gridify so cards take full width tightly */
+  #editor .section .section-body .mod { gap: 0; }
+  #panel h3 { margin: 0; font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(240,235,224,0.45); font-weight: 500; padding: 8px 0 4px; border-bottom: 1px solid rgba(240,235,224,0.12); }
+  #panel h3:first-child { padding-top: 0; }
+  #panel h3.collapsible { cursor: pointer; user-select: none; }
+  #panel h3.collapsible:hover { color: #ff4b1f; }
+  #panel h3.collapsible .caret { display: inline-block; width: 9px; transition: transform 0.12s; color: rgba(240,235,224,0.55); }
+  #panel h3.collapsible.collapsed .caret { transform: rotate(-90deg); }
+  #panel h3.collapsible.collapsed { color: rgba(240,235,224,0.30); }
+  .section-body { padding-bottom: 4px; }
+  .row { display: grid; grid-template-columns: 88px 1fr 42px; gap: 6px; align-items: center; margin: 2px 0; }
+  .row label { color: rgba(240,235,224,0.55); text-transform: uppercase; font-size: 9px; }
+  .row input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 2px; background: rgba(240,235,224,0.20); outline: none; }
+  .row input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 8px; height: 12px; background: #ff4b1f; cursor: pointer; }
+  .row input[type=range]::-moz-range-thumb { width: 8px; height: 12px; background: #ff4b1f; cursor: pointer; border: none; }
+  .row input[type=checkbox] { accent-color: #ff4b1f; }
+  .row select { background: rgba(12,10,7,0.7); color: #f0ebe0; border: 1px solid rgba(240,235,224,0.18); font: inherit; font-size: 10px; padding: 1px 2px; }
+  .row .v { color: #ff4b1f; text-align: right; font-weight: 500; font-size: 10px; }
+  /* Click-to-edit numeric value column. Looks like the read-only `.v` span
+     until you click it, then turns into a focused input you can type into. */
+  input.v.v-input {
+    background: transparent; border: 0;
+    color: #ff4b1f; text-align: right; font-weight: 500;
+    font: inherit; font-size: 10px; line-height: 1;
+    padding: 1px 2px; width: 100%; box-sizing: border-box;
+    font-variant-numeric: tabular-nums;
+    cursor: text;
+  }
+  input.v.v-input:hover { background: rgba(255,75,31,0.08); }
+  input.v.v-input:focus {
+    outline: 1px solid rgba(255,75,31,0.55);
+    outline-offset: 0;
+    background: rgba(255,75,31,0.10);
+  }
+
+  /* ----- module list ----- */
+  .mod {
+    background: rgba(255,75,31,0.04);
+    border: 1px solid rgba(240,235,224,0.10);
+    padding: 6px 8px; margin: 4px 0;
+  }
+  .mod.disabled { opacity: 0.4; }
+  .mod-head {
+    display: flex; align-items: center; gap: 6px;
+    cursor: pointer; user-select: none;
+    margin: -6px -8px 4px; padding: 6px 8px;
+    background: rgba(240,235,224,0.04);
+  }
+  .mod-head:hover { background: rgba(255,75,31,0.10); }
+  .mod-head .name { color: #ff4b1f; font-weight: 500; flex: 1; font-size: 10px; }
+  .mod-head .kind { color: rgba(240,235,224,0.40); font-size: 9px; }
+  .mod-head .del { color: rgba(240,235,224,0.55); padding: 0 2px; cursor: pointer; }
+  .mod-head .del:hover { color: #ff4b1f; }
+  .mod-body { display: block; }
+  .mod.collapsed .mod-body { display: none; }
+  .mod-body textarea {
+    width: 100%; box-sizing: border-box; min-height: 38px; font: inherit; font-size: 10px;
+    background: rgba(12,10,7,0.7); color: #f0ebe0; border: 1px solid rgba(240,235,224,0.18); padding: 3px 4px;
+    margin: 2px 0; resize: vertical;
+  }
+  .preview { height: 28px; background: rgba(12,10,7,0.5); margin: 2px 0 4px; }
+
+  /* ----- add-module modal ----- */
+  #addBtn {
+    background: rgba(255,75,31,0.12); color: #ff4b1f; border: 1px dashed rgba(255,75,31,0.4);
+    padding: 6px; cursor: pointer; font: inherit; font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase; text-align: center;
+  }
+  #addBtn:hover { background: rgba(255,75,31,0.20); }
+  #picker {
+    position: absolute; top: 12px; right: 348px; width: 280px; max-height: calc(100% - 24px);
+    background: rgba(12,10,7,0.95); border: 1px solid #ff4b1f;
+    backdrop-filter: blur(8px); padding: 10px;
+    font-size: 10px; display: none; z-index: 50; overflow-y: auto;
+  }
+  #picker.show { display: block; }
+  #picker input[type=search] {
+    width: 100%; box-sizing: border-box; font: inherit; font-size: 11px;
+    background: rgba(12,10,7,0.7); color: #f0ebe0;
+    border: 1px solid rgba(240,235,224,0.20); padding: 5px 6px; margin-bottom: 6px;
+  }
+  .pcat { color: rgba(240,235,224,0.45); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; padding: 8px 0 2px; }
+  .pitem { padding: 5px 6px; cursor: pointer; border: 1px solid transparent; }
+  .pitem:hover { border-color: #ff4b1f; background: rgba(255,75,31,0.08); }
+  .pitem .pname { color: #ff4b1f; font-weight: 500; }
+  .pitem .pdoc { color: rgba(240,235,224,0.55); font-size: 9px; margin-top: 1px; }
+
+  /* ----- gradient picker ----- */
+  .grad-picker { padding: 4px 0; }
+  .grad-track-host {
+    position: relative; width: 100%; height: 22px; margin-bottom: 14px;
+    border: 1px solid rgba(240,235,224,0.18);
+  }
+  .grad-track { display: block; width: 100%; height: 22px; cursor: crosshair; }
+  .grad-stops { position: absolute; left: 0; right: 0; bottom: -10px; height: 10px; }
+  .grad-stop {
+    position: absolute; bottom: 0;
+    width: 10px; height: 10px;
+    transform: translateX(-50%);
+    border: 1px solid rgba(240,235,224,0.30);
+    cursor: ew-resize;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+    box-sizing: border-box;
+  }
+  .grad-stop.selected { border-color: #ff4b1f; transform: translateX(-50%) scale(1.25); z-index: 2; }
+  .grad-btn-row { display: flex; gap: 4px; margin: 4px 0 6px; }
+  .grad-btn {
+    background: rgba(255,75,31,0.10); color: #ff4b1f;
+    border: 1px solid rgba(255,75,31,0.30); cursor: pointer;
+    padding: 2px 8px; font: inherit; font-size: 11px;
+  }
+  .grad-btn:hover { background: rgba(255,75,31,0.25); }
+  .grad-editor { display: flex; gap: 8px; align-items: flex-start; }
+  .grad-wheel-stack { position: relative; width: 110px; height: 110px; flex-shrink: 0; }
+  .grad-wheel, .grad-wheel-overlay {
+    position: absolute; left: 0; top: 0; width: 110px; height: 110px;
+    border-radius: 55px; cursor: crosshair;
+  }
+  .grad-wheel-overlay { pointer-events: none; }
+  .grad-controls { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .grad-row {
+    display: grid; grid-template-columns: 50px 1fr 36px;
+    gap: 4px; align-items: center; font-size: 9px;
+  }
+  .grad-row label { color: rgba(240,235,224,0.55); text-transform: uppercase; }
+  .grad-row input[type=range] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 2px; background: rgba(240,235,224,0.20); outline: none;
+  }
+  .grad-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 8px; height: 12px; background: #ff4b1f; cursor: pointer;
+  }
+  .grad-row .gv { color: #ff4b1f; text-align: right; font-size: 9px; }
+  .grad-hex {
+    background: rgba(12,10,7,0.7); color: #f0ebe0;
+    border: 1px solid rgba(240,235,224,0.18);
+    font: inherit; font-size: 10px; padding: 1px 3px; width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* ----- curve picker ----- */
+  .curve-picker { padding: 4px 0; }
+  .curve-canvas {
+    display: block; width: 100%; max-width: 100%; height: 100px;
+    background: #0c0a07; border: 1px solid rgba(240,235,224,0.18); cursor: crosshair;
+  }
+  .curve-help { color: rgba(240,235,224,0.45); font-size: 9px; margin: 3px 0 4px; }
+  .curve-vmax {
+    background: rgba(12,10,7,0.7); color: #f0ebe0;
+    border: 1px solid rgba(240,235,224,0.18);
+    font: inherit; font-size: 10px; padding: 1px 3px; width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* ----- binding link icon + popover ----- */
+  .row-bindable { grid-template-columns: 64px 1fr 18px 32px; }
+  .link-btn {
+    color: rgba(240,235,224,0.40); cursor: pointer; text-align: center;
+    font-size: 10px; line-height: 1; user-select: none; padding: 0 2px;
+  }
+  .link-btn:hover { color: #ff4b1f; }
+  .bound-pill {
+    background: rgba(255,75,31,0.15); color: #ff4b1f;
+    border: 1px solid rgba(255,75,31,0.45);
+    padding: 2px 6px; cursor: pointer; font-size: 9px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bound-pill:hover { background: rgba(255,75,31,0.30); }
+  .bound-pill .src { color: #f0ebe0; }
+  .bound-pill .src::before { content: '🔗 '; opacity: 0.6; }
+
+  /* Inline editor shown in the spawn-rules grid when a constant value
+     was replaced by a Bound (e.g. rate ← audio.bands.mid × 1000). */
+  .row.row-bound { grid-template-columns: 88px 1fr 22px; align-items: center; }
+  .bound-editor {
+    display: flex; gap: 6px; align-items: center; min-width: 0;
+  }
+  .bound-editor .bound-pill {
+    flex: 1 1 auto; min-width: 0;
+    /* Pills inside the bound editor get cramped by the scale input. Allow
+       the source path to wrap onto two lines instead of ellipsis-clipping
+       it to "audio.b_" — the user needs to read the full path. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+    text-overflow: clip;
+  }
+  .bound-editor .bound-mul {
+    color: rgba(240,235,224,0.45); font-size: 10px; flex: 0 0 auto;
+  }
+  .bound-editor .bound-scale {
+    flex: 0 0 64px;
+    background: rgba(12,10,7,0.7); color: #ff4b1f;
+    border: 1px solid rgba(255,75,31,0.30);
+    font: inherit; font-size: 10px; padding: 1px 4px;
+    text-align: right;
+  }
+  .bound-unbind {
+    background: transparent; border: 0; cursor: pointer;
+    color: rgba(240,235,224,0.45); font-size: 11px; padding: 0;
+    line-height: 1;
+  }
+  .bound-unbind:hover { color: #ff4b1f; }
+
+  /* Backdrop dim while the source panel is open */
+  .source-backdrop {
+    position: fixed; inset: 0; z-index: 199;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+  }
+  /* Wide centred source-picker panel — every category visible at once via
+     multi-column flow, no scrolling needed under typical conditions. */
+  .source-pop {
+    position: fixed; z-index: 200;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: rgba(12,10,7,0.97); color: #f0ebe0;
+    border: 1px solid #ff4b1f;
+    width: min(960px, 92vw); max-height: 86vh; overflow-y: auto;
+    padding: 14px 16px;
+    font-size: 10px;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.75);
+  }
+  .source-pop-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 12px; padding-bottom: 10px;
+    border-bottom: 1px solid rgba(240,235,224,0.10);
+  }
+  .source-pop-title {
+    color: rgba(240,235,224,0.55);
+    font-size: 9px; letter-spacing: 0.20em; text-transform: uppercase;
+    flex: 0 0 auto;
+  }
+  .source-pop-search {
+    flex: 1 1 auto;
+    background: rgba(12,10,7,0.7); color: #f0ebe0;
+    border: 1px solid rgba(240,235,224,0.18);
+    font: inherit; font-size: 11px; padding: 4px 8px;
+    letter-spacing: 0.04em;
+  }
+  .source-pop-search:focus {
+    outline: 1px solid rgba(255,75,31,0.55); outline-offset: 0;
+    border-color: rgba(255,75,31,0.55);
+  }
+  .source-pop-close {
+    flex: 0 0 auto;
+    background: transparent; border: 0; cursor: pointer;
+    color: rgba(240,235,224,0.55); font-size: 14px; padding: 0 4px;
+  }
+  .source-pop-close:hover { color: #ff4b1f; }
+  .source-pop-grid {
+    column-width: 220px; column-gap: 18px;
+  }
+  /* Each category is a "card" inside the multi-column grid. break-inside
+     keeps a category whole rather than splitting across columns. */
+  .source-pop .sp-category {
+    break-inside: avoid; -webkit-column-break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 14px;
+    border: 1px solid rgba(240,235,224,0.08);
+    background: rgba(20,17,12,0.45);
+  }
+  .source-pop .sp-cat {
+    color: rgba(240,235,224,0.55); padding: 6px 8px;
+    font-size: 9px; letter-spacing: 0.10em; text-transform: uppercase;
+    display: grid; grid-template-columns: 1fr auto; gap: 6px;
+    align-items: center;
+    background: linear-gradient(90deg, rgba(28,24,18,0.7), transparent 70%);
+    border-bottom: 1px solid rgba(240,235,224,0.08);
+  }
+  .source-pop .sp-category.is-audio .sp-cat { color: #ff4b1f; }
+  .source-pop .sp-cat-count {
+    color: rgba(240,235,224,0.35); font-size: 9px;
+    font-variant-numeric: tabular-nums; letter-spacing: 0;
+  }
+  .source-pop .sp-cat-warn {
+    grid-column: 1 / -1;
+    color: rgba(255,75,31,0.65); font-size: 8px; letter-spacing: 0.05em;
+    text-transform: lowercase; font-style: italic; margin-top: 2px;
+  }
+  .source-pop .sp-cat-body { padding: 2px 0; }
+  .source-pop .sp-item {
+    padding: 4px 10px; cursor: pointer; font-family: ui-monospace, monospace;
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .source-pop .sp-item:hover { background: rgba(255,75,31,0.15); }
+  .source-pop .sp-item.disabled { color: rgba(240,235,224,0.25); cursor: not-allowed; }
+  .source-pop .sp-item.disabled:hover { background: transparent; }
+  .source-pop .sp-item .sp-range {
+    color: rgba(240,235,224,0.45); font-size: 9px;
+  }
+  .source-pop .sp-unbind {
+    margin-top: 6px; padding: 6px 10px; cursor: pointer;
+    background: rgba(240,235,224,0.06);
+    border-top: 1px solid rgba(240,235,224,0.12);
+    color: #ff4b1f; text-align: center; letter-spacing: 0.10em;
+    text-transform: uppercase; font-size: 9px;
+  }
+  .source-pop .sp-unbind:hover { background: rgba(255,75,31,0.20); }
+
+  /* ----- emitter spawn settings ----- */
+  .rng-toggle {
+    background: rgba(255,75,31,0.10); color: #ff4b1f;
+    border: 1px solid rgba(255,75,31,0.30); cursor: pointer;
+    padding: 1px 6px; font: inherit; font-size: 9px; letter-spacing: 0.06em;
+    text-transform: uppercase; border-radius: 0;
+  }
+  .rng-toggle:hover { background: rgba(255,75,31,0.25); }
+  /* Inline sub-divider inside a section (e.g. between origin and shape). */
+  .sub-divider {
+    margin: 8px 0 4px;
+    color: rgba(240,235,224,0.45); font-size: 9px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    border-top: 1px dashed rgba(240,235,224,0.10);
+    padding-top: 6px;
+  }
+  .modules-empty {
+    color: rgba(240,235,224,0.40); font-size: 10px; font-style: italic;
+    padding: 8px 4px; line-height: 1.4;
+  }
+  /* Top of the Trigger section — at-a-glance summary of which spawn
+     sources are live for this emitter (continuous / bursts / triggers). */
+  .trigger-summary {
+    font-size: 10px; color: rgba(240,235,224,0.80);
+    background: rgba(255,75,31,0.07);
+    border-left: 2px solid rgba(255,75,31,0.50);
+    padding: 6px 10px; margin: 0 0 6px 0;
+    line-height: 1.45; letter-spacing: 0.04em;
+  }
+
+  /* Direction-override editor inside Initial values. */
+  .dir-editor { display: flex; flex-direction: column; gap: 2px; }
+  .dir-editor select {
+    background: rgba(12,10,7,0.7); color: #f0ebe0;
+    border: 1px solid rgba(240,235,224,0.18);
+    font: inherit; font-size: 10px; padding: 1px 4px;
+    text-transform: lowercase;
+  }
+  .dir-hint {
+    color: rgba(240,235,224,0.40); font-size: 9px; line-height: 1.3;
+    padding: 2px 6px 4px; font-style: italic;
+  }
+
+  /* Incoming sub-emit triggers: list of other emitters whose emit.* modules
+     target this one. Click to jump to the source emitter. */
+  .incoming-head {
+    margin-top: 6px;
+    color: rgba(240,235,224,0.40);
+    font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+    border-top: 1px dashed rgba(240,235,224,0.10);
+    padding: 6px 0 2px;
+  }
+  .incoming-row {
+    display: grid; grid-template-columns: auto 1fr auto; gap: 6px;
+    align-items: center;
+    padding: 3px 6px; cursor: pointer;
+    background: rgba(255,75,31,0.06);
+    border-left: 2px solid rgba(255,75,31,0.55);
+    font-size: 9px;
+  }
+  .incoming-row:hover { background: rgba(255,75,31,0.14); }
+  .incoming-row .inc-from { color: #ff4b1f; font-weight: 500; }
+  .incoming-row .inc-trigger { color: rgba(240,235,224,0.65); overflow: hidden; text-overflow: ellipsis; }
+  .incoming-row .inc-count { color: rgba(240,235,224,0.45); font-variant-numeric: tabular-nums; }
+
+  .static-color { padding: 4px 0; }
+  .color-swatch {
+    width: 100%; height: 22px;
+    border: 1px solid rgba(240,235,224,0.20);
+    background: #fff;
+    box-sizing: border-box;
+    cursor: pointer;
+    padding: 0; margin: 0;
+    position: relative;
+  }
+  .color-swatch::after {
+    content: ''; position: absolute; inset: 0;
+    background: repeating-linear-gradient(45deg,
+      transparent 0 4px, rgba(240,235,224,0.05) 4px 5px);
+    pointer-events: none;
+  }
+  /* ----- custom color picker popover ----- */
+  .color-pop {
+    position: fixed; z-index: 200;
+    background: rgba(12,10,7,0.97); color: #f0ebe0;
+    border: 1px solid #ff4b1f;
+    padding: 10px;
+    width: 220px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.7);
+    display: flex; flex-direction: column; gap: 8px;
+    user-select: none;
+  }
+  .color-pop .cp-sat {
+    width: 200px; height: 140px;
+    position: relative; cursor: crosshair;
+    background-image:
+      linear-gradient(to top, #000, transparent),
+      linear-gradient(to right, #fff, var(--hue-color, #f00));
+  }
+  .color-pop .cp-sat-thumb {
+    position: absolute; width: 12px; height: 12px;
+    border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+    border-radius: 50%; transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .color-pop .cp-hue {
+    width: 200px; height: 14px; position: relative; cursor: ew-resize;
+    background: linear-gradient(to right,
+      #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%);
+  }
+  .color-pop .cp-hue-thumb {
+    position: absolute; top: -2px; bottom: -2px; width: 4px;
+    background: #fff; box-shadow: 0 0 0 1px rgba(0,0,0,0.7);
+    transform: translateX(-50%); pointer-events: none;
+  }
+  .color-pop .cp-foot {
+    display: flex; gap: 6px; align-items: center;
+  }
+  .color-pop .cp-preview {
+    width: 28px; height: 22px;
+    border: 1px solid rgba(240,235,224,0.20);
+  }
+  .color-pop .cp-hex {
+    flex: 1 1 auto;
+    background: rgba(12,10,7,0.7); color: #f0ebe0;
+    border: 1px solid rgba(240,235,224,0.18);
+    font: inherit; font-size: 10px; padding: 3px 6px;
+    text-transform: lowercase;
+  }
+  .bursts { display: flex; flex-direction: column; gap: 6px; padding: 2px 0 4px; }
+  /* Each burst is a small card. Values stack one per row so the user can
+     see full numbers without truncation (1,000,000 fit comfortably). */
+  .burst-card {
+    border: 1px solid rgba(240,235,224,0.10);
+    padding: 6px 6px 4px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .burst-row {
+    display: grid;
+    grid-template-columns: 70px 1fr;
+    gap: 6px; align-items: center; font-size: 9px;
+  }
+  .burst-row > .burst-label {
+    color: rgba(240,235,224,0.55);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .burst-row input[type=number], .burst-row input[type=text] {
+    background: rgba(12,10,7,0.7); color: #f0ebe0;
+    border: 1px solid rgba(240,235,224,0.18);
+    font: inherit; font-size: 10px; padding: 2px 5px; min-width: 0;
+    box-sizing: border-box; width: 100%;
+  }
+  .burst-row input[type=checkbox] { accent-color: #ff4b1f; justify-self: start; }
+  .burst-actions { display: flex; justify-content: flex-end; padding-top: 2px; }
+
+  /* ----- audio block ----- */
+  .audio-block { padding: 4px 0; }
+  .audio-row {
+    display: flex; gap: 4px; align-items: center; margin-top: 6px;
+    flex-wrap: wrap;
+  }
+  .audio-track {
+    background: rgba(12,10,7,0.7); color: #f0ebe0;
+    border: 1px solid rgba(240,235,224,0.18);
+    font: inherit; font-size: 10px; padding: 2px 4px;
+    flex: 1 1 100%; min-width: 0; max-width: 100%;
+  }
+  .audio-status { color: #9ee37d; font-size: 9px; margin-left: 4px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<svg id="scene-overlay" xmlns="http://www.w3.org/2000/svg" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:1;overflow:visible"></svg>
+
+<div class="topbar" id="topbar">
+  <button data-preset="fountain"  class="on">Fountain</button>
+  <button data-preset="explosion">Explosion</button>
+  <button data-preset="snow">Snow</button>
+  <button data-preset="rain">Rain</button>
+  <button data-preset="smoke">Smoke</button>
+  <button data-preset="galaxy">Galaxy</button>
+  <button data-preset="beats">Beats</button>
+  <button data-preset="boids">Boids</button>
+  <button data-preset="fluid">Fluid</button>
+  <button data-preset="balls">Balls</button>
+  <button data-preset="stress">Stress 1M</button>
+  <button data-preset="empty">Empty</button>
+  <span class="gap"></span>
+  <button id="reset" title="Clear particles + restart simulation; keeps your parameter edits">Reset Sim</button>
+  <button id="reload" title="Rebuild emitter from preset defaults — discards your edits">Reload Preset</button>
+  <button id="pause">Pause</button>
+  <button id="dumpJson">Copy JSON</button>
+</div>
+
+<p class="label"><b>particle playground</b> · click to fire a 100-particle burst at the cursor · drag to orbit · scroll to zoom</p>
+<div class="stats" id="stats">
+  <div class="stat-backend" id="stat-backend">backend: ?</div>
+  <div><b id="stat-fps">0</b> fps</div>
+  <div>alive: <b id="stat-alive">0</b></div>
+  <div>sim: <b id="stat-sim">0.0</b> ms <span class="info">approx</span></div>
+  <div>render: <b id="stat-render">0.0</b> ms <span class="info">approx</span></div>
+  <div>gpuMem: <b id="stat-gpumem">0.0</b> MB</div>
+</div>
+
+<aside id="panel">
+  <nav id="tab-nav"></nav>
+  <main id="editor" class="editor"></main>
+  <footer id="status-bar"></footer>
+</aside>
+<!-- audio-panel removed: core/audio.js not vendored into the portfolio -->
+<aside id="picker"><input type="search" id="pickerSearch" placeholder="search modules…"><div id="pickerList"></div></aside>
+
+<script type="module">
+import {
+  createParticleSystem, Emitter,
+  PRESETS, buildPreset, modules, shapes, SHAPE_FACTORIES, MODULE_DEFS,
+  Curve, Gradient, gradientPicker, curvePicker,
+  isSourceBinding, evalBoundScalar, getSource,
+  mat4LookAt, mat4Perspective,
+} from '../js/particles/index.js';
+
+// AudioFeed is dropped from the portfolio vendoring — declare a stub so any
+// unreachable references (inside the audio dock builder, which we no-op below)
+// still parse without ReferenceError.
+const AudioFeed = null;
+
+// WebGPU-only playground. No-WebGPU visitors get a small notice + a back link.
+if (!('gpu' in navigator)) {
+  document.body.innerHTML = '<p style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font-size:13px;line-height:1.7;color:#ff4b1f;font-family:JetBrains Mono,monospace">'
+    + 'WebGPU required.<br><span style="color:rgba(240,235,224,0.6)">This playground exposes the full GPGPU pipeline — Chrome 113+, Edge 113+, or any Chromium with WebGPU enabled.</span><br><br>'
+    + '<a href="/" style="color:#ff4b1f;border:1px solid #ff4b1f;padding:6px 14px;text-decoration:none;letter-spacing:0.1em;text-transform:uppercase;font-size:10px">← back to portfolio</a></p>';
+  throw new Error('WebGPU unavailable');
+}
+
+const params = new URLSearchParams(location.search);
+const backend = params.get('backend') ?? 'webgpu';
+const initialPreset = params.get('preset') ?? 'fountain';
+
+const canvas = document.getElementById('c');
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width  = Math.floor(canvas.clientWidth  * dpr);
+  canvas.height = Math.floor(canvas.clientHeight * dpr);
+  // postfx setSize is handled inside ps.render() on each frame.
+}
+
+// ============================================================ camera
+let camAngle = 0.0, camAngleY = 0.25, camDist = 18;
+let dragging = false, lastX = 0, lastY = 0, dragMoved = 0;
+canvas.addEventListener('mousedown', e => { dragging = true; lastX = e.clientX; lastY = e.clientY; dragMoved = 0; });
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  dragMoved += Math.abs(e.movementX) + Math.abs(e.movementY);
+  camAngle  += (e.clientX - lastX) * 0.01;
+  camAngleY = Math.max(-1.5, Math.min(1.5, camAngleY + (e.clientY - lastY) * 0.005));
+  lastX = e.clientX; lastY = e.clientY;
+});
+window.addEventListener('mouseup', () => { dragging = false; });
+canvas.addEventListener('wheel', e => {
+  camDist = Math.max(2, Math.min(80, camDist * (1 + e.deltaY * 0.001)));
+  e.preventDefault();
+}, { passive: false });
+
+canvas.addEventListener('click', e => {
+  if (e.detail === 0) return;
+  if (dragMoved > 4) return;
+  // Plain click is now reserved for emitter pick (Phase D). The legacy
+  // 100-particle debug burst stays available behind Alt+click so the
+  // affordance isn't lost.
+  if (!e.altKey) return;
+  if (!ps.emitters.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const ndcX = ((e.clientX - rect.left) / rect.width)  * 2 - 1;
+  const ndcY = -(((e.clientY - rect.top)  / rect.height) * 2 - 1);
+  const e0 = pickWorldOnY(ndcX, ndcY);
+  if (e0) {
+    const em = ps.emitters[0];
+    const oldPos = em.config.position.slice();
+    em.config.position = [e0[0], e0[1], e0[2]];
+    em.burst(100);
+    em.config.position = oldPos;
+  }
+});
+
+function pickWorldOnY(ndcX, ndcY) {
+  const inv = mat4Inverse(mat4MultiplyOut(proj, view));
+  const a = transformVec4(inv, [ndcX, ndcY, -1, 1]);
+  const b = transformVec4(inv, [ndcX, ndcY, +1, 1]);
+  for (let k = 0; k < 4; k++) { a[k] /= a[3]; b[k] /= b[3]; }
+  const dy = b[1]-a[1];
+  if (Math.abs(dy) < 1e-6) return null;
+  const t = -a[1] / dy;
+  return [a[0] + (b[0]-a[0]) * t, 0, a[2] + (b[2]-a[2]) * t];
+}
+function mat4MultiplyOut(p, v) {
+  const r = new Float32Array(16);
+  for (let i = 0; i < 4; i++) {
+    const bi0 = v[i*4], bi1 = v[i*4+1], bi2 = v[i*4+2], bi3 = v[i*4+3];
+    r[i*4]     = p[0]*bi0 + p[4]*bi1 + p[8] *bi2 + p[12]*bi3;
+    r[i*4 + 1] = p[1]*bi0 + p[5]*bi1 + p[9] *bi2 + p[13]*bi3;
+    r[i*4 + 2] = p[2]*bi0 + p[6]*bi1 + p[10]*bi2 + p[14]*bi3;
+    r[i*4 + 3] = p[3]*bi0 + p[7]*bi1 + p[11]*bi2 + p[15]*bi3;
+  }
+  return r;
+}
+function transformVec4(m, v) {
+  return [
+    m[0]*v[0] + m[4]*v[1] + m[8] *v[2] + m[12]*v[3],
+    m[1]*v[0] + m[5]*v[1] + m[9] *v[2] + m[13]*v[3],
+    m[2]*v[0] + m[6]*v[1] + m[10]*v[2] + m[14]*v[3],
+    m[3]*v[0] + m[7]*v[1] + m[11]*v[2] + m[15]*v[3],
+  ];
+}
+function mat4Inverse(m) {
+  const a00=m[0],a01=m[1],a02=m[2],a03=m[3];
+  const a10=m[4],a11=m[5],a12=m[6],a13=m[7];
+  const a20=m[8],a21=m[9],a22=m[10],a23=m[11];
+  const a30=m[12],a31=m[13],a32=m[14],a33=m[15];
+  const b00=a00*a11-a01*a10, b01=a00*a12-a02*a10, b02=a00*a13-a03*a10;
+  const b03=a01*a12-a02*a11, b04=a01*a13-a03*a11, b05=a02*a13-a03*a12;
+  const b06=a20*a31-a21*a30, b07=a20*a32-a22*a30, b08=a20*a33-a23*a30;
+  const b09=a21*a32-a22*a31, b10=a21*a33-a23*a31, b11=a22*a33-a23*a32;
+  let det = b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;
+  if (!det) return new Float32Array(16);
+  det = 1/det;
+  const o = new Float32Array(16);
+  o[0]=( a11*b11 -a12*b10 +a13*b09)*det; o[1]=(-a01*b11 +a02*b10 -a03*b09)*det;
+  o[2]=( a31*b05 -a32*b04 +a33*b03)*det; o[3]=(-a21*b05 +a22*b04 -a23*b03)*det;
+  o[4]=(-a10*b11 +a12*b08 -a13*b07)*det; o[5]=( a00*b11 -a02*b08 +a03*b07)*det;
+  o[6]=(-a30*b05 +a32*b02 -a33*b01)*det; o[7]=( a20*b05 -a22*b02 +a23*b01)*det;
+  o[8]=( a10*b10 -a11*b08 +a13*b06)*det; o[9]=(-a00*b10 +a01*b08 -a03*b06)*det;
+  o[10]=( a30*b04 -a31*b02 +a33*b00)*det; o[11]=(-a20*b04 +a21*b02 -a23*b00)*det;
+  o[12]=(-a10*b09 +a11*b07 -a12*b06)*det; o[13]=( a00*b09 -a01*b07 +a02*b06)*det;
+  o[14]=(-a30*b03 +a31*b01 -a32*b00)*det; o[15]=( a20*b03 -a21*b01 +a22*b00)*det;
+  return o;
+}
+
+// ============================================================ system + grid + postfx
+// Stage-level state (declared before `ps` so the maxParticles default is
+// available for the initial createParticleSystem call below).
+const stage = {
+  showGrid: true,
+  showStats: true,
+  bgColor: [0.047, 0.039, 0.027, 1.0],   // #0c0a07 — warm dark brown
+  // Authoritative particle-pool size. Preset hints are ignored — the user
+  // sets this once in the General tab and every preset respects it.
+  maxParticles: 1000000,
+  enableBloom: true,
+  bloomThreshold: 0.85,
+  bloomIntensity: 0.7,
+  bloomSoftKnee: 0.7,
+  blurPasses: 3,
+  exposure: 1.0,
+  vignette: 0.30,
+};
+
+// Initial pool size comes from stage.maxParticles so the General-tab
+// control reflects reality from frame 1. loadPreset() respects this too.
+let ps = await createParticleSystem({ canvas, backend, maxParticles: stage.maxParticles, blend: 'additive', seed: 1 });
+// WebGL2 backend was decommissioned in Phase 7. PostFX runs inside
+// ps.render() on WebGPU. The reference grid was a WebGL2-only debug
+// helper.
+window.__pSystem = ps;
+
+resize();
+new ResizeObserver(resize).observe(canvas);
+
+// State for the persistent audio dock — declared up here (before the init
+// call below) so buildAudioDock's `_audioEl =` assignment doesn't hit a TDZ.
+let _audioEl = null;
+let _audioStatus = null;
+// Refs into the audio dock UI, populated by buildAudioDock(). Read every
+// frame by updateAudioDockLive() to drive playhead / EQ / drum lights.
+let _audioDock = null;
+
+// Build the persistent audio dock once. It lives above the tab content
+// so playback continues regardless of which tab is active.
+buildAudioDock();
+
+let activePresetName = 'fountain';
+async function loadPreset(name) {
+  const cfg = buildPreset(name);
+  // Preset's `maxParticles` field is IGNORED — stage.maxParticles (set in
+  // the General tab) is the only authority on pool size. The user said so.
+  if (stage.maxParticles !== ps.maxParticles) {
+    ps = await createParticleSystem({
+      canvas, backend, maxParticles: stage.maxParticles, blend: cfg.blend || 'additive', seed: 1,
+    });
+    window.__pSystem = ps;
+  }
+  ps.reset();
+  ps.emitters.length = 0;
+  ps.blend = cfg.blend || 'additive';
+  if (cfg.interaction) {
+    // Deep-merge user-supplied fields onto defaults so presets can omit
+    // any sub-object and inherit the spec's defaults.
+    const def = ps.interaction;
+    ps.interaction = {
+      mode:            cfg.interaction.mode            ?? def.mode,
+      cellSize:        cfg.interaction.cellSize        ?? def.cellSize,
+      worldHalfExtent: cfg.interaction.worldHalfExtent ?? def.worldHalfExtent,
+      boids: { ...def.boids, ...(cfg.interaction.boids || {}) },
+      sph:   { ...def.sph,   ...(cfg.interaction.sph   || {}) },
+    };
+  } else {
+    // Preset omits interaction → reset to defaults so a previous preset's
+    // mode='boids' doesn't leak into a vanilla preset.
+    ps.interaction = {
+      mode: 'none',
+      cellSize: 1.0, worldHalfExtent: 25.0,
+      boids: { sepRadius: 0.5, sepWeight: 1.5, alignWeight: 1.0, cohWeight: 0.8, maxAccel: 20, maxSpeed: 8 },
+      sph:   { smoothingRadius: 1.0, restDensity: 1000, stiffness: 400, viscosity: 50, mass: 1.0 },
+    };
+  }
+  for (const eCfg of cfg.emitters) await ps.addEmitter(new Emitter(eCfg));
+  camDist = cfg.cameraDist || 18;
+  // Optional initial camera angles per preset — the beats debug preset
+  // wants a 3/4 top-down view to make all four rows readable at once.
+  // User can still drag to override after the preset loads.
+  if (cfg.cameraAngle  != null) camAngle  = cfg.cameraAngle;
+  if (cfg.cameraAngleY != null) camAngleY = cfg.cameraAngleY;
+  activePresetName = cfg.name || name;
+  document.querySelectorAll('.topbar button[data-preset]').forEach(b =>
+    b.classList.toggle('on', b.dataset.preset === activePresetName));
+  buildPanel();
+}
+
+document.querySelectorAll('.topbar button[data-preset]').forEach(b => {
+  b.addEventListener('click', () => loadPreset(b.dataset.preset));
+});
+document.getElementById('reset').addEventListener('click', () => {
+  // Clear alive particles + reset emitter timers, but PRESERVE the current
+  // emitter configs (including any param edits made through the inspector).
+  ps.reset();
+});
+document.getElementById('reload').addEventListener('click', () => loadPreset(activePresetName));
+
+// Backend toggle was removed in Phase 7 — WebGPU is the only backend.
+let paused = false;
+const pauseBtn = document.getElementById('pause');
+pauseBtn.addEventListener('click', () => {
+  paused = !paused;
+  pauseBtn.textContent = paused ? 'Play' : 'Pause';
+  pauseBtn.classList.toggle('on', paused);
+});
+document.getElementById('dumpJson').addEventListener('click', async () => {
+  const out = { preset: activePresetName, blend: ps.blend, stage, interaction: JSON.parse(JSON.stringify(ps.interaction)), emitters: ps.emitters.map(serialiseEmitter) };
+  const txt = JSON.stringify(out, null, 2);
+  try { await navigator.clipboard.writeText(txt); } catch (_) {}
+  console.log(txt);
+});
+
+function serialiseEmitter(e) {
+  return {
+    position: e.config.position,
+    rate: e.config.rate,
+    bursts: e.config.bursts,
+    shape: e.config.shape.type || '?',
+    initial: e.config.initial,
+    modules: (e.config.modules || []).map(serialiseModule),
+  };
+}
+function serialiseModule(m) {
+  if (!m.moduleName) return { kind: 'fn' };
+  const out = { name: m.moduleName, params: {} };
+  for (const k of Object.keys(m.params)) {
+    const v = m.params[k];
+    if (v && typeof v === 'object' && v.keys) out.params[k] = { keys: v.keys };  // Curve/Gradient
+    else out.params[k] = v;
+  }
+  return out;
+}
+
+// ============================================================ inspector / module editor
+const panel = document.getElementById('panel');
+const picker = document.getElementById('picker');
+const pickerSearch = document.getElementById('pickerSearch');
+const pickerList = document.getElementById('pickerList');
+
+function el(tag, props = {}, children = []) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v == null) continue;
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k === 'style' && typeof v === 'object') {
+      for (const sk of Object.keys(v)) e.style.setProperty(sk, v[sk]);
+    }
+    else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children) {
+    if (c == null) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+
+// Panel state — which tab is active, expand state for module cards.
+// `active` is the single anchor used for module-card keys / rename / scroll.
+// `selectedIdx` is the multi-selection set, holding *Emitter object refs* so
+// it survives array reorders/splices (object identity, not array index).
+const panelState = {
+  active: { type: 'em', idx: 0 },     // 'general' | 'fx' | 'em'
+  selectedIdx: new Set(),             // Set<Emitter>
+  modOpen: {},                        // emitterIdx + '/' + moduleIdx -> bool
+};
+
+function getSelectedEmitters() {
+  return ps.emitters.filter(em => panelState.selectedIdx.has(em));
+}
+
+// Drop refs to deleted emitters; if active is em and selection is empty,
+// seed selection with the active emitter so single-click flow works.
+function syncSelectionToActive() {
+  if (panelState.active.type !== 'em') {
+    panelState.selectedIdx.clear();
+    return;
+  }
+  for (const em of [...panelState.selectedIdx]) {
+    if (!ps.emitters.includes(em)) panelState.selectedIdx.delete(em);
+  }
+  const anchor = ps.emitters[panelState.active.idx];
+  if (panelState.selectedIdx.size === 0 && anchor) panelState.selectedIdx.add(anchor);
+}
+
+function buildPanel() {
+  // Defensive: clamp emitter index if emitters changed
+  if (panelState.active.type === 'em') {
+    if (ps.emitters.length === 0) panelState.active = { type: 'general' };
+    else if (panelState.active.idx >= ps.emitters.length) panelState.active.idx = ps.emitters.length - 1;
+  }
+  syncSelectionToActive();
+  renderTabs();
+  renderEditor();
+  renderStatusBar();
+}
+
+function renderTabs() {
+  const nav = document.getElementById('tab-nav');
+  nav.innerHTML = '';
+
+  // Scene group (general + post-fx — these aren't part of any emitter).
+  // The audio tab was removed: it only displayed live source readouts and
+  // wasn't used in practice; the audio dock above the panel provides what
+  // we still need.
+  const sceneRow = el('div', { class: 'tab-group-row' });
+  sceneRow.appendChild(el('div', { class: 'tab-group-label' }, ['scene']));
+  const sceneStrip = el('div', { class: 'tab-strip' });
+  sceneStrip.appendChild(makeTab('general', { type: 'general' }));
+  sceneStrip.appendChild(makeTab('post-fx', { type: 'fx' }));
+  sceneRow.appendChild(sceneStrip);
+  nav.appendChild(sceneRow);
+
+  // Emitter group
+  const emRow = el('div', { class: 'tab-group-row last' });
+  emRow.appendChild(el('div', { class: 'tab-group-label' }, ['emitters']));
+  const emStrip = el('div', { class: 'tab-strip wrap' });
+  ps.emitters.forEach((em, i) => {
+    const c = em.config.initial?.color || [1, 0.5, 0.1, 1];
+    emStrip.appendChild(makeTab(em.config.name || ('em_' + i), { type: 'em', idx: i }, {
+      em: true, color: rgbCss(c), badge: countAlive(i),
+      disabled: !!em.config.disabled,
+    }));
+  });
+  emStrip.appendChild(el('button', { class: 'tab tab-add', onclick: addNewEmitter }, ['+ NEW']));
+  emRow.appendChild(emStrip);
+  nav.appendChild(emRow);
+}
+function makeTab(label, target, opts = {}) {
+  const isActive = sameTab(target, panelState.active);
+  let isSelected = isActive;
+  if (target.type === 'em') {
+    const em = ps.emitters[target.idx];
+    isSelected = !!(em && panelState.selectedIdx.has(em));
+  }
+  const cls = ['tab'];
+  if (opts.em) cls.push('tab-em');
+  if (isSelected) cls.push('selected');
+  if (isActive && target.type === 'em' && panelState.selectedIdx.size > 1) cls.push('anchor');
+  if (opts.disabled) cls.push('disabled');
+  const props = { class: cls.join(' '), onclick: (ev) => {
+    if (target.type === 'em') {
+      const em = ps.emitters[target.idx];
+      if (!em) return;
+      if (ev.shiftKey && panelState.active.type === 'em') {
+        const lo = Math.min(panelState.active.idx, target.idx);
+        const hi = Math.max(panelState.active.idx, target.idx);
+        panelState.selectedIdx.clear();
+        for (let i = lo; i <= hi; i++) panelState.selectedIdx.add(ps.emitters[i]);
+        panelState.active = target;
+      } else if (ev.ctrlKey || ev.metaKey) {
+        if (panelState.selectedIdx.has(em)) {
+          panelState.selectedIdx.delete(em);
+          if (panelState.active.type === 'em' && panelState.active.idx === target.idx) {
+            const nextIdx = ps.emitters.findIndex(x => panelState.selectedIdx.has(x));
+            if (nextIdx >= 0) panelState.active = { type: 'em', idx: nextIdx };
+          }
+        } else {
+          panelState.selectedIdx.add(em);
+          panelState.active = target;
+        }
+      } else {
+        panelState.selectedIdx.clear();
+        panelState.selectedIdx.add(em);
+        panelState.active = target;
+      }
+    } else {
+      panelState.selectedIdx.clear();
+      panelState.active = target;
+    }
+    buildPanel();
+  } };
+  if (opts.color) props.style = { '--c': opts.color };
+  if (target.type === 'em') props['data-em-idx'] = String(target.idx);
+  const kids = [label];
+  if (opts.badge != null) kids.push(el('span', { class: 'tab-badge' }, [String(opts.badge)]));
+  return el('button', props, kids);
+}
+
+// Periodic live-count refresh — updates emitter tab badges, the active
+// emitter header's "X ALIVE" line, and the status bar in place. Runs every
+// 200 ms so counts stay current without needing UI interaction.
+function refreshLiveCounts() {
+  if (!ps || !ps.emitterId) return;
+  // tab badges (cheap: just text content)
+  const tabs = document.querySelectorAll('.tab.tab-em[data-em-idx]');
+  for (const t of tabs) {
+    const idx = parseInt(t.getAttribute('data-em-idx'), 10);
+    const badge = t.querySelector('.tab-badge');
+    if (badge && Number.isFinite(idx)) badge.textContent = String(countAlive(idx));
+  }
+  // emitter header alive count (if an emitter tab is currently active)
+  if (panelState.active && panelState.active.type === 'em') {
+    const stats = document.querySelector('#editor .em-stats');
+    if (stats) stats.innerHTML = `<b>${countAlive(panelState.active.idx)}</b> ALIVE`;
+  }
+  // status bar global alive
+  renderStatusBar();
+}
+setInterval(refreshLiveCounts, 200);
+function sameTab(a, b) {
+  if (a.type !== b.type) return false;
+  if (a.type === 'em') return a.idx === b.idx;
+  return true;
+}
+function rgbCss(c) {
+  return `rgb(${(Math.min(1,c[0])*255)|0},${(Math.min(1,c[1])*255)|0},${(Math.min(1,c[2])*255)|0})`;
+}
+function countAlive(emitterIdx) {
+  if (!ps) return 0;
+  // WebGPU: O(1) lookup into the GPU-synced CPU mirror (compaction Pass C
+  // atomicAdds per-emitter; readback every 60 frames). Up to 1s stale,
+  // accurate across all emitters.
+  if (ps.backend === 'webgpu') {
+    return ps.aliveByEmitter ? ps.aliveByEmitter(emitterIdx) : 0;
+  }
+  // WebGL2: walk the SoA arrays directly.
+  if (!ps.emitterId) return 0;
+  let n = 0;
+  for (let i = 0; i < ps.alive; i++) if (ps.emitterId[i] === emitterIdx) n++;
+  return n;
+}
+
+function renderEditor() {
+  const editor = document.getElementById('editor');
+  editor.innerHTML = '';
+  if (panelState.active.type === 'general') return renderGeneralTab(editor);
+  if (panelState.active.type === 'fx')      return renderFXTab(editor);
+  if (panelState.active.type === 'em') {
+    const sel = getSelectedEmitters();
+    if (sel.length > 1) return renderEmittersTab(editor, sel);
+    return renderEmitterTab(editor, ps.emitters[panelState.active.idx]);
+  }
+}
+
+function renderStatusBar() {
+  const bar = document.getElementById('status-bar');
+  if (!bar) return;
+  // Same fps source as the stats overlay: prefer realFps (actual GPU-
+  // presented rate) when the backend reports it; fall back to rAF rate.
+  // Without this, the panel and the overlay disagree under GPU saturation
+  // (rAF=70+ but realFps=6).
+  const realFps = ps.getStats?.()?.realFps;
+  const fps = (typeof realFps === 'number' && realFps > 0) ? realFps : currentFps();
+  bar.innerHTML =
+    `<span><b>${fps.toFixed(0)}</b> FPS · <b>${ps.alive}</b> ALIVE</span>` +
+    `<span>${ps.audioFeed ? '<b>♪ '+ps.audioFeed.bpm.toFixed(0)+' BPM</b>' : 'no audio'}</span>`;
+}
+
+async function addNewEmitter() {
+  const palette = [[1,0.55,0.1,1],[1,0.85,0.4,1],[0.4,0.78,1,1],[0.65,0.4,1,1],[0.4,1,0.6,1]];
+  const i = ps.emitters.length;
+  const em = new Emitter({
+    name: 'em_' + (i + 1),
+    shape: shapes.point(),
+    rate: 100,
+    initial: {
+      lifetime: 1.0, speed: 0, size: 0.3,
+      color: palette[i % palette.length].slice(),
+    },
+    modules: [],
+  });
+  await ps.addEmitter(em);
+  panelState.active = { type: 'em', idx: i };
+  buildPanel();
+}
+
+// Collapsible section. State persists per title in localStorage so navigation
+// or panel rebuilds (e.g. after preset switch) preserve open/closed state.
+function getCollapsed(id) { return localStorage.getItem('particles.collapse.' + id) === '1'; }
+function setCollapsedSt(id, v) {
+  if (v) localStorage.setItem('particles.collapse.' + id, '1');
+  else localStorage.removeItem('particles.collapse.' + id);
+}
+function section(title, contents) {
+  const id = title.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+  const collapsed = getCollapsed(id);
+  const head = el('h3', {
+    class: 'collapsible' + (collapsed ? ' collapsed' : ''),
+    html: '<span class="caret">▾</span> ' + title,
+  });
+  const body = el('div', { class: 'section-body' });
+  if (collapsed) body.style.display = 'none';
+  for (const c of contents) if (c) body.appendChild(c);
+  head.addEventListener('click', () => {
+    const willCollapse = !head.classList.contains('collapsed');
+    head.classList.toggle('collapsed', willCollapse);
+    body.style.display = willCollapse ? 'none' : '';
+    setCollapsedSt(id, willCollapse);
+  });
+  const wrap = el('div', { class: 'section' });
+  wrap.appendChild(head);
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function renderGeneralTab(host) {
+  host.appendChild(section('General', [
+    rowToggle('Show stats overlay', stage, 'showStats'),
+    staticColorRow('Background', stage, 'bgColor'),
+    rowMaxParticles(),
+  ]));
+
+  // Interaction — particle-particle physics. mode='none' by default; the
+  // grid and solver passes only run when the user switches modes (or a
+  // preset sets it).
+  const intRows = [
+    rowEnum('Mode', ps.interaction, 'mode', ['none', 'boids', 'sph'], () => buildPanel()),
+    rowSlider('cell size',         ps.interaction, 'cellSize',         0.1, 5,    0.05),
+    rowSlider('world half-extent', ps.interaction, 'worldHalfExtent',  5,   100,  0.5),
+  ];
+  if (ps.interaction.mode === 'boids') {
+    const b = ps.interaction.boids;
+    intRows.push(el('div', { class: 'sub-divider', html: 'boids params' }));
+    intRows.push(rowSlider('separation radius', b, 'sepRadius',   0,  3,   0.01));
+    intRows.push(rowSlider('separation weight', b, 'sepWeight',   0,  5,   0.05));
+    intRows.push(rowSlider('alignment weight',  b, 'alignWeight', 0,  5,   0.05));
+    intRows.push(rowSlider('cohesion weight',   b, 'cohWeight',   0,  5,   0.05));
+    intRows.push(rowSlider('max accel',         b, 'maxAccel',    0,  100, 0.5));
+    intRows.push(rowSlider('max speed',         b, 'maxSpeed',    0,  50,  0.1));
+  }
+  if (ps.interaction.mode === 'sph') {
+    const s = ps.interaction.sph;
+    intRows.push(el('div', { class: 'sub-divider', html: 'sph params' }));
+    intRows.push(rowSlider('smoothing radius (h)', s, 'smoothingRadius', 0.1, 5,    0.05));
+    intRows.push(rowSlider('rest density',         s, 'restDensity',     1,   5000, 1));
+    intRows.push(rowSlider('stiffness',            s, 'stiffness',       0,   5000, 1));
+    intRows.push(rowSlider('viscosity',            s, 'viscosity',       0,   500,  0.5));
+    intRows.push(rowSlider('mass',                 s, 'mass',            0.01, 10,  0.01));
+  }
+  host.appendChild(section('Interaction', intRows));
+}
+
+// Custom row for stage.maxParticles: number input that calls
+// ps.setMaxParticles(n) on change. setMaxParticles is destructive (clears
+// alive particles + reallocates GPU buffers) so we don't fire it for every
+// keystroke — only on `change` (blur or Enter) and we guard against
+// re-entry while a previous resize is still in flight.
+function rowMaxParticles() {
+  const inp = el('input', {
+    type: 'number', step: 1000, min: 1000,
+    value: stage.maxParticles, class: 'v v-input',
+  });
+  let pending = false;
+  inp.addEventListener('change', async () => {
+    let v = parseInt(inp.value, 10);
+    if (!isFinite(v) || v < 1000) v = 1000;
+    inp.value = v;
+    if (v === ps.maxParticles || pending) return;
+    pending = true;
+    stage.maxParticles = v;
+    try {
+      await ps.setMaxParticles(v);
+      ps.reset();
+    } catch (e) {
+      console.error('setMaxParticles:', e);
+    } finally {
+      pending = false;
+    }
+  });
+  return el('div', { class: 'row' }, [
+    el('label', { html: 'max particles', title: 'pool size — destructive on change' }),
+    inp,
+    el('span', { class: 'v', html: 'destr.', title: 'changing this clears alive particles' }),
+  ]);
+}
+
+function renderFXTab(host) {
+  host.appendChild(section('Bloom', [
+    rowToggle('Bloom',         stage, 'enableBloom'),
+    rowSlider('Threshold',     stage, 'bloomThreshold', 0,  3,    0.01),
+    rowSlider('Intensity',     stage, 'bloomIntensity', 0,  3,    0.01),
+    rowSlider('Soft knee',     stage, 'bloomSoftKnee',  0,  1,    0.01),
+    rowSlider('Blur passes',   stage, 'blurPasses',     1,  8,    1),
+  ]));
+  host.appendChild(section('Tonemap', [
+    rowSlider('Exposure',      stage, 'exposure',       0.1, 3,   0.01),
+    rowSlider('Vignette',      stage, 'vignette',       0,  1,    0.01),
+  ]));
+}
+
+// existing stageBlock kept for back-compat callers; now unused.
+function stageBlock() { return el('div'); }
+
+// ----- Persistent audio dock — built ONCE at startup. Lives outside the
+// tabbed area so playback survives tab switches and the player is always
+// reachable without leaving the current section. (_audioEl / _audioStatus
+// are hoisted higher up in the module to avoid TDZ on early init calls.)
+function buildAudioDock() {
+  const dock = document.getElementById('audio-panel');
+  if (!dock || dock.dataset.built) return;
+  dock.dataset.built = '1';
+
+  // Headless <audio> — provides standard playback APIs (play/pause/seek)
+  // without rendering the browser's native UI; we render our own below.
+  _audioEl = document.createElement('audio');
+  _audioEl.preload = 'metadata';
+  dock.appendChild(_audioEl);
+
+  // ── Header: play/pause + track title + volume control ───────────────
+  const playBtn  = el('button', { class: 'audio-play', title: 'play / pause', html: '▶' });
+  const titleEl  = el('div', { class: 'audio-title', html: 'load a track to start' });
+  const volIcon  = el('span', { class: 'audio-vol-icon', title: 'click to mute', html: '🔊' });
+  const volSlide = el('input', {
+    class: 'audio-vol-slider', type: 'range',
+    min: '0', max: '1', step: '0.01', value: '1',
+    title: 'volume',
+  });
+  const volWrap  = el('div', { class: 'audio-vol' }, [volIcon, volSlide]);
+  dock.appendChild(el('div', { class: 'audio-head' }, [playBtn, titleEl, volWrap]));
+
+  // ── Stat row: BPM | KEY | LUFS ─ values updated on load ──────────────
+  function statCard(label, extraClass = '') {
+    const value = el('div', { class: 'audio-stat-value', html: '—' });
+    const unit  = el('div', { class: 'audio-stat-unit',  html: label });
+    const root  = el('div', { class: 'audio-stat' + (extraClass ? ' ' + extraClass : '') }, [value, unit]);
+    return { root, value, unit };
+  }
+  const statBpm  = statCard('BPM', 'bpm');   // .bpm — pulses on each beat
+  const statKey  = statCard('KEY');
+  const statLufs = statCard('LUFS');
+  dock.appendChild(el('div', { class: 'audio-stats' }, [statBpm.root, statKey.root, statLufs.root]));
+
+  // ── Progress scrubber + time row ─────────────────────────────────────
+  const progressFill = el('div', { class: 'audio-progress-fill' });
+  const progressTrack = el('div', { class: 'audio-progress-track' }, [progressFill]);
+  const progressOuter = el('div', { class: 'audio-progress' }, [progressTrack]);
+  progressOuter.addEventListener('click', (e) => {
+    if (!_audioEl.duration || !isFinite(_audioEl.duration)) return;
+    const rect = progressTrack.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    _audioEl.currentTime = pct * _audioEl.duration;
+  });
+  const timeCurr = el('span', { class: 'audio-time-curr', html: '0:00' });
+  const timeEnd  = el('span', { class: 'audio-time-end',  html: '0:00' });
+  dock.appendChild(progressOuter);
+  dock.appendChild(el('div', { class: 'audio-time-row' }, [timeCurr, timeEnd]));
+
+  // ── Live row: 7-band EQ + kick / snare / hat onset lights ───────────
+  const eqContainer = el('div', { class: 'audio-eq' });
+  const eqBars = [];
+  for (let i = 0; i < 7; i++) {
+    const bar = el('div', { class: 'audio-eq-bar' });
+    eqBars.push(bar);
+    eqContainer.appendChild(bar);
+  }
+  const drumKick  = el('span', { class: 'audio-drum',  title: 'kick',  html: 'K' });
+  const drumSnare = el('span', { class: 'audio-drum',  title: 'snare', html: 'S' });
+  const drumHat   = el('span', { class: 'audio-drum',  title: 'hat',   html: 'H' });
+  const drumRow   = el('div', { class: 'audio-drum-lights' }, [drumKick, drumSnare, drumHat]);
+  dock.appendChild(el('div', { class: 'audio-eq-row' }, [eqContainer, drumRow]));
+
+  // ── Foot row: track picker + load / unload ───────────────────────────
+  const select = el('select', { class: 'audio-track' });
+  select.appendChild(el('option', { value: '', html: '— choose track —' }));
+  // Track manifest lives at /output/index.json (this project's analysis
+  // output) when the demo is served from AudioReactiveProject root, or
+  // /index.json (legacy: served from visualiser's tracks/ folder).
+  // First successful fetch wins; trackBase is set to the matching prefix
+  // so the load button uses the same folder.
+  let trackBase = '/output/';
+  const _resolveManifest = async () => {
+    for (const base of ['/output/', '/']) {
+      try {
+        const r = await fetch(base + 'index.json');
+        if (r.ok) { trackBase = base; return await r.json(); }
+      } catch (_) {}
+    }
+    return { tracks: [] };
+  };
+  _resolveManifest().then(data => {
+    for (const t of (data.tracks || [])) {
+      if (t.schema_version !== 2) continue;
+      const opt = el('option', { value: t.path, html: `${t.title || t.id} (${t.bpm ? t.bpm.toFixed(0) + ' BPM' : '?'})` });
+      select.appendChild(opt);
+    }
+  }).catch(() => {});
+  const loadBtn   = el('button', { class: 'grad-btn', html: 'load' });
+  const unloadBtn = el('button', { class: 'grad-btn', html: 'unload' });
+  _audioStatus    = el('span', { class: 'audio-status' });   // kept for back-compat; hidden via CSS
+  dock.appendChild(el('div', { class: 'audio-foot' }, [select, loadBtn, unloadBtn]));
+
+  // ── Wire interactions ────────────────────────────────────────────────
+  playBtn.addEventListener('click', () => {
+    if (_audioEl.paused) _audioEl.play().catch(() => {});
+    else                  _audioEl.pause();
+  });
+  _audioEl.addEventListener('play',  () => { playBtn.textContent = '❚❚'; });
+  _audioEl.addEventListener('pause', () => { playBtn.textContent = '▶'; });
+  _audioEl.addEventListener('ended', () => { playBtn.textContent = '▶'; });
+
+  // Volume slider — direct binding. Mute toggle on the icon click.
+  volSlide.addEventListener('input', (e) => {
+    _audioEl.volume = parseFloat(e.target.value) || 0;
+    if (_audioEl.muted && _audioEl.volume > 0) _audioEl.muted = false;
+    volIcon.textContent = _audioEl.volume === 0 ? '🔇' : (_audioEl.volume < 0.5 ? '🔉' : '🔊');
+  });
+  volIcon.addEventListener('click', () => {
+    _audioEl.muted = !_audioEl.muted;
+    volIcon.textContent = _audioEl.muted ? '🔇' : (_audioEl.volume < 0.5 ? '🔉' : '🔊');
+  });
+
+  // Helper: revoke any prior Blob URL so we don't leak. Returns the URL
+  // string we previously set as src (or '' if none was a blob).
+  const revokeBlobSrc = () => {
+    if (_audioEl.src && _audioEl.src.startsWith('blob:')) {
+      URL.revokeObjectURL(_audioEl.src);
+    }
+  };
+
+  loadBtn.addEventListener('click', async () => {
+    const path = select.value;
+    if (!path) return;
+    titleEl.textContent = 'loading…';
+    try {
+      const url = trackBase + path + '/';
+      const feed = await AudioFeed.load(url);
+      // Fetch the source as a Blob and bind via Object URL. Python's stdlib
+      // http.server doesn't send Accept-Ranges, which leaves the streamed
+      // <audio>'s seekable range stuck at [0..0] — clicking the scrubber
+      // would snap currentTime back to 0. A Blob URL is fully in-memory and
+      // fully seekable.
+      const audioResp = await fetch(url + feed.meta.track.filename);
+      if (!audioResp.ok) throw new Error('fetch source: ' + audioResp.status);
+      const audioBlob = await audioResp.blob();
+      revokeBlobSrc();
+      _audioEl.src = URL.createObjectURL(audioBlob);
+      feed.bindAudio(_audioEl);
+      ps.setAudioFeed(feed);
+      const t = feed.meta.track || {};
+      const g = feed.meta.globals || {};
+      titleEl.textContent = t.artist ? `${t.title} — ${t.artist}` : (t.title || path);
+      titleEl.title = titleEl.textContent;   // tooltip in case of ellipsis
+      statBpm.value.textContent  = (g.bpm ?? feed.bpm).toFixed(1);
+      statKey.value.textContent  = g.key  || '—';
+      statKey.unit.textContent   = g.mode ? g.mode.toUpperCase() : 'KEY';
+      statLufs.value.textContent = g.loudness_lufs != null ? g.loudness_lufs.toFixed(1) : '—';
+      timeEnd.textContent = formatTime(feed.duration);
+      dock.classList.add('has-track');
+    } catch (e) {
+      titleEl.textContent = 'error: ' + e.message;
+      dock.classList.remove('has-track');
+    }
+  });
+  unloadBtn.addEventListener('click', () => {
+    _audioEl.pause();
+    revokeBlobSrc();
+    _audioEl.removeAttribute('src');
+    _audioEl.load();
+    ps.setAudioFeed(null);
+    titleEl.textContent = 'load a track to start';
+    statBpm.value.textContent = '—';
+    statKey.value.textContent = '—'; statKey.unit.textContent = 'KEY';
+    statLufs.value.textContent = '—';
+    timeCurr.textContent = '0:00'; timeEnd.textContent = '0:00';
+    progressFill.style.width = '0%';
+    dock.classList.remove('has-track');
+  });
+
+  // Refs for the live tick (called from frame()). Envelope state for
+  // each gated visual (kick / snare / hat / beat) is held here so the
+  // follower has access to the previous frame's value. Fast attack +
+  // slow release = stable, eye-readable pulses without visual jitter.
+  _audioDock = {
+    playBtn, titleEl, progressFill, timeCurr, eqBars,
+    drumKick, drumSnare, drumHat, bpmCard: statBpm.root,
+    envKick: 0, envSnare: 0, envHat: 0, envBeat: 0,
+    // Track-wide running peak per drum stem — used to normalise the
+    // drum_band envelope into [0,1]. Initial values seeded by first hits.
+    peakKick: 0, peakSnare: 0, peakHat: 0,
+  };
+}
+
+// "1:35" / "12:04" formatting for playhead times.
+function formatTime(sec) {
+  if (!isFinite(sec) || sec < 0) sec = 0;
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60).toString().padStart(2, '0');
+  return `${m}:${s}`;
+}
+
+// Per-frame tick from frame(). Reads live audio samples and pushes them
+// into the dock DOM. Cheap: a feed.update + ~11 sample() calls + a few
+// style writes per frame.
+//
+// Two real signal-processing details here:
+//
+//  (1) feed.update() syncs feed.currentFrame from the audio element's
+//      currentTime. Without this, feed.currentFrame only advances on the
+//      <audio> 'timeupdate' event, which Chrome fires at 4–15 Hz. At a
+//      150 ms onset-flash decay, that's slow enough to miss most peaks
+//      entirely — the dock would visibly stutter even though the data is
+//      perfectly clean. We sync at 60 Hz instead.
+//
+//  (2) Onset / beat flashes are sub-frame impulses. The raw signal is
+//      visually jittery: a kick at frame 1480 spikes to 1.0, decays to
+//      ~0.15 by frame 1490, then nothing for 30+ frames until the next
+//      kick. Driving a CSS opacity off that produces hard blink-blink
+//      visuals. An envelope follower with FAST attack (max(raw, prev))
+//      and SLOW release (prev * 0.93 per frame ≈ 230 ms tau) holds the
+//      pulse long enough to read while still tracking the rising edge.
+function updateAudioDockLive() {
+  if (!_audioDock) return;
+  const feed = ps.audioFeed;
+  if (!feed || !_audioEl || !_audioEl.src) return;
+  const t   = _audioEl.currentTime;
+  const dur = _audioEl.duration || feed.duration || 1;
+  // (1) Force feed.currentFrame to track audio playhead at render rate.
+  feed.update(t);
+
+  // Playhead + scrubber fill.
+  _audioDock.progressFill.style.width = (Math.min(1, t / dur) * 100).toFixed(2) + '%';
+  _audioDock.timeCurr.textContent = formatTime(t);
+
+  // 7-band EQ heights — bands.* are raw STFT magnitudes (bass ~25, presence
+  // ~1), so log-compress for visually balanced bars across the spectrum.
+  const bands = ['bands.sub', 'bands.bass', 'bands.low_mid', 'bands.mid',
+                 'bands.high_mid', 'bands.presence', 'bands.brilliance'];
+  for (let i = 0; i < 7; i++) {
+    const v = feed.sample(bands[i]) || 0;
+    const h = Math.min(1, Math.log10(1 + v) / 1.5);
+    _audioDock.eqBars[i].style.height = (Math.max(2, h * 100)).toFixed(1) + '%';
+  }
+
+  // (2) Drum lights drive off the precomputed `drum_band.<name>`
+  // envelopes — the continuous signal you see in the dashboard's "drum
+  // components" panel. Much steadier than `onsets.*.flash`, which is a
+  // sparse impulse-decay train that the eye reads as on/off blink.
+  // We still rectify and run an envelope follower on top: drum_band can
+  // jitter by a few percent within a single drum hit, and the follower
+  // smooths that out without sacrificing rising-edge precision.
+  // Track-wide peaks vary (snare loud in choruses, hat quiet in verses),
+  // so scale each by an auto-tracking peak so the light reads "lit at the
+  // CURRENT loudness ceiling" not "lit at a hardcoded threshold".
+  const REL = 0.93;             // ≈ 230 ms visual release tau
+  const PK_REL = 0.9985;        // ≈ 11 s peak-tracker tau — slow enough
+                                //   to be section-stable, fast enough to
+                                //   adapt across tracks / live energy
+  const env = (prev, raw) => Math.max(raw, prev * REL);
+  const trackPeak = (prev, raw) => Math.max(raw, prev * PK_REL);
+  const norm = (v, peak) => peak > 1e-3 ? Math.min(1, v / peak) : 0;
+
+  const kickRaw  = feed.sample('drum_band.kick')  || 0;
+  const snareRaw = feed.sample('drum_band.snare') || 0;
+  const hatRaw   = feed.sample('drum_band.hat')   || 0;
+  _audioDock.peakKick  = trackPeak(_audioDock.peakKick,  kickRaw);
+  _audioDock.peakSnare = trackPeak(_audioDock.peakSnare, snareRaw);
+  _audioDock.peakHat   = trackPeak(_audioDock.peakHat,   hatRaw);
+
+  _audioDock.envKick  = env(_audioDock.envKick,  norm(kickRaw,  _audioDock.peakKick));
+  _audioDock.envSnare = env(_audioDock.envSnare, norm(snareRaw, _audioDock.peakSnare));
+  _audioDock.envHat   = env(_audioDock.envHat,   norm(hatRaw,   _audioDock.peakHat));
+  _audioDock.envBeat  = env(_audioDock.envBeat,  feed.sample('beat.flash') || 0);
+
+  _audioDock.drumKick.style.setProperty('--lit',  _audioDock.envKick.toFixed(3));
+  _audioDock.drumSnare.style.setProperty('--lit', _audioDock.envSnare.toFixed(3));
+  _audioDock.drumHat.style.setProperty('--lit',   _audioDock.envHat.toFixed(3));
+  _audioDock.bpmCard.style.setProperty('--beat',  _audioDock.envBeat.toFixed(3));
+}
+
+function renderEmitterTab(host, emitter) {
+  if (!emitter) return;
+  // Header
+  host.appendChild(emitterHeader(emitter));
+
+  const c = emitter.config;
+
+  // ─── 01 / SPAWN ─── (sampled once when a particle is born)
+  // Split into 5 sections, each one focused on a single concern, instead
+  // of three overloaded buckets that mix "where", "when", "how fast" and
+  // "what does it look like".
+  //
+  //   Trigger     → when to fire (rate, bursts, incoming sub-emits)
+  //   Position    → where to spawn (origin offset + spawn shape)
+  //   Velocity    → initial motion (direction + speed) — direction sits
+  //                 next to speed because they describe the same thing
+  //   Lifetime    → how long each particle lives
+  //   Appearance  → initial visuals (size, rotation, color)
+
+  // Trigger — three independent spawn sources, visually separated so the
+  // user can see at a glance which modes are active. Any source at zero /
+  // empty is dormant; the summary above states which are firing.
+  const triggerRows = [
+    triggerModeSummary(emitter),
+    el('div', { class: 'sub-divider', html: 'continuous spawn rate' }),
+    rowSlider('rate /s', c, 'rate', 0, 5000, 1),
+    el('div', { class: 'sub-divider', html: 'timed bursts — fire at fixed times' }),
+    burstsEditor(emitter),
+    el('div', { class: 'sub-divider', html: 'audio triggers — fire on rising edge of a source' }),
+    triggersEditor(emitter),
+  ];
+  const incomingRows = incomingSpawnRows(emitter);
+  if (incomingRows && incomingRows.length) {
+    triggerRows.push(el('div', {
+      class: 'incoming-head',
+      title: 'other emitters whose emit.* modules spawn particles into this one — click any row to jump to that emitter',
+      html: 'spawned externally by',
+    }));
+    for (const r of incomingRows) triggerRows.push(r);
+  }
+
+  // Position — origin + shape together (both describe "where particles appear")
+  const positionRows = [
+    vec3Row('origin', c.position, -25, 25, 0.1),
+    el('div', { class: 'sub-divider', html: 'spawn shape — ' + c.shape.type }),
+    shapeEditor(emitter),
+  ];
+
+  // Velocity — direction + speed (both describe "how particles move at birth")
+  const velocityRows = [
+    directionEditor(c.initial),
+    rangeOrScalar('speed', c.initial, 'speed', 0, 50, 0.1),
+  ];
+
+  // Lifetime — its own section so it's not buried under appearance
+  const lifetimeRows = [
+    rangeOrScalar('lifetime', c.initial, 'lifetime', 0.05, 30, 0.05),
+  ];
+
+  // Appearance — all initial visual properties
+  const appearanceRows = [
+    rangeOrScalar('size',     c.initial, 'size',            0.01, 5,           0.01),
+    rangeOrScalar('rotation', c.initial, 'rotation',        0,    Math.PI * 2, 0.01),
+    rangeOrScalar('ang.vel',  c.initial, 'angularVelocity', -10,  10,          0.05),
+    c.initial.color ? staticColorRow('color', c.initial, 'color') : null,
+    blendModeRow(ps),
+  ];
+
+  host.appendChild(phaseBlock('01', 'spawn', 'evaluated once at birth', [
+    section('Trigger',    triggerRows),
+    section('Position',   positionRows),
+    section('Velocity',   velocityRows),
+    section('Lifetime',   lifetimeRows),
+    section('Appearance', appearanceRows),
+  ]));
+
+  // ─── 02 / UPDATE ─── (per-frame modules acting on existing particles)
+  // Modules grouped by category so a long list (forces + colour rules + audio
+  // sugar + emit triggers) reads as a small set of focused buckets instead of
+  // one undifferentiated stack.
+  host.appendChild(phaseBlock('02', 'update', 'evaluated every frame',
+    renderModuleSections(emitter)));
+}
+
+// Group an emitter's modules by category prefix and render each non-empty
+// category as its own collapsible section. The "+ ADD MODULE" affordance
+// sits at the bottom in its own row so it's reachable regardless of state.
+const _MODULE_CAT_LABELS = {
+  force:      'Forces',
+  set:        'Set (replace)',
+  mul:        'Multiply',
+  add:        'Add',
+  constraint: 'Constraint',
+  emit:       'Emit triggers',
+  audio:      'Audio sugar',
+};
+const _MODULE_CAT_ORDER = ['force', 'set', 'mul', 'add', 'constraint', 'emit', 'audio', 'other'];
+function renderModuleSections(emitter) {
+  const mods = emitter.config.modules || [];
+  // Bucket by category prefix of moduleName ("force.gravity" → "force").
+  const groups = {};
+  mods.forEach((m, i) => {
+    const name = m.moduleName || 'other';
+    const cat  = name.split('.')[0];
+    const key  = _MODULE_CAT_LABELS[cat] ? cat : 'other';
+    (groups[key] ||= []).push({ m, i });
+  });
+  const out = [];
+  for (const cat of _MODULE_CAT_ORDER) {
+    const items = groups[cat];
+    if (!items || items.length === 0) continue;
+    const label = _MODULE_CAT_LABELS[cat] || 'Other';
+    out.push(section(`${label} (${items.length})`,
+      items.map(({ m, i }) => moduleCard(emitter, m, i))));
+  }
+  if (out.length === 0) {
+    out.push(el('div', { class: 'modules-empty', html: 'no modules — particles will fall under physics defaults only' }));
+  }
+  out.push(el('div', { id: 'addBtn', html: '+ ADD MODULE',
+    onclick: () => openPicker(emitter) }));
+  return out;
+}
+
+// Phase block: header + collapsible body. Persists open/closed per emitter
+// in localStorage (so toggling 'sparks' doesn't change 'ambient').
+function phaseBlock(num, name, subtitle, contents) {
+  const id = 'phase-em' + panelState.active.idx + '-' + num + '-' + name;
+  const collapsed = getCollapsed(id);
+  const wrap = el('div', { class: 'phase-block' + (collapsed ? ' collapsed' : '') });
+  const head = phaseDivider(num, name, subtitle);
+  head.addEventListener('click', () => {
+    const willCollapse = !wrap.classList.contains('collapsed');
+    wrap.classList.toggle('collapsed', willCollapse);
+    setCollapsedSt(id, willCollapse);
+  });
+  const body = el('div', { class: 'phase-body' });
+  for (const c of contents) if (c) body.appendChild(c);
+  wrap.appendChild(head);
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function emitterHeader(emitter) {
+  const c = emitter.config.initial?.color || [1, 0.5, 0.1, 1];
+  const idx = ps.emitters.indexOf(emitter);
+  const isDisabled = !!emitter.config.disabled;
+  const head = el('header', {
+    class: 'em-head' + (isDisabled ? ' disabled' : ''),
+    style: { '--c': rgbCss(c) },
+  });
+  head.appendChild(el('div', { class: 'em-color' }));
+  head.appendChild(el('input', {
+    class: 'em-name',
+    value: emitter.config.name || ('em_' + idx),
+    onchange: (e) => { emitter.config.name = e.target.value; renderTabs(); },
+  }));
+  head.appendChild(el('span', { class: 'em-stats', html: `<b>${countAlive(idx)}</b> ALIVE` }));
+  head.appendChild(el('button', {
+    class: 'em-power',
+    title: isDisabled ? 'enable emitter' : 'disable emitter',
+    onclick: () => {
+      emitter.config.disabled = !emitter.config.disabled;
+      buildPanel();
+    },
+  }, [isDisabled ? 'OFF' : 'ON']));
+  head.appendChild(el('button', { class: 'em-del', title: 'delete emitter',
+    onclick: () => deleteEmitter(idx),
+  }, ['✕']));
+  return head;
+}
+function deleteEmitter(idx) {
+  if (ps.emitters.length <= 1) return;
+  const removed = ps.emitters[idx];
+  ps.emitters.splice(idx, 1);
+  panelState.selectedIdx.delete(removed);
+  // Re-id remaining emitters and re-tag their particles.
+  for (let i = 0; i < ps.emitters.length; i++) ps.emitters[i].id = i;
+  if (ps.emitterId) {
+    for (let i = 0; i < ps.alive; i++) {
+      if (ps.emitterId[i] >= ps.emitters.length) ps.emitterId[i] = 0;
+    }
+  }
+  panelState.active = { type: 'em', idx: 0 };
+  buildPanel();
+}
+
+// Multi-emitter header — drawn when 2+ emitters selected. Mirrors emitterHeader
+// shape (color swatch, name, ON/OFF, ✕) but reads/writes across the selection.
+function emittersHeader(emitters) {
+  const colors = emitters.slice(0, 6).map(e => rgbCss(e.config.initial?.color || [1,0.5,0.1,1]));
+  const head = el('header', { class: 'em-head em-head-multi' });
+  const swatch = el('div', { class: 'em-color' });
+  swatch.style.background = `linear-gradient(90deg, ${colors.join(', ')})`;
+  head.appendChild(swatch);
+  const names = emitters.map(e => e.config.name || 'em').join(', ');
+  head.appendChild(el('div', { class: 'em-name', style: { 'flex': '1', 'overflow': 'hidden', 'text-overflow': 'ellipsis', 'white-space': 'nowrap' }, title: names }, [
+    `${emitters.length} emitters selected`,
+  ]));
+  const states = emitters.map(e => !!e.config.disabled);
+  const allOn  = states.every(x => !x);
+  const allOff = states.every(x => x);
+  const label  = allOn ? 'ON' : allOff ? 'OFF' : '–';
+  head.appendChild(el('button', {
+    class: 'em-power',
+    title: 'toggle all selected',
+    onclick: () => {
+      // allOn → disable all; otherwise enable all (mixed/allOff → all on).
+      const target = allOn;
+      for (const e of emitters) e.config.disabled = target;
+      buildPanel();
+    },
+  }, [label]));
+  head.appendChild(el('button', { class: 'em-del', title: 'delete all selected',
+    onclick: () => bulkDeleteEmitters(emitters),
+  }, ['✕']));
+  return head;
+}
+
+function bulkDeleteEmitters(emitters) {
+  // Preserve at least one emitter overall (matches single deleteEmitter).
+  let toDelete = emitters.slice();
+  if (ps.emitters.length - toDelete.length < 1) {
+    toDelete = toDelete.slice(0, ps.emitters.length - 1);
+  }
+  if (!toDelete.length) return;
+  for (const em of toDelete) {
+    const i = ps.emitters.indexOf(em);
+    if (i < 0) continue;
+    ps.emitters.splice(i, 1);
+    panelState.selectedIdx.delete(em);
+  }
+  for (let i = 0; i < ps.emitters.length; i++) ps.emitters[i].id = i;
+  if (ps.emitterId) {
+    for (let i = 0; i < ps.alive; i++) {
+      if (ps.emitterId[i] >= ps.emitters.length) ps.emitterId[i] = 0;
+    }
+  }
+  panelState.active = { type: 'em', idx: 0 };
+  buildPanel();
+}
+
+// ─── Phase B: bulk-edit views ────────────────────────────────────────────────
+// `bv(emitters, getter, setter)` is the read/write/mixed abstraction over a
+// selection. Bulk row helpers below mirror the single-emitter row helpers but
+// render `???` placeholders when values diverge across the selection.
+
+const _MIXED = Symbol('mixed');
+
+function _eq(a, b) {
+  if (a === b) return true;
+  if (a == null || b == null) return false;
+  if (typeof a !== typeof b) return false;
+  if (typeof a !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!_eq(a[i], b[i])) return false;
+    return true;
+  }
+  // Special-case Curve/Gradient: compare on `keys` array.
+  if (a && b && Array.isArray(a.keys) && Array.isArray(b.keys)) return _eq(a.keys, b.keys);
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) if (!_eq(a[k], b[k])) return false;
+  return true;
+}
+
+function bv(emitters, getter, setter) {
+  return {
+    read() {
+      let v;
+      for (let i = 0; i < emitters.length; i++) {
+        const cur = getter(emitters[i]);
+        if (i === 0) v = cur;
+        else if (!_eq(v, cur)) return _MIXED;
+      }
+      return v;
+    },
+    write(val) { for (const e of emitters) setter(e, val); },
+    mixed() { return this.read() === _MIXED; },
+  };
+}
+
+function bulkRowSlider(label, view, min, max, step) {
+  const v0 = view.read();
+  if (v0 === _MIXED) {
+    const inp = el('input', {
+      type: 'text', class: 'v v-input row-mixed-input',
+      value: '???', placeholder: '???',
+      style: { 'font-style': 'italic', 'opacity': '0.55' },
+    });
+    inp.addEventListener('focus', () => { inp.value = ''; inp.style.removeProperty('font-style'); inp.style.removeProperty('opacity'); });
+    inp.addEventListener('blur',  () => { if (inp.value === '') { inp.value = '???'; inp.style.fontStyle = 'italic'; inp.style.opacity = '0.55'; } });
+    inp.addEventListener('change', () => {
+      const n = parseFloat(inp.value.replace(',', '.'));
+      if (!isFinite(n)) return;
+      const f = step >= 1 ? Math.round(Math.max(min, n)) : Math.max(min, n);
+      view.write(f);
+      buildPanel();
+    });
+    return el('div', { class: 'row' }, [el('label', { html: label }), inp, el('span', { html: 'mixed', style: { 'font-size': '9px', opacity: '0.5' } })]);
+  }
+  const inp = el('input', { type: 'range', min, max, step, value: v0 });
+  const get = () => view.read(), set = (v) => view.write(v);
+  const valEl = makeValueInput(get, set, inp, min, max, step);
+  inp.addEventListener('input', (e) => {
+    const v = parseFloat(e.target.value);
+    const f = step >= 1 ? Math.round(v) : v;
+    view.write(f);
+    valEl.value = fmt(f, step);
+  });
+  return el('div', { class: 'row' }, [el('label', { html: label }), inp, valEl]);
+}
+
+function bulkRowToggle(label, view) {
+  const v0 = view.read();
+  const cb = el('input', { type: 'checkbox' });
+  if (v0 === _MIXED) cb.indeterminate = true;
+  else cb.checked = !!v0;
+  cb.addEventListener('input', () => { view.write(cb.checked); buildPanel(); });
+  return el('div', { class: 'row' }, [el('label', { html: label }), cb, el('span')]);
+}
+
+function bulkRowEnum(label, view, options) {
+  const v0 = view.read();
+  const sel = el('select', { onchange: (e) => { view.write(e.target.value); } });
+  if (v0 === _MIXED) sel.appendChild(el('option', { value: '', html: '??? (mixed)' }));
+  for (const o of options) {
+    const opt = el('option', { value: o, html: o });
+    if (o === v0) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  return el('div', { class: 'row' }, [el('label', { html: label }), sel, el('span')]);
+}
+
+function bulkVec3Row(label, emitters, getArr, min, max, step) {
+  const wrap = el('div');
+  wrap.appendChild(el('div', { class: 'row' }, [el('label', { html: label }), el('span'), el('span')]));
+  for (let i = 0; i < 3; i++) {
+    const axis = ['x', 'y', 'z'][i];
+    const v = bv(emitters, e => getArr(e)[i], (e, val) => { getArr(e)[i] = val; });
+    wrap.appendChild(bulkRowSlider(axis, v, min, max, step));
+  }
+  return wrap;
+}
+
+// "Mixed across selection" placeholder for non-trivially-bulkable rows
+// (curves, gradients, ranges, complex objects). Provides an "overwrite all"
+// affordance that copies the anchor emitter's value into every selected one.
+function bulkMixedRow(label, anchor, emitters, getter, copyValue) {
+  const wrap = el('div', { class: 'row' });
+  wrap.appendChild(el('label', { html: label }));
+  wrap.appendChild(el('span', { html: 'differs across selection', style: { 'font-size': '11px', opacity: '0.55', flex: '1' } }));
+  wrap.appendChild(el('button', {
+    class: 'rng-toggle',
+    title: `copy ${anchor.config.name || 'anchor'}'s value to all selected`,
+    html: 'overwrite all',
+    onclick: () => {
+      const src = getter(anchor);
+      for (const e of emitters) if (e !== anchor) copyValue(e, src);
+      buildPanel();
+    },
+  }));
+  return wrap;
+}
+
+// Module intersection: names where every selected emitter has exactly one
+// instance of that moduleName. Returns array of { name, modulesByEmitter[] }.
+function intersectModules(emitters) {
+  if (!emitters.length) return [];
+  const counts = new Map();
+  for (const e of emitters) {
+    const seen = new Map();
+    for (const m of (e.config.modules || [])) {
+      const n = m.moduleName;
+      if (!n) continue;
+      seen.set(n, (seen.get(n) || 0) + 1);
+    }
+    for (const [n, c] of seen) {
+      if (!counts.has(n)) counts.set(n, []);
+      counts.get(n).push(c);
+    }
+  }
+  const out = [];
+  for (const [name, cs] of counts) {
+    if (cs.length !== emitters.length) continue;          // missing on some
+    if (!cs.every(c => c === 1)) continue;                // multiple on some
+    const mods = emitters.map(e => e.config.modules.find(m => m.moduleName === name));
+    out.push({ name, modules: mods });
+  }
+  return out;
+}
+
+// Bulk module card: float / bool / enum params edited via bulkView; curves /
+// gradients fall back to "differs / overwrite all" or render the anchor's
+// editor when all keys match.
+function bulkModuleCard(emitters, name, mods) {
+  const c = emitters[0].config.initial?.color || [1, 0.5, 0.1, 1];
+  const collapseKey = 'em*/' + name;
+  const collapsed = !!panelState.modOpen[collapseKey + '_closed'];
+  const wrap = el('div', { class: 'mod' + (collapsed ? ' collapsed' : ''), style: { '--c': rgbCss(c) } });
+  const ns = name.includes('.') ? name.split('.')[0] + '.' : '';
+  const tail = name.slice(ns.length);
+  const head = el('div', { class: 'mod-head', onclick: (e) => {
+    if (e.target.classList && (e.target.classList.contains('del') || e.target.classList.contains('pip'))) return;
+    panelState.modOpen[collapseKey + '_closed'] = !panelState.modOpen[collapseKey + '_closed'];
+    wrap.classList.toggle('collapsed');
+  } }, [
+    el('span', { class: 'pip', title: 'toggle disabled across selection',
+      onclick: (ev) => {
+        ev.stopPropagation();
+        const allOff = mods.every(m => m.disabled);
+        for (const m of mods) m.disabled = !allOff;
+        buildPanel();
+      },
+    }),
+    el('span', { class: 'mod-chev' }, ['▾']),
+    el('span', { class: 'name', html: '<span class="ns">' + ns + '</span>' + tail }),
+    el('span', { class: 'kind' }, [`× ${emitters.length}`]),
+    el('span', { class: 'del', html: '✕', onclick: () => {
+      // Remove this moduleName from every selected emitter.
+      for (const e of emitters) {
+        const i = e.config.modules.findIndex(m => m.moduleName === name);
+        if (i >= 0) e.config.modules.splice(i, 1);
+      }
+      buildPanel();
+    } }),
+  ]);
+  wrap.appendChild(head);
+  const body = el('div', { class: 'mod-body' });
+  const schema = mods[0].schema;
+  if (!schema) {
+    body.appendChild(el('div', { style: { color: 'rgba(240,235,224,0.30)', fontSize: '9px' }, html: 'opaque function module — no editable params' }));
+  } else {
+    for (const [pkey, def] of Object.entries(schema)) {
+      if (def.type === 'float') {
+        const view = bv(mods, m => m.params[pkey], (m, v) => { m.params[pkey] = v; });
+        // float can be a Bound (object with .source) or a plain number;
+        // bulk editing is only sane on the plain-number path. If any
+        // emitter has the param bound, treat it as mixed and offer
+        // overwrite-all from the anchor.
+        const anyBound = mods.some(m => m.params[pkey] && typeof m.params[pkey] === 'object' && 'source' in m.params[pkey]);
+        if (anyBound) {
+          body.appendChild(bulkMixedRow(pkey, emitters[0], emitters, e => e.config.modules.find(m => m.moduleName === name).params[pkey], (e, src) => {
+            const m = e.config.modules.find(mm => mm.moduleName === name);
+            m.params[pkey] = (src && typeof src === 'object') ? JSON.parse(JSON.stringify(src)) : src;
+          }));
+        } else {
+          body.appendChild(bulkRowSlider(pkey, view, def.min, def.max, def.step));
+        }
+      } else if (def.type === 'enum') {
+        body.appendChild(bulkRowEnum(pkey, bv(mods, m => m.params[pkey], (m, v) => { m.params[pkey] = v; }), def.options));
+      } else if (def.type === 'curve' || def.type === 'gradient') {
+        body.appendChild(bulkMixedRow(pkey, emitters[0], emitters, e => e.config.modules.find(m => m.moduleName === name).params[pkey], (e, src) => {
+          const m = e.config.modules.find(mm => mm.moduleName === name);
+          if (src && Array.isArray(src.keys)) {
+            // clone keys; m.params[pkey] is a Curve/Gradient instance
+            const cloned = JSON.parse(JSON.stringify(src.keys));
+            if (m.params[pkey] && typeof m.params[pkey].update === 'function') m.params[pkey].update(cloned);
+            else m.params[pkey] = src;
+          } else {
+            m.params[pkey] = src;
+          }
+        }));
+      } else {
+        body.appendChild(el('div', { class: 'row' }, [el('label', { html: pkey }), el('span', { html: 'unsupported in bulk', style: { opacity: '0.5' } }), el('span')]));
+      }
+    }
+  }
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function renderEmittersTab(host, emitters) {
+  host.appendChild(emittersHeader(emitters));
+
+  // ─── 01 / SPAWN ───
+  // Trigger
+  const rateView = bv(emitters, e => e.config.rate, (e, v) => { e.config.rate = v; });
+  const anyRateBound = emitters.some(e => e.config.rate && typeof e.config.rate === 'object' && 'source' in e.config.rate);
+  const triggerRows = [
+    el('div', { class: 'sub-divider', html: 'continuous spawn rate' }),
+    anyRateBound
+      ? bulkMixedRow('rate /s', emitters[0], emitters, e => e.config.rate, (e, src) => { e.config.rate = (src && typeof src === 'object') ? JSON.parse(JSON.stringify(src)) : src; })
+      : bulkRowSlider('rate /s', rateView, 0, 5000, 1),
+    el('div', { class: 'sub-divider', html: 'timed bursts' }),
+    el('div', { class: 'row' }, [
+      el('span', { html: 'edit per emitter — bulk burst editing not supported in v1', style: { opacity: '0.55', 'font-size': '11px' } }),
+    ]),
+    el('div', { class: 'sub-divider', html: 'audio triggers' }),
+    el('div', { class: 'row' }, [
+      el('span', { html: 'edit per emitter — bulk trigger editing not supported in v1', style: { opacity: '0.55', 'font-size': '11px' } }),
+    ]),
+  ];
+
+  // Position — origin + shape (shape edited per-emitter; only origin is bulkable)
+  const positionRows = [
+    bulkVec3Row('origin', emitters, e => e.config.position, -25, 25, 0.1),
+    el('div', { class: 'row' }, [
+      el('span', { html: 'spawn shape — edit per emitter (Ctrl-click to drop down to single)', style: { opacity: '0.55', 'font-size': '11px' } }),
+    ]),
+  ];
+
+  // Velocity (speed only — direction is structural)
+  const velRows = [
+    bulkRowSlider('speed', bv(emitters, e => {
+      const s = e.config.initial?.speed;
+      return (typeof s === 'object' && s) ? (s.min + s.max) / 2 : s;
+    }, (e, v) => { if (e.config.initial) e.config.initial.speed = v; }), 0, 50, 0.1),
+    el('div', { class: 'row' }, [
+      el('span', { html: 'direction — edit per emitter', style: { opacity: '0.55', 'font-size': '11px' } }),
+    ]),
+  ];
+
+  // Lifetime
+  const lifeRows = [
+    bulkRowSlider('lifetime', bv(emitters, e => {
+      const l = e.config.initial?.lifetime;
+      return (typeof l === 'object' && l) ? (l.min + l.max) / 2 : l;
+    }, (e, v) => { if (e.config.initial) e.config.initial.lifetime = v; }), 0.05, 30, 0.05),
+  ];
+
+  // Appearance
+  const appearanceRows = [
+    bulkRowSlider('size', bv(emitters, e => {
+      const s = e.config.initial?.size;
+      return (typeof s === 'object' && s) ? (s.min + s.max) / 2 : s;
+    }, (e, v) => { if (e.config.initial) e.config.initial.size = v; }), 0.01, 5, 0.01),
+    bulkRowSlider('rotation', bv(emitters, e => {
+      const r = e.config.initial?.rotation;
+      return (typeof r === 'object' && r) ? (r.min + r.max) / 2 : r;
+    }, (e, v) => { if (e.config.initial) e.config.initial.rotation = v; }), 0, Math.PI * 2, 0.01),
+    bulkRowSlider('ang.vel', bv(emitters, e => {
+      const a = e.config.initial?.angularVelocity;
+      return (typeof a === 'object' && a) ? (a.min + a.max) / 2 : a;
+    }, (e, v) => { if (e.config.initial) e.config.initial.angularVelocity = v; }), -10, 10, 0.05),
+    bulkMixedRow('color', emitters[0], emitters, e => e.config.initial?.color, (e, src) => { if (e.config.initial && Array.isArray(src)) e.config.initial.color = src.slice(); }),
+    blendModeRow(ps),
+  ];
+
+  host.appendChild(phaseBlock('01', 'spawn', `bulk edit · ${emitters.length} emitters`, [
+    section('Trigger',    triggerRows),
+    section('Position',   positionRows),
+    section('Velocity',   velRows),
+    section('Lifetime',   lifeRows),
+    section('Appearance', appearanceRows),
+  ]));
+
+  // ─── 02 / UPDATE ─── module intersection
+  const inter = intersectModules(emitters);
+  const groups = {};
+  for (const { name, modules } of inter) {
+    const cat = name.split('.')[0];
+    const key = _MODULE_CAT_LABELS[cat] ? cat : 'other';
+    (groups[key] ||= []).push({ name, modules });
+  }
+  const modContent = [];
+  for (const cat of _MODULE_CAT_ORDER) {
+    const items = groups[cat];
+    if (!items || items.length === 0) continue;
+    const label = _MODULE_CAT_LABELS[cat] || 'Other';
+    modContent.push(section(`${label} (${items.length})`,
+      items.map(({ name, modules }) => bulkModuleCard(emitters, name, modules))));
+  }
+  if (modContent.length === 0) {
+    modContent.push(el('div', { class: 'modules-empty', html: 'no modules common to every selected emitter' }));
+  }
+  modContent.push(el('div', { id: 'addBtn', html: '+ ADD MODULE',
+    onclick: () => openPickerBulk(emitters) }));
+  host.appendChild(phaseBlock('02', 'update', `intersection · ${inter.length} common modules`, modContent));
+}
+
+// Bulk variant of openPicker: latches a selection list. addModule() reads
+// it and fans out a fresh factory instance to each emitter that doesn't
+// already have a module of that moduleName.
+let _bulkPickerEmitters = null;
+function openPickerBulk(emitters) {
+  _bulkPickerEmitters = emitters.slice();
+  picker.classList.add('show');
+  pickerSearch.value = '';
+  renderPicker('');
+  pickerSearch.focus();
+}
+
+function phaseDivider(num, name, subtitle) {
+  return el('div', { class: 'phase' }, [
+    el('span', { class: 'ph-num' }, [num]),
+    el('div', { class: 'ph-name' }, [
+      name,
+      el('span', { class: 'ph-sub' }, [subtitle]),
+    ]),
+    el('span', { class: 'ph-chev', html: '▾' }),
+  ]);
+}
+
+// Module card with header + collapsible body. Click anywhere on the head
+// (except the × delete) to toggle. Body shows the module's schema-driven
+// param editors + curve/gradient pickers when applicable.
+function moduleCard(emitter, m, idx) {
+  const c = emitter.config.initial?.color || [1, 0.5, 0.1, 1];
+  const key = panelState.active.idx + '/' + idx + '/' + (m.moduleName || 'fn');
+  // Default state: expanded for new mods, but collapsed if user toggled off.
+  const collapsed = !!panelState.modOpen[key + '_closed'];
+  const isDisabled = !!m.disabled;
+  const wrap = el('div', {
+    class: 'mod' + (collapsed ? ' collapsed' : '') + (isDisabled ? ' disabled' : ''),
+    style: { '--c': rgbCss(c) },
+  });
+  const ns = (m.moduleName || '').includes('.')
+    ? m.moduleName.split('.')[0] + '.'
+    : '';
+  const tail = (m.moduleName || 'fn').slice(ns.length);
+  const head = el('div', { class: 'mod-head', onclick: (e) => {
+    // The pip and del buttons own their own clicks.
+    if (e.target.classList && (e.target.classList.contains('del') || e.target.classList.contains('pip'))) return;
+    panelState.modOpen[key + '_closed'] = !panelState.modOpen[key + '_closed'];
+    wrap.classList.toggle('collapsed');
+  } }, [
+    // enable/disable pip (filled = enabled, hollow = disabled)
+    el('span', {
+      class: 'pip',
+      title: isDisabled ? 'enable module' : 'disable module',
+      onclick: (e) => {
+        e.stopPropagation();
+        m.disabled = !m.disabled;
+        wrap.classList.toggle('disabled', !!m.disabled);
+        // Also recolor: the filled state of the pip is driven by .disabled.
+      },
+    }),
+    el('span', { class: 'mod-chev' }, ['▾']),
+    el('span', { class: 'name', html: '<span class="ns">' + ns + '</span>' + tail }),
+    el('span', { class: 'kind' }, [m.kind || 'fn']),
+    el('span', { class: 'del', html: '✕', onclick: () => {
+      const i = emitter.config.modules.indexOf(m);
+      if (i >= 0) emitter.config.modules.splice(i, 1);
+      buildPanel();
+    } }),
+  ]);
+  wrap.appendChild(head);
+  // Body
+  const body = el('div', { class: 'mod-body' });
+  if (!m.schema) {
+    body.appendChild(el('div', { style: { color: 'rgba(240,235,224,0.30)', fontSize: '9px' }, html: 'opaque function module — no editable params' }));
+  } else {
+    for (const [pkey, def] of Object.entries(m.schema)) {
+      body.appendChild(rowFromSchema(pkey, def, m.params));
+      // Curve/Gradient pickers attach below the row when relevant
+      if (def.type === 'curve' && m.params[pkey] instanceof Curve) {
+        body.appendChild(curvePicker(m.params, pkey));
+      } else if (def.type === 'gradient' && m.params[pkey] instanceof Gradient) {
+        body.appendChild(gradientPicker(m.params, pkey));
+      } else if ((def.type === 'curve' || def.type === 'gradient') && isSourceBinding(m.params[pkey])) {
+        const pill = el('div', { class: 'bound-pill', html: '<span class="src">' + m.params[pkey].source + '</span>' });
+        pill.addEventListener('click', () => openSourcePicker(m.params, pkey, pill));
+        body.appendChild(el('div', { class: 'row' }, [el('label', { html: pkey }), pill, el('span')]));
+      }
+    }
+    if (m.params.curve && !m.schema.curve)    body.appendChild(curvePicker(m.params, 'curve'));
+    if (m.params.gradient && !m.schema.gradient) body.appendChild(gradientPicker(m.params, 'gradient'));
+  }
+  wrap.appendChild(body);
+  return wrap;
+}
+
+// Back-compat wrappers — older code calls these names.
+function emitterBlock(emitter) { const w = el('div'); renderEmitterTab(w, emitter); return w; }
+function moduleBlock(emitter, m) { return moduleCard(emitter, m, emitter.config.modules.indexOf(m)); }
+
+// ---------------------------- Emitter spawn-settings UI -----------------------
+
+function emitterSettings(emitter) {
+  const wrap = el('div');
+  const c = emitter.config;
+
+  wrap.appendChild(section('Emitter — spawn rules', [
+    vec3Row('position', c.position, -25, 25, 0.1),
+    rowSlider('rate /s', c, 'rate', 0, 5000, 1),
+    burstsEditor(emitter),
+  ]));
+
+  wrap.appendChild(section('Initial values (per spawn)', [
+    rangeOrScalar('lifetime',  c.initial, 'lifetime',        0.05, 30, 0.05),
+    rangeOrScalar('speed',     c.initial, 'speed',           0,    50, 0.1),
+    rangeOrScalar('size',      c.initial, 'size',            0.01, 5,  0.01),
+    rangeOrScalar('rotation',  c.initial, 'rotation',        0,    Math.PI * 2, 0.01),
+    rangeOrScalar('ang.vel',   c.initial, 'angularVelocity', -10,  10, 0.05),
+    c.initial.color ? staticColorRow('color', c.initial, 'color') : null,
+  ]));
+
+  wrap.appendChild(section('Spawn shape', [shapeEditor(emitter)]));
+
+  return wrap;
+}
+
+// Direction override editor — lets the user set the velocity direction
+// independently from the spawn shape. Modes:
+//   shape    use the spawn shape's outDir (default)
+//   outward  radial unit vector from local origin to spawn position
+//   inward   opposite of outward
+//   vector   fixed [x,y,z] direction
+//   cone     uniform random direction within a half-angle around an axis
+function directionEditor(initial) {
+  const wrap = el('div', { class: 'dir-editor' });
+  const d = initial.direction;
+  let mode;
+  if (!d || d === 'shape')                        mode = 'shape';
+  else if (d === 'outward' || d === 'inward')     mode = d;
+  else if (Array.isArray(d) && d.length >= 3)     mode = 'vector';
+  else if (d && typeof d === 'object' && d.axis)  mode = 'cone';
+  else                                            mode = 'shape';
+
+  const sel = el('select');
+  for (const m of ['shape', 'outward', 'inward', 'vector', 'cone']) {
+    const opt = el('option', { value: m, html: m });
+    if (m === mode) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => {
+    const m = sel.value;
+    if (m === 'shape')        delete initial.direction;
+    else if (m === 'outward' || m === 'inward') initial.direction = m;
+    else if (m === 'vector')  initial.direction = [0, 1, 0];
+    else if (m === 'cone')    initial.direction = { axis: [0, 1, 0], halfAngle: 0.5 };
+    buildPanel();
+  });
+  wrap.appendChild(el('div', { class: 'row' }, [
+    el('label', { html: 'direction' }), sel, el('span'),
+  ]));
+
+  if (mode === 'vector') {
+    wrap.appendChild(vec3Row('vec', initial.direction, -1, 1, 0.01));
+  } else if (mode === 'cone') {
+    wrap.appendChild(vec3Row('axis', initial.direction.axis, -1, 1, 0.01));
+    wrap.appendChild(rowSliderObj('halfAngle', initial.direction, 'halfAngle', 0, Math.PI, 0.01));
+  } else if (mode === 'outward' || mode === 'inward') {
+    wrap.appendChild(el('div', {
+      class: 'dir-hint',
+      html: mode === 'outward'
+        ? 'velocity = unit(spawn position) — points away from local origin'
+        : 'velocity = -unit(spawn position) — points toward local origin',
+    }));
+  } else {
+    wrap.appendChild(el('div', {
+      class: 'dir-hint',
+      html: 'using spawn-shape direction (e.g. cone → +Y, sphere → radial, ring → outward in XZ)',
+    }));
+  }
+  return wrap;
+}
+
+// Scans every OTHER emitter's modules for emit.* triggers that target
+// this emitter, so the inspector can show "← from ring_inner on kick onset"
+// instead of the user having to grep through every other emitter to figure
+// out why a rate-0 emitter is producing particles.
+function incomingSpawnRows(emitter) {
+  const myName = emitter.config.name;
+  if (!myName) return [];
+  const rows = [];
+  ps.emitters.forEach((other, otherIdx) => {
+    if (other === emitter) return;
+    for (const m of (other.config.modules || [])) {
+      if (m.kind !== 'emit' || !m.params || m.params.target !== myName) continue;
+      const p = m.params;
+      const trigger = (p.source || 'audio.beat.flash').replace(/^audio\./, '');
+      let countTxt;
+      if (p.count !== null && typeof p.count === 'object' && 'source' in p.count) {
+        const sc = p.count.scale !== undefined ? p.count.scale : 1;
+        const off = p.count.offset !== undefined ? p.count.offset : 0;
+        countTxt = `${p.count.source.replace(/^audio\./, '')}×${sc}` + (off ? `+${off}` : '');
+      } else {
+        countTxt = '×' + p.count;
+      }
+      const row = el('div', {
+        class: 'incoming-row',
+        title: 'click to jump to ' + (other.config.name || 'em_' + otherIdx),
+      });
+      row.innerHTML =
+        `<span class="inc-from">← ${other.config.name || 'em_' + otherIdx}</span>` +
+        `<span class="inc-trigger">${trigger}</span>` +
+        `<span class="inc-count">${countTxt}</span>`;
+      row.addEventListener('click', () => {
+        panelState.active = { type: 'em', idx: otherIdx };
+        buildPanel();
+      });
+      rows.push(row);
+    }
+  });
+  return rows;
+}
+
+function vec3Row(label, arr, min, max, step) {
+  const wrap = el('div');
+  wrap.appendChild(el('div', { class: 'row' }, [
+    el('label', { html: label }), el('span'), el('span'),
+  ]));
+  for (let i = 0; i < 3; i++) {
+    const axis = ['x', 'y', 'z'][i];
+    wrap.appendChild(rowSliderArr(axis, arr, i, min, max, step));
+  }
+  return wrap;
+}
+// Editable value cell. Click → type a number → Enter / blur to commit. Esc
+// reverts. Stays in sync with the slider in both directions.
+// Round v up to the next "nice" tick (1, 2, 5 × 10^n) for slider headroom.
+function niceCeil(v) {
+  if (!isFinite(v) || v <= 0) return 0;
+  const e = Math.floor(Math.log10(v));
+  const m = v / Math.pow(10, e);
+  const nice = m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10;
+  return nice * Math.pow(10, e);
+}
+
+function makeValueInput(getValue, setValue, slider, min, max, step) {
+  const inp = el('input', {
+    type: 'text', class: 'v v-input', spellcheck: 'false',
+    inputmode: 'decimal', value: fmt(getValue(), step),
+  });
+  inp.addEventListener('focus', () => inp.select());
+  inp.addEventListener('change', () => {
+    const v = parseFloat(inp.value.replace(',', '.'));
+    if (!isFinite(v)) { inp.value = fmt(getValue(), step); return; }
+    // No upper clamp via the number input — the slider's `max` attribute
+    // is just a coarse-handle range, not a value ceiling. Type any number
+    // and the slider's max grows to fit (rounded to a nice 1/2/5 × 10^n
+    // tick). Keeps the lower bound (e.g. rate≥0) intact.
+    const floored = Math.max(min, v);
+    setValue(step >= 1 ? Math.round(floored) : floored);
+    inp.value = fmt(getValue(), step);
+    if (slider) {
+      const sliderMax = parseFloat(slider.max);
+      if (isFinite(sliderMax) && floored > sliderMax) {
+        slider.max = niceCeil(floored);
+      }
+      slider.value = getValue();
+    }
+  });
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter')  inp.blur();
+    if (e.key === 'Escape') { inp.value = fmt(getValue(), step); inp.blur(); }
+  });
+  return inp;
+}
+function rowSliderArr(label, arr, idx, min, max, step) {
+  const get = () => arr[idx], set = (v) => { arr[idx] = v; };
+  const inp = el('input', { type: 'range', min, max, step, value: arr[idx] });
+  const valEl = makeValueInput(get, set, inp, min, max, step);
+  inp.addEventListener('input', (e) => {
+    arr[idx] = parseFloat(e.target.value);
+    valEl.value = fmt(arr[idx], step);
+  });
+  return el('div', { class: 'row' }, [el('label', { html: label }), inp, valEl]);
+}
+
+// Renders a single slider for a scalar OR two sliders (min/max) for a range.
+// Tracks the original kind so editing preserves range vs scalar.
+function rangeOrScalar(label, target, key, min, max, step) {
+  const wrap = el('div');
+  const initial = target[key];
+  const isRange = initial && typeof initial === 'object' && 'min' in initial && 'max' in initial;
+  // Header + toggle to convert between scalar and range
+  const tgl = el('button', {
+    class: 'rng-toggle',
+    title: isRange ? 'switch to single value' : 'switch to range',
+    html: isRange ? 'range' : 'fixed',
+    onclick: () => {
+      if (isRange) {
+        target[key] = (initial.min + initial.max) / 2;
+      } else {
+        const v = target[key];
+        target[key] = { min: v * 0.7, max: v * 1.3 };
+      }
+      buildPanel();
+    },
+  });
+  wrap.appendChild(el('div', { class: 'row' }, [
+    el('label', { html: label }), tgl, el('span'),
+  ]));
+  if (isRange) {
+    const r = target[key];
+    wrap.appendChild(rowSliderObj('min', r, 'min', min, max, step));
+    wrap.appendChild(rowSliderObj('max', r, 'max', min, max, step));
+  } else {
+    wrap.appendChild(rowSlider('value', target, key, min, max, step));
+  }
+  return wrap;
+}
+function rowSliderObj(label, obj, key, min, max, step) {
+  const get = () => obj[key], set = (v) => { obj[key] = v; };
+  const inp = el('input', { type: 'range', min, max, step, value: obj[key] });
+  const valEl = makeValueInput(get, set, inp, min, max, step);
+  inp.addEventListener('input', (e) => {
+    obj[key] = parseFloat(e.target.value);
+    valEl.value = fmt(obj[key], step);
+  });
+  return el('div', { class: 'row' }, [el('label', { html: label }), inp, valEl]);
+}
+
+// Blend mode selector — scene-level (ps.blend), one dropdown shared across all emitter panels.
+function blendModeRow(ps) {
+  const wrap = el('div', { class: 'row' });
+  wrap.appendChild(el('label', { html: 'blend (scene)' }));
+  const sel = el('select');
+  for (const mode of ['additive', 'alpha-over', 'opaque']) {
+    const opt = el('option', { html: mode });
+    opt.value = mode;
+    // Match 'alpha-over' against both 'alpha-over' and the legacy 'alphaover' spelling.
+    const current = ps.blend || 'additive';
+    if (mode === current || (mode === 'alpha-over' && current === 'alphaover')) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => { ps.blend = sel.value; });
+  wrap.appendChild(sel);
+  return wrap;
+}
+
+// Hex + intensity + alpha for a [r,g,b,a] array. RGB can exceed 1.0 for HDR.
+function staticColorRow(label, target, key) {
+  const wrap = el('div', { class: 'static-color' });
+  const rgba = target[key];
+  // Decompose: intensity = max(r,g,b) clamped >= 1; base = rgb / intensity
+  let intensity = Math.max(rgba[0], rgba[1], rgba[2], 1);
+  let baseR = rgba[0] / intensity, baseG = rgba[1] / intensity, baseB = rgba[2] / intensity;
+  let alpha = rgba[3];
+
+  function commit() {
+    target[key][0] = baseR * intensity;
+    target[key][1] = baseG * intensity;
+    target[key][2] = baseB * intensity;
+    target[key][3] = alpha;
+    refresh();
+  }
+  function refresh() {
+    const hex = '#' + [baseR, baseG, baseB].map(v => Math.round(Math.min(1, v) * 255).toString(16).padStart(2, '0')).join('');
+    swatch.style.background = hex;
+    hexEl.value = hex;
+    intLab.textContent = intensity.toFixed(2);
+    alphLab.textContent = alpha.toFixed(2);
+  }
+
+  // Custom color picker — clicking the swatch opens an HSV popover styled
+  // to match the rest of the UI (no chunky OS dialog).
+  const swatch = el('button', { class: 'color-swatch', type: 'button', title: 'click to pick color' });
+  swatch.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openColorPicker(swatch, { r: baseR, g: baseG, b: baseB }, (rgb) => {
+      baseR = rgb.r; baseG = rgb.g; baseB = rgb.b;
+      commit();
+    });
+  });
+  const hexEl = el('input', { type: 'text', class: 'grad-hex', maxlength: 7, spellcheck: 'false',
+    onchange: () => {
+      const m = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(hexEl.value.trim());
+      if (!m) return;
+      let h = m[1]; if (h.length === 3) h = h.split('').map(c => c + c).join('');
+      baseR = parseInt(h.slice(0,2), 16) / 255;
+      baseG = parseInt(h.slice(2,4), 16) / 255;
+      baseB = parseInt(h.slice(4,6), 16) / 255;
+      commit();
+    },
+  });
+  const intLab = el('span', { class: 'v' });
+  const alphLab = el('span', { class: 'v' });
+  const intInp = el('input', { type: 'range', min: 0, max: 10, step: 0.05, value: intensity,
+    oninput: (e) => { intensity = parseFloat(e.target.value); commit(); } });
+  const alphInp = el('input', { type: 'range', min: 0, max: 1, step: 0.01, value: alpha,
+    oninput: (e) => { alpha = parseFloat(e.target.value); commit(); } });
+
+  wrap.appendChild(el('div', { class: 'row' }, [el('label', { html: label }), swatch, el('span')]));
+  wrap.appendChild(el('div', { class: 'row' }, [el('label', { html: 'hex' }), hexEl, el('span')]));
+  wrap.appendChild(el('div', { class: 'row' }, [el('label', { html: 'intens.' }), intInp, intLab]));
+  wrap.appendChild(el('div', { class: 'row' }, [el('label', { html: 'alpha' }), alphInp, alphLab]));
+  refresh();
+  return wrap;
+}
+
+// Render a single burst (one card with stacked rows: time / count / repeat /
+// interval / delete). Stacked layout means a 7-digit count like 1,000,000
+// always renders in full without column truncation.
+function burstCard(emitter, b, i, refresh) {
+  const card = el('div', { class: 'burst-card' });
+
+  const labelRow = (label, control) => {
+    const row = el('div', { class: 'burst-row' });
+    row.appendChild(el('span', { class: 'burst-label', html: label }));
+    row.appendChild(control);
+    return row;
+  };
+
+  const timeInput = el('input', {
+    type: 'number', step: 0.05, value: b.time ?? 0,
+    oninput: (e) => {
+      b.time = parseFloat(e.target.value) || 0;
+      emitter._reset?.(); ps.reset();
+    },
+  });
+
+  const countInput = el('input', {
+    type: 'number', step: 1, min: 0, value: b.count ?? 0,
+    oninput: (e) => {
+      b.count = parseInt(e.target.value, 10) || 0;
+      // Auto-grow the particle pool when the user types a count larger
+      // than the current cap. Destructive (alive particles reset) but
+      // gives the "no max" feel — type 5,000,000 and it just works.
+      if (ps.setMaxParticles && b.count > ps.maxParticles) {
+        ps.setMaxParticles(b.count + 1024).then(() => {
+          emitter._reset?.();
+          ps.reset();
+        });
+      }
+    },
+  });
+
+  const repeatCheckbox = el('input', { type: 'checkbox' });
+  repeatCheckbox.checked = !!b.repeat;
+
+  const intervalRow = el('div', {
+    class: 'burst-row',
+    style: { display: b.repeat ? 'grid' : 'none' },
+  });
+  intervalRow.appendChild(el('span', { class: 'burst-label', html: 'interval (s)' }));
+  const intervalInput = el('input', {
+    type: 'number', step: 0.05, min: 0.01, value: b.interval ?? 1.0,
+    oninput: (e) => {
+      b.interval = parseFloat(e.target.value) || 1.0;
+      emitter._reset?.(); ps.reset();
+    },
+  });
+  intervalRow.appendChild(intervalInput);
+
+  repeatCheckbox.addEventListener('input', () => {
+    b.repeat = repeatCheckbox.checked;
+    if (b.repeat && !b.interval) b.interval = 1.0;
+    intervalRow.style.display = b.repeat ? 'grid' : 'none';
+    emitter._reset?.(); ps.reset();
+  });
+
+  const deleteButton = el('button', {
+    class: 'grad-btn', html: 'remove',
+    onclick: () => {
+      emitter.config.bursts.splice(i, 1);
+      emitter._reset?.(); ps.reset();
+      refresh();
+    },
+  });
+
+  card.appendChild(labelRow('delay (s)',    timeInput));
+  card.appendChild(labelRow('count',        countInput));
+  card.appendChild(labelRow('repeat',       repeatCheckbox));
+  card.appendChild(intervalRow);
+  const actions = el('div', { class: 'burst-actions' });
+  actions.appendChild(deleteButton);
+  card.appendChild(actions);
+  return card;
+}
+
+function burstsEditor(emitter) {
+  const wrap = el('div', { class: 'bursts' });
+  const list = el('div', { class: 'bursts' });
+  function refresh() {
+    list.innerHTML = '';
+    (emitter.config.bursts || []).forEach((b, i) => {
+      list.appendChild(burstCard(emitter, b, i, refresh));
+    });
+  }
+  refresh();
+  wrap.appendChild(list);
+  const addButton = el('button', {
+    class: 'grad-btn', html: '+ burst',
+    onclick: () => {
+      if (!emitter.config.bursts) emitter.config.bursts = [];
+      emitter.config.bursts.push({ time: 0, count: 50 });
+      refresh();
+    },
+  });
+  wrap.appendChild(addButton);
+  return wrap;
+}
+
+// Audio-driven trigger entries: each fires a burst when its source crosses
+// `threshold` (rising edge). `count` is either a scalar or a Bound on a
+// per-particle source like drum_band.kick. Mirrors the burst-card layout
+// so the spawn-tab Trigger section reads as one consistent design.
+function triggerCard(emitter, t, i, refresh) {
+  const card = el('div', { class: 'burst-card' });
+  const labelRow = (label, control) => {
+    const row = el('div', { class: 'burst-row' });
+    row.appendChild(el('span', { class: 'burst-label', html: label }));
+    row.appendChild(control);
+    return row;
+  };
+
+  // ── source — clickable pill, opens source picker in raw-string mode
+  const sourcePill = el('span', {
+    class: 'bound-pill',
+    title: 'click to change source',
+  });
+  sourcePill.innerHTML = '<span class="src">' + (t.source || '<unset>') + '</span>';
+  sourcePill.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openSourcePicker(t, 'source', sourcePill, { writeAsString: true });
+  });
+
+  // ── threshold — gating value, free-form number input
+  const thresholdInput = el('input', {
+    type: 'number', step: 0.05, min: 0, value: t.threshold ?? 0.7,
+    oninput: (e) => {
+      const v = parseFloat(e.target.value);
+      if (isFinite(v)) t.threshold = v;
+    },
+  });
+
+  // ── count — scalar OR Bound. When Bound: pill + scale + offset (the trigger
+  // count formula is `source * scale + offset` rounded to int).
+  let countControl;
+  if (t.count !== null && typeof t.count === 'object' && 'source' in t.count) {
+    const countPill = el('span', { class: 'bound-pill', title: 'click to change count source' });
+    countPill.innerHTML = '<span class="src">' + t.count.source + '</span>';
+    countPill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openSourcePicker(t, 'count', countPill);
+    });
+    const scaleInput = el('input', {
+      type: 'number', step: 'any', value: t.count.scale ?? 1, class: 'bound-scale',
+      oninput: (e) => {
+        const v = parseFloat(e.target.value);
+        if (isFinite(v)) t.count.scale = v;
+      },
+    });
+    const offsetInput = el('input', {
+      type: 'number', step: 'any', value: t.count.offset ?? 0, class: 'bound-scale',
+      oninput: (e) => {
+        const v = parseFloat(e.target.value);
+        if (isFinite(v)) t.count.offset = v;
+      },
+    });
+    const unbindBtn = el('button', {
+      class: 'bound-unbind', title: 'unbind count to a fixed value', html: '✕',
+      onclick: (e) => {
+        e.stopPropagation();
+        t.count = Math.max(1, Math.round((t.count.offset || 0) + (t.count.scale || 0) * 0.5));
+        refresh();
+      },
+    });
+    countControl = el('div', { class: 'bound-editor' }, [
+      countPill,
+      el('span', { html: '×', class: 'bound-mul' }), scaleInput,
+      el('span', { html: '+', class: 'bound-mul' }), offsetInput,
+      unbindBtn,
+    ]);
+  } else {
+    const inp = el('input', {
+      type: 'number', step: 1, min: 0, value: t.count ?? 0,
+      oninput: (e) => { t.count = parseInt(e.target.value, 10) || 0; },
+    });
+    const bindBtn = el('button', {
+      class: 'bound-unbind', title: 'bind count to a source', html: '🔗',
+      onclick: (e) => {
+        e.stopPropagation();
+        t.count = { source: 'audio.drum_band.kick', scale: 200, offset: 50 };
+        refresh();
+      },
+    });
+    countControl = el('div', { class: 'bound-editor' }, [inp, el('span'), bindBtn]);
+  }
+
+  const deleteButton = el('button', {
+    class: 'grad-btn', html: 'remove',
+    onclick: () => {
+      emitter.config.triggers.splice(i, 1);
+      refresh();
+    },
+  });
+
+  card.appendChild(labelRow('source',    sourcePill));
+  card.appendChild(labelRow('threshold', thresholdInput));
+  card.appendChild(labelRow('count',     countControl));
+  const actions = el('div', { class: 'burst-actions' });
+  actions.appendChild(deleteButton);
+  card.appendChild(actions);
+  return card;
+}
+
+// One-line summary at the top of the Trigger section telling the user
+// which of the three spawn sources are active. Keeps the user oriented
+// when a long list of bursts/triggers/rate-bound is visible below.
+function triggerModeSummary(emitter) {
+  const c = emitter.config;
+  const parts = [];
+  // Continuous: rate is non-zero scalar OR rate is bound (always treated
+  // as active since the bound value at runtime is the effective rate).
+  const rate = c.rate;
+  if (rate !== null && typeof rate === 'object' && 'source' in rate) {
+    parts.push(`continuous (${rate.source.replace(/^audio\./, '')} × ${rate.scale ?? 1})`);
+  } else if (typeof rate === 'number' && rate > 0) {
+    parts.push(`continuous (${rate}/s)`);
+  }
+  // Bursts: count of one-shots and repeating ones separately.
+  const bursts = c.bursts || [];
+  if (bursts.length) {
+    const reps = bursts.filter(b => b.repeat).length;
+    const oneshots = bursts.length - reps;
+    if (oneshots) parts.push(`${oneshots} burst${oneshots > 1 ? 's' : ''}`);
+    if (reps)     parts.push(`${reps} repeating burst${reps > 1 ? 's' : ''}`);
+  }
+  // Audio triggers.
+  const trigs = c.triggers || [];
+  if (trigs.length) parts.push(`${trigs.length} audio trigger${trigs.length > 1 ? 's' : ''}`);
+
+  const summary = parts.length === 0
+    ? 'spawning: nothing — set a rate, add a burst, or add an audio trigger'
+    : 'spawning: ' + parts.join(' + ');
+  return el('div', { class: 'trigger-summary', html: summary });
+}
+
+function triggersEditor(emitter) {
+  const wrap = el('div', { class: 'bursts' });
+  const list = el('div', { class: 'bursts' });
+  function refresh() {
+    list.innerHTML = '';
+    (emitter.config.triggers || []).forEach((t, i) => {
+      list.appendChild(triggerCard(emitter, t, i, refresh));
+    });
+  }
+  refresh();
+  wrap.appendChild(list);
+  const addButton = el('button', {
+    class: 'grad-btn', html: '+ trigger',
+    onclick: () => {
+      if (!emitter.config.triggers) emitter.config.triggers = [];
+      emitter.config.triggers.push({ source: 'audio.beat.flash', threshold: 0.7, count: 100 });
+      refresh();
+    },
+  });
+  wrap.appendChild(addButton);
+  return wrap;
+}
+
+function shapeEditor(emitter) {
+  const wrap = el('div');
+  const sh = emitter.config.shape;
+  // Shape-type dropdown
+  const sel = el('select');
+  for (const t of Object.keys(SHAPE_FACTORIES)) {
+    const opt = el('option', { value: t, html: t });
+    if (sh.type === t) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', () => {
+    emitter.config.shape = SHAPE_FACTORIES[sel.value]();
+    buildPanel();
+  });
+  wrap.appendChild(el('div', { class: 'row' }, [el('label', { html: 'type' }), sel, el('span')]));
+  // Per-shape params
+  for (const [key, def] of Object.entries(sh.schema || {})) {
+    if (def.type === 'float') wrap.appendChild(rowSlider(key, sh.params, key, def.min, def.max, def.step));
+    else if (def.type === 'bool') wrap.appendChild(rowToggle(key, sh.params, key));
+    else if (def.type === 'enum') wrap.appendChild(rowEnum(key, sh.params, key, def.options));
+  }
+  return wrap;
+}
+
+// (legacy moduleBlock removed — superseded by moduleCard in renderEmitterTab block)
+
+function rowFromSchema(key, def, params) {
+  if (def.type === 'float') {
+    if (def.bindable) return rowBindableSlider(key, params, key, def.min, def.max, def.step);
+    return rowSlider(key, params, key, def.min, def.max, def.step);
+  }
+  if (def.type === 'enum')  return rowEnum(key, params, key, def.options);
+  if (def.type === 'curve' || def.type === 'gradient') return el('div'); // handled below
+  return el('div', { html: 'unknown: ' + def.type });
+}
+
+// Bindable scalar row: shows either a slider + 🔗 link, or a "bound: <source>" pill.
+function rowBindableSlider(label, target, key, min, max, step) {
+  if (isSourceBinding(target[key])) {
+    const pill = el('div', { class: 'bound-pill' });
+    pill.innerHTML = '<span class="src">' + target[key].source + '</span>';
+    pill.addEventListener('click', () => openSourcePicker(target, key, pill, { min, max, step }));
+    return el('div', { class: 'row row-bindable' }, [
+      el('label', { html: label }), pill, el('span'), el('span'),
+    ]);
+  }
+  const valEl = el('span', { class: 'v', html: fmt(target[key], step) });
+  const inp = el('input', { type: 'range', min, max, step, value: target[key],
+    oninput: (e) => {
+      const v = parseFloat(e.target.value);
+      target[key] = step >= 1 ? Math.round(v) : v;
+      valEl.textContent = fmt(target[key], step);
+    } });
+  const link = el('span', { class: 'link-btn', title: 'bind to source', html: '🔗',
+    onclick: (e) => { e.stopPropagation(); openSourcePicker(target, key, link, { min, max, step }); } });
+  return el('div', { class: 'row row-bindable' }, [
+    el('label', { html: label }), inp, link, valEl,
+  ]);
+}
+
+// ---------- source picker popover ----------
+// Source registry is grouped by collapsible categories. Audio-related
+// groups are split into focused sub-categories (mix / bands / drums /
+// per-stem / onsets / chroma) so the picker isn't a wall of 70+ rows.
+const SOURCE_LIST = (() => {
+  const STEMS = ['vocals','drums','bass','other','guitar','piano'];
+  const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  // Format defaultRange [a,b] as "[a,~b]" — the tilde flags an
+  // approximate / typical-loud calibration (most ranges are P75-ish, not
+  // absolute max). When the caller supplies an explicit `rangeStr`, use
+  // it verbatim (covers non-numeric labels like "varies", "scalar", "int").
+  const fmt = (id, fallback) => {
+    if (fallback) return fallback;
+    const src = getSource(id);
+    if (!src || !src.defaultRange) return '?';
+    const [lo, hi] = src.defaultRange;
+    const tildeLo = lo === 0 || lo === Math.round(lo) ? '' : '~';
+    const tildeHi = hi >= 1000 ? '' : '~';
+    const fmtN = (n) => Math.abs(n) >= 1000 ? Math.round(n / 100) / 10 + 'k'
+                     : Math.abs(n) >= 1     ? (Math.round(n * 10) / 10).toString()
+                                            : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    return `[${tildeLo}${fmtN(lo)},${tildeHi}${fmtN(hi)}]`;
+  };
+  const r = (id, desc, rangeStr, audio = false) => ({ id, desc, range: fmt(id, rangeStr), audio });
+  const out = {
+    'Per-particle': [
+      r('life',    'age / lifetime',                  '[0,1]'),
+      r('age',     'seconds since spawn',             '[0,∞)'),
+      r('speed',   '|velocity|',                      '[0,~30]'),
+      r('posY',    'world Y position',                'varies'),
+      r('radial',  'distance from origin',            '[0,~20]'),
+      r('random',  'per-particle stable rand',        '[0,1]'),
+    ],
+    'System': [
+      r('time',  'seconds since system start',        '[0,∞)'),
+      r('frame', 'integer frame counter',             'int'),
+    ],
+    'Audio · Mix': [
+      r('audio.rms',      'mix RMS',                  null,       true),
+      r('audio.flux',     'spectral flux',            null,       true),
+      r('audio.centroid', 'centroid (Hz)',            '[0,10k]',  true),
+      r('audio.rolloff',  'rolloff (Hz)',             '[0,22k]',  true),
+      r('audio.flatness', 'spectral flatness',        null,       true),
+      r('audio.zcr',      'zero-cross rate',          null,       true),
+    ],
+    'Audio · Bands (7-split)': [
+      r('audio.bands.sub',        '20-60 Hz',         null, true),
+      r('audio.bands.bass',       '60-250 Hz',        null, true),
+      r('audio.bands.low_mid',    '250-500 Hz',       null, true),
+      r('audio.bands.mid',        '500-2 k',          null, true),
+      r('audio.bands.high_mid',   '2-4 k',            null, true),
+      r('audio.bands.presence',   '4-8 k',            null, true),
+      r('audio.bands.brilliance', '8 k +',            null, true),
+    ],
+    'Audio · Drum components': [
+      r('audio.drum_band.kick',   'kick band 20-120Hz', null, true),
+      r('audio.drum_band.snare',  'snare band',         null, true),
+      r('audio.drum_band.hat',    'hat band 6-12k',     null, true),
+      r('audio.drum_band.cymbal', 'cymbal band 12k+',   null, true),
+    ],
+    'Audio · Beat / BPM': [
+      r('audio.beat.flash', 'beat impulse',           '[0,1]',  true),
+      r('audio.beat.phase', 'beat phase 0..1',        '[0,1]',  true),
+      r('audio.bpm',        'track BPM',              'scalar', true),
+    ],
+  };
+  // One sub-category per stem so each one stays compact (3 rows).
+  for (const s of STEMS) {
+    out['Audio · Stem · ' + s] = [
+      r('audio.stems.' + s + '.rms',      s + ' RMS',      null, true),
+      r('audio.stems.' + s + '.flux',     s + ' flux',     null, true),
+      r('audio.stems.' + s + '.centroid', s + ' centroid', null, true),
+    ];
+  }
+  // Onsets — stems + drum components in one group.
+  out['Audio · Onsets'] = [
+    ...STEMS.map(s => r('audio.onsets.' + s + '.flash', s + ' onset flash', '[0,1]', true)),
+    ...['kick','snare','hat'].map(c => r('audio.onsets.' + c + '.flash', c + ' onset flash', '[0,1]', true)),
+  ];
+  // Chroma — three variants, one sub-category each.
+  out['Audio · Chroma · mix']      = NOTES.map(n => r('audio.chroma.' + n,          'chroma ' + n, '[0,1]', true));
+  out['Audio · Chroma · harmonic'] = NOTES.map(n => r('audio.chroma_harmonic.' + n, 'chroma ' + n, '[0,1]', true));
+  out['Audio · Chroma · stems']    = NOTES.map(n => r('audio.chroma_stems.' + n,    'chroma ' + n, '[0,1]', true));
+  return out;
+})();
+// Categories collapsed by default to keep the popover scannable; remembers
+// state across re-opens so the user's expansion choices persist.
+const _sourceCatExpanded = {
+  'Per-particle': true, 'System': true, 'Audio · Mix': true,
+  // everything else starts collapsed
+};
+// ---------- custom HSV color picker ----------
+let _colorPopover = null;
+function closeColorPicker() {
+  if (_colorPopover) { _colorPopover.remove(); _colorPopover = null; }
+}
+function rgbToHsv(r, g, b) {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+  }
+  h = (h * 60 + 360) % 360;
+  const s = max === 0 ? 0 : d / max;
+  return { h, s, v: max };
+}
+function hsvToRgb(h, s, v) {
+  const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+  let r = 0, g = 0, b = 0;
+  if (h < 60)       { r = c; g = x; }
+  else if (h < 120) { r = x; g = c; }
+  else if (h < 180) { g = c; b = x; }
+  else if (h < 240) { g = x; b = c; }
+  else if (h < 300) { r = x; b = c; }
+  else              { r = c; b = x; }
+  return { r: r + m, g: g + m, b: b + m };
+}
+function hexFromRgb(r, g, b) {
+  return '#' + [r, g, b].map(v => Math.round(Math.min(1, Math.max(0, v)) * 255).toString(16).padStart(2, '0')).join('');
+}
+function openColorPicker(anchorEl, initRgb, onChange) {
+  closeColorPicker();
+  let { h, s, v } = rgbToHsv(initRgb.r, initRgb.g, initRgb.b);
+  const pop = el('div', { class: 'color-pop' });
+  const sat = el('div', { class: 'cp-sat' });
+  const satThumb = el('div', { class: 'cp-sat-thumb' });
+  sat.appendChild(satThumb);
+  const hue = el('div', { class: 'cp-hue' });
+  const hueThumb = el('div', { class: 'cp-hue-thumb' });
+  hue.appendChild(hueThumb);
+  const preview = el('div', { class: 'cp-preview' });
+  const hexInp = el('input', { class: 'cp-hex', type: 'text', spellcheck: 'false', maxlength: 7 });
+
+  function emit() {
+    const rgb = hsvToRgb(h, s, v);
+    preview.style.background = hexFromRgb(rgb.r, rgb.g, rgb.b);
+    hexInp.value = hexFromRgb(rgb.r, rgb.g, rgb.b);
+    sat.style.setProperty('--hue-color', hexFromRgb(...Object.values(hsvToRgb(h, 1, 1))));
+    satThumb.style.left = (s * 100) + '%';
+    satThumb.style.top  = ((1 - v) * 100) + '%';
+    hueThumb.style.left = ((h / 360) * 100) + '%';
+    onChange(rgb);
+  }
+
+  function dragSat(ev) {
+    const rect = sat.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+    const y = Math.max(0, Math.min(1, (ev.clientY - rect.top)  / rect.height));
+    s = x; v = 1 - y; emit();
+  }
+  function dragHue(ev) {
+    const rect = hue.getBoundingClientRect();
+    const x = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+    h = x * 360; emit();
+  }
+  function bindDrag(target, handler) {
+    target.addEventListener('mousedown', (ev) => {
+      ev.preventDefault();
+      handler(ev);
+      const move = (e) => handler(e);
+      const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+  }
+  bindDrag(sat, dragSat);
+  bindDrag(hue, dragHue);
+
+  hexInp.addEventListener('change', () => {
+    const m = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(hexInp.value.trim());
+    if (!m) return;
+    let hh = m[1]; if (hh.length === 3) hh = hh.split('').map(c => c + c).join('');
+    const r = parseInt(hh.slice(0,2), 16) / 255;
+    const g = parseInt(hh.slice(2,4), 16) / 255;
+    const b = parseInt(hh.slice(4,6), 16) / 255;
+    const hsv = rgbToHsv(r, g, b);
+    h = hsv.h; s = hsv.s; v = hsv.v; emit();
+  });
+
+  pop.appendChild(sat);
+  pop.appendChild(hue);
+  pop.appendChild(el('div', { class: 'cp-foot' }, [preview, hexInp]));
+  document.body.appendChild(pop);
+  emit();
+
+  // Position to the LEFT of the inspector panel (which lives on the right).
+  const rect = anchorEl.getBoundingClientRect();
+  pop.style.right = (window.innerWidth - rect.left + 6) + 'px';
+  pop.style.top   = Math.max(8, rect.top - 4) + 'px';
+  _colorPopover = pop;
+  setTimeout(() => {
+    const off = (e) => {
+      if (_colorPopover && !_colorPopover.contains(e.target) && e.target !== anchorEl) {
+        closeColorPicker();
+        document.removeEventListener('click', off);
+      }
+    };
+    document.addEventListener('click', off);
+  }, 0);
+}
+
+let _sourcePopover = null;
+function closeSourcePicker() {
+  if (_sourcePopover) {
+    if (_sourcePopover._backdrop) _sourcePopover._backdrop.remove();
+    _sourcePopover.remove();
+    _sourcePopover = null;
+  }
+}
+function openSourcePicker(target, key, anchorEl, opts = {}) {
+  closeSourcePicker();
+
+  // Backdrop dim — click anywhere outside the panel to dismiss.
+  const backdrop = el('div', { class: 'source-backdrop' });
+  backdrop.addEventListener('click', closeSourcePicker);
+
+  const pop = el('div', { class: 'source-pop' });
+  pop.addEventListener('click', (e) => e.stopPropagation());
+
+  // Header: title + live search + close button.
+  const search = el('input', {
+    class: 'source-pop-search',
+    type: 'search', placeholder: 'filter… (e.g. kick, vocals, chroma)',
+    spellcheck: 'false',
+  });
+  const closeBtn = el('button', { class: 'source-pop-close', type: 'button', html: '✕', title: 'close (Esc)' });
+  closeBtn.addEventListener('click', closeSourcePicker);
+  pop.appendChild(el('div', { class: 'source-pop-head' }, [
+    el('span', { class: 'source-pop-title', html: 'bind to source' }),
+    search,
+    closeBtn,
+  ]));
+
+  // Multi-column grid of category cards.
+  const grid = el('div', { class: 'source-pop-grid' });
+  const categoryEls = [];
+
+  for (const [cat, items] of Object.entries(SOURCE_LIST)) {
+    const isAudio = cat.startsWith('Audio');
+    const noFeed = isAudio && !ps.audioFeed;
+    const card = el('div', { class: 'sp-category' + (isAudio ? ' is-audio' : '') });
+    const head = el('div', { class: 'sp-cat' });
+    head.innerHTML =
+      `<span class="sp-cat-name">${cat}</span>` +
+      `<span class="sp-cat-count">${items.length}</span>` +
+      (noFeed ? '<span class="sp-cat-warn">load a track to enable</span>' : '');
+    card.appendChild(head);
+    const body = el('div', { class: 'sp-cat-body' });
+    const itemEls = [];
+    for (const s of items) {
+      const disabled = s.audio && !ps.audioFeed;
+      const item = el('div', { class: 'sp-item' + (disabled ? ' disabled' : '') });
+      item.appendChild(el('span', { html: s.id }));
+      item.appendChild(el('span', { class: 'sp-range', html: s.range }));
+      if (!disabled) {
+        item.addEventListener('click', () => {
+          // writeAsString mode: trigger.source needs the bare ID string,
+          // not a Bound object. Other call sites store a Bound to enable
+          // scale/normalise editing.
+          target[key] = opts.writeAsString
+            ? s.id
+            : { source: s.id, normalise: true };
+          closeSourcePicker();
+          buildPanel();
+        });
+      }
+      body.appendChild(item);
+      itemEls.push({ el: item, src: s });
+    }
+    card.appendChild(body);
+    grid.appendChild(card);
+    categoryEls.push({ card, items: itemEls });
+  }
+  pop.appendChild(grid);
+
+  // Optional unbind footer when the row already holds a Bound — same
+  // semantics as before (snapshot the current sampled value to a constant).
+  if (isSourceBinding(target[key])) {
+    const unbind = el('div', { class: 'sp-unbind', html: '× unbind (snapshot value)' });
+    unbind.addEventListener('click', () => {
+      let snap = 0;
+      try { if (ps.alive > 0) snap = evalBoundScalar(target[key], 0, ps, null); } catch (e) {}
+      target[key] = isFinite(snap) ? +snap.toFixed(4) : 0;
+      closeSourcePicker();
+      buildPanel();
+    });
+    pop.appendChild(unbind);
+  }
+
+  // Live search — hides items / categories that don't match. Substring match
+  // against id and any descriptive text on the source row.
+  function applyFilter() {
+    const q = search.value.trim().toLowerCase();
+    for (const { card, items } of categoryEls) {
+      let visibleCount = 0;
+      for (const { el: row, src } of items) {
+        const hay = (src.id + ' ' + (src.desc || '')).toLowerCase();
+        const show = !q || hay.includes(q);
+        row.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+      }
+      card.style.display = visibleCount === 0 ? 'none' : '';
+    }
+  }
+  search.addEventListener('input', applyFilter);
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(pop);
+  setTimeout(() => search.focus(), 0);
+  _sourcePopover = pop;
+  _sourcePopover._backdrop = backdrop;
+
+  // Esc key to dismiss
+  const esc = (e) => {
+    if (e.key === 'Escape') { closeSourcePicker(); document.removeEventListener('keydown', esc); }
+  };
+  document.addEventListener('keydown', esc);
+}
+
+function rowSlider(label, target, key, min, max, step) {
+  // If the value is a Bound (object with `source`), render an inline
+  // editor: clickable source pill (→ source picker), an editable scale
+  // multiplier, and an × button to unbind back to a constant. Lets the
+  // user retune a bound rate / position without deleting and re-creating.
+  const v0 = target[key];
+  if (v0 !== null && typeof v0 === 'object' && 'source' in v0) {
+    const pill = el('span', {
+      class: 'bound-pill',
+      title: 'click to change source',
+      html: '🔗 ' + v0.source,
+    });
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openSourcePicker(target, key, pill, { min, max, step });
+    });
+    const scaleInp = el('input', {
+      type: 'number', step: 'any',
+      value: v0.scale !== undefined ? v0.scale : 1,
+      title: 'scale (multiplier on the source value)',
+      class: 'bound-scale',
+    });
+    scaleInp.addEventListener('change', () => {
+      const v = parseFloat(scaleInp.value);
+      if (isFinite(v)) v0.scale = v;
+    });
+    const unbind = el('button', {
+      class: 'bound-unbind', title: 'unbind (revert to constant)',
+      html: '✕',
+    });
+    unbind.addEventListener('click', (e) => {
+      e.stopPropagation();
+      let snap = 0;
+      try { if (ps.alive > 0) snap = evalBoundScalar(v0, 0, ps, null); } catch (_) {}
+      target[key] = isFinite(snap) ? +snap.toFixed(4) : 0;
+      buildPanel();
+    });
+    const editor = el('div', { class: 'bound-editor' }, [pill, el('span', { html: '×', class: 'bound-mul' }), scaleInp]);
+    return el('div', { class: 'row row-bound' }, [
+      el('label', { html: label }),
+      editor,
+      unbind,
+    ]);
+  }
+  const get = () => target[key], set = (v) => { target[key] = v; };
+  const inp = el('input', { type: 'range', min, max, step, value: target[key] });
+  const valEl = makeValueInput(get, set, inp, min, max, step);
+  inp.addEventListener('input', (e) => {
+    const v = parseFloat(e.target.value);
+    target[key] = step >= 1 ? Math.round(v) : v;
+    valEl.value = fmt(target[key], step);
+  });
+  return el('div', { class: 'row' }, [el('label', { html: label }), inp, valEl]);
+}
+function rowEnum(label, target, key, options, onChange) {
+  const sel = el('select', {
+    onchange: (e) => { target[key] = e.target.value; if (onChange) onChange(); }
+  });
+  for (const o of options) {
+    const opt = el('option', { value: o, html: o });
+    if (target[key] === o) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  return el('div', { class: 'row' }, [el('label', { html: label }), sel, el('span')]);
+}
+function rowToggle(label, target, key) {
+  const cb = el('input', { type: 'checkbox',
+    oninput: (e) => { target[key] = e.target.checked; },
+  });
+  cb.checked = !!target[key];
+  return el('div', { class: 'row' }, [el('label', { html: label }), cb, el('span')]);
+}
+function fmt(v, step) {
+  if (step >= 1)    return Math.round(v).toString();
+  if (step >= 0.1)  return v.toFixed(1);
+  if (step >= 0.01) return v.toFixed(2);
+  return v.toFixed(3);
+}
+
+function curveRow(target, key) {
+  const wrap = el('div');
+  wrap.appendChild(el('label', { class: 'v', html: 'curve keys' }));
+  const ta = el('textarea', { spellcheck: 'false' });
+  ta.value = JSON.stringify(target[key].keys);
+  ta.addEventListener('change', () => {
+    try {
+      const keys = JSON.parse(ta.value);
+      target[key].update(keys);
+      drawCurvePreview(canvasEl, target[key]);
+    } catch (e) {}
+  });
+  wrap.appendChild(ta);
+  const canvasEl = el('canvas', { class: 'preview', width: 280, height: 28 });
+  wrap.appendChild(canvasEl);
+  drawCurvePreview(canvasEl, target[key]);
+  return wrap;
+}
+function drawCurvePreview(canvas, curve) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.fillStyle = '#0c0a07'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#ff4b1f'; ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  for (let x = 0; x <= W; x++) {
+    const y = curve.sample(x / W);
+    const py = H - 2 - y * (H - 4);
+    if (x === 0) ctx.moveTo(x, py); else ctx.lineTo(x, py);
+  }
+  ctx.stroke();
+}
+
+function gradientRow(target, key) {
+  const wrap = el('div');
+  wrap.appendChild(el('label', { class: 'v', html: 'gradient keys' }));
+  const ta = el('textarea', { spellcheck: 'false' });
+  ta.value = JSON.stringify(target[key].keys);
+  ta.addEventListener('change', () => {
+    try {
+      const keys = JSON.parse(ta.value);
+      target[key].update(keys);
+      drawGradPreview(canvasEl, target[key]);
+    } catch (e) {}
+  });
+  wrap.appendChild(ta);
+  const canvasEl = el('canvas', { class: 'preview', width: 280, height: 28 });
+  wrap.appendChild(canvasEl);
+  drawGradPreview(canvasEl, target[key]);
+  return wrap;
+}
+function drawGradPreview(canvas, g) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const tmp = [0,0,0,0];
+  for (let x = 0; x < W; x++) {
+    g.sample(x / (W - 1), tmp);
+    ctx.fillStyle = `rgba(${(tmp[0]*255)|0},${(tmp[1]*255)|0},${(tmp[2]*255)|0},${tmp[3]})`;
+    ctx.fillRect(x, 0, 1, H);
+  }
+}
+
+// ----- module picker (search/category) -----
+function openPicker(emitter) {
+  picker.dataset.target = ps.emitters.indexOf(emitter);
+  picker.classList.add('show');
+  pickerSearch.value = '';
+  renderPicker('');
+  pickerSearch.focus();
+}
+function renderPicker(query) {
+  pickerList.innerHTML = '';
+  const q = query.trim().toLowerCase();
+  const byCat = {};
+  for (const def of MODULE_DEFS) {
+    if (q && !def.name.toLowerCase().includes(q) && !(def.doc || '').toLowerCase().includes(q)) continue;
+    const cat = def.category || 'Other';
+    (byCat[cat] = byCat[cat] || []).push(def);
+  }
+  for (const [cat, items] of Object.entries(byCat)) {
+    pickerList.appendChild(el('div', { class: 'pcat', html: cat }));
+    for (const def of items) {
+      const row = el('div', { class: 'pitem',
+        onclick: () => addModule(parseInt(picker.dataset.target, 10), def) },
+        [
+          el('div', { class: 'pname', html: def.name }),
+          el('div', { class: 'pdoc',  html: def.doc || '' }),
+        ]);
+      pickerList.appendChild(row);
+    }
+  }
+}
+function addModule(emitterIdx, def) {
+  // Bulk-add path: skip emitters already carrying a module of this name,
+  // mint a fresh factory instance per peer (modules can't be deep-cloned
+  // safely — they're function objects with closure state).
+  if (_bulkPickerEmitters) {
+    const targets = _bulkPickerEmitters;
+    _bulkPickerEmitters = null;
+    const m0 = def.factory();
+    const name = m0.moduleName;
+    let added = 0;
+    for (const e of targets) {
+      if (!e.config.modules) e.config.modules = [];
+      if (name && e.config.modules.some(mm => mm.moduleName === name)) continue;
+      e.config.modules.push(added === 0 ? m0 : def.factory());
+      added++;
+    }
+    picker.classList.remove('show');
+    buildPanel();
+    return;
+  }
+  const m = def.factory();
+  const e = ps.emitters[emitterIdx];
+  if (!e.config.modules) e.config.modules = [];
+  e.config.modules.push(m);
+  picker.classList.remove('show');
+  buildPanel();
+}
+pickerSearch.addEventListener('input', e => renderPicker(e.target.value));
+window.addEventListener('keydown', e => { if (e.key === 'Escape') picker.classList.remove('show'); });
+
+// ============================================================ main loop
+let last = performance.now();
+let view = mat4LookAt([0, 4, 18], [0, 0, 0], [0, 1, 0]);
+let proj = mat4Perspective(Math.PI / 3.4, canvas.width / canvas.height, 0.5, 200);
+
+// rolling-window FPS: keep last ~30 frame timestamps, compute average dt.
+const fpsWindow = [];
+const FPS_WINDOW_SIZE = 30;
+function pushFps(now) {
+  fpsWindow.push(now);
+  while (fpsWindow.length > FPS_WINDOW_SIZE) fpsWindow.shift();
+}
+function currentFps() {
+  if (fpsWindow.length < 2) return 0;
+  const span = (fpsWindow[fpsWindow.length - 1] - fpsWindow[0]) / 1000;
+  return span > 0 ? (fpsWindow.length - 1) / span : 0;
+}
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  pushFps(now);
+  const dt = paused ? 0 : Math.min(0.05, (now - last) / 1000);
+  last = now;
+
+  const eye = [
+    Math.cos(camAngle) * camDist * Math.cos(camAngleY),
+    Math.sin(camAngleY) * camDist,
+    Math.sin(camAngle) * camDist * Math.cos(camAngleY),
+  ];
+  view = mat4LookAt(eye, [0, 0, 0], [0, 1, 0]);
+  proj = mat4Perspective(Math.PI / 3.4, canvas.width / canvas.height, 0.5, 200);
+
+  const t0 = performance.now();
+  if (!paused) ps.update(dt);
+  const tSim = performance.now() - t0;
+
+  // 1. render scene to postfx FBO
+  const bg = stage.bgColor;
+  const r0 = performance.now();
+  ps.render({
+    view, proj,
+    pixelScale: Math.min(window.devicePixelRatio || 1, 2),
+    bgColor: bg,
+    postfx: {
+      enableBloom:    stage.enableBloom,
+      bloomThreshold: stage.bloomThreshold,
+      bloomSoftKnee:  stage.bloomSoftKnee,
+      bloomIntensity: stage.bloomIntensity,
+      blurPasses:     stage.blurPasses,
+      exposure:       stage.exposure,
+      vignette:       stage.vignette,
+    },
+  });
+  const tRen = performance.now() - r0;
+
+  // PostFX runs inside ps.render() on WebGPU.
+
+  const gStats = ps.getStats();
+  // Prefer real presented-frame rate (from onSubmittedWorkDone) when the
+  // backend reports it. The rAF-based currentFps() lies under GPU
+  // saturation: rAF fires at display refresh while submitted work piles
+  // up and frames drop silently. realFps counts actual GPU completions.
+  const fps = (typeof gStats.realFps === 'number' && gStats.realFps > 0) ? gStats.realFps : currentFps();
+  const backendEl = document.getElementById('stat-backend');
+  backendEl.textContent = `backend: ${gStats.backend}`;
+  backendEl.className = 'stat-backend backend-' + gStats.backend;
+  // Honor stage.showStats — toggleable from the General tab.
+  const statsEl = document.getElementById('stats');
+  if (statsEl) statsEl.classList.toggle('hidden', !stage.showStats);
+  document.getElementById('stat-fps').textContent = fps.toFixed(0);
+  document.getElementById('stat-alive').textContent = gStats.alive.toLocaleString();
+  document.getElementById('stat-sim').textContent = gStats.simMs.toFixed(2);
+  document.getElementById('stat-render').textContent = gStats.renderMs.toFixed(2);
+  document.getElementById('stat-gpumem').textContent = (gStats.gpuMemBytes / 1024 / 1024).toFixed(1);
+  // Live audio dock: playhead, EQ bars, beat pulse, drum onset lights.
+  updateAudioDockLive();
+  // Scene overlay (grid + emitter markers + gizmo). SVG layer above the
+  // canvas; pointer-events: none so canvas drags pass through.
+  updateSceneOverlay();
+  updateGizmo();
+}
+
+// ============================================================ scene overlay
+// SVG-based overlay for the reference grid and selection markers. Drawn each
+// frame off `view` / `proj`. Uses fixed pools of <line>/<rect> elements so
+// the hot path mutates attributes only — no DOM mint/destroy per frame.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const _overlay = {
+  svg:        document.getElementById('scene-overlay'),
+  gridGroup:  null,
+  gridLines:  [],            // pool of <line> elements
+  markerGroup: null,
+  markers:     [],           // pool of <g> elements (one per emitter slot)
+  boxGroup:    null,         // wireframe for constraint.box
+  boxLines:    [],           // 12 <line> elements
+  initialized: false,
+};
+
+function _initSceneOverlay() {
+  if (_overlay.initialized) return;
+  if (!_overlay.svg) return;
+  _overlay.gridGroup = document.createElementNS(SVG_NS, 'g');
+  _overlay.gridGroup.setAttribute('id', 'overlay-grid');
+  _overlay.svg.appendChild(_overlay.gridGroup);
+  // 21 lines along X (constant Z) + 21 lines along Z (constant X) = 42.
+  for (let i = 0; i < 42; i++) {
+    const ln = document.createElementNS(SVG_NS, 'line');
+    ln.setAttribute('stroke', 'rgba(240,235,224,0.10)');
+    ln.setAttribute('stroke-width', '1');
+    _overlay.gridGroup.appendChild(ln);
+    _overlay.gridLines.push(ln);
+  }
+  _overlay.markerGroup = document.createElementNS(SVG_NS, 'g');
+  _overlay.markerGroup.setAttribute('id', 'overlay-markers');
+  _overlay.svg.appendChild(_overlay.markerGroup);
+  // Wireframe-box pool: 12 edges of a cuboid. Only updated when a
+  // constraint.box module is present on some emitter; otherwise hidden.
+  _overlay.boxGroup = document.createElementNS(SVG_NS, 'g');
+  _overlay.boxGroup.setAttribute('id', 'overlay-constraint-box');
+  _overlay.svg.appendChild(_overlay.boxGroup);
+  for (let i = 0; i < 12; i++) {
+    const ln = document.createElementNS(SVG_NS, 'line');
+    ln.setAttribute('stroke', 'rgba(140,200,255,0.45)');
+    ln.setAttribute('stroke-width', '1.2');
+    ln.setAttribute('stroke-dasharray', '4 3');
+    _overlay.boxGroup.appendChild(ln);
+    _overlay.boxLines.push(ln);
+  }
+  _overlay.initialized = true;
+}
+
+// Scan all emitters for the first enabled constraint.box; return {sx, sy, sz}
+// or null. The box is treated as scene-level even though it's per-emitter —
+// most presets have a single containment shape.
+function _findConstraintBox() {
+  if (!ps?.emitters) return null;
+  for (const em of ps.emitters) {
+    if (em.config?.disabled) continue;
+    const mods = em.config?.modules || [];
+    for (const m of mods) {
+      if (m.disabled) continue;
+      if (m.moduleName !== 'constraint.box') continue;
+      const p = m.params || {};
+      const sx = typeof p.sx === 'number' ? p.sx : 5;
+      const sy = typeof p.sy === 'number' ? p.sy : 5;
+      const sz = typeof p.sz === 'number' ? p.sz : 5;
+      return { sx, sy, sz };
+    }
+  }
+  return null;
+}
+
+// world (x,y,z) → screen CSS px in [0,cssW]×[0,cssH]; returns null when behind camera.
+function _projectWorld(p, viewM, projM, cssW, cssH) {
+  // clip = proj * view * (p, 1)
+  const x = p[0], y = p[1], z = p[2];
+  // view * p
+  const vx = viewM[0]*x + viewM[4]*y + viewM[8]*z  + viewM[12];
+  const vy = viewM[1]*x + viewM[5]*y + viewM[9]*z  + viewM[13];
+  const vz = viewM[2]*x + viewM[6]*y + viewM[10]*z + viewM[14];
+  const vw = viewM[3]*x + viewM[7]*y + viewM[11]*z + viewM[15];
+  // proj * (vx,vy,vz,vw)
+  const cx = projM[0]*vx + projM[4]*vy + projM[8]*vz  + projM[12]*vw;
+  const cy = projM[1]*vx + projM[5]*vy + projM[9]*vz  + projM[13]*vw;
+  const cz = projM[2]*vx + projM[6]*vy + projM[10]*vz + projM[14]*vw;
+  const cw = projM[3]*vx + projM[7]*vy + projM[11]*vz + projM[15]*vw;
+  if (cw <= 0.001) return null;
+  const ndx = cx / cw, ndy = cy / cw, ndz = cz / cw;
+  return [(ndx * 0.5 + 0.5) * cssW, (1 - (ndy * 0.5 + 0.5)) * cssH, ndz];
+}
+
+function updateSceneOverlay() {
+  _initSceneOverlay();
+  if (!_overlay.initialized) return;
+  const cssW = canvas.clientWidth || canvas.width;
+  const cssH = canvas.clientHeight || canvas.height;
+  // ── grid ──
+  const showGrid = !!stage.showGrid;
+  _overlay.gridGroup.style.display = showGrid ? '' : 'none';
+  if (showGrid) {
+    const N = 21;          // 21 lines per axis (-10..+10 step 1)
+    const HALF = 10;
+    let li = 0;
+    // Lines parallel to X (vary Z)
+    for (let k = 0; k < N; k++) {
+      const z = -HALF + k;
+      const a = _projectWorld([-HALF, 0, z], view, proj, cssW, cssH);
+      const b = _projectWorld([+HALF, 0, z], view, proj, cssW, cssH);
+      const ln = _overlay.gridLines[li++];
+      if (!a || !b) { ln.setAttribute('x1', '0'); ln.setAttribute('y1', '0'); ln.setAttribute('x2', '0'); ln.setAttribute('y2', '0'); ln.setAttribute('opacity', '0'); continue; }
+      ln.setAttribute('x1', a[0].toFixed(1)); ln.setAttribute('y1', a[1].toFixed(1));
+      ln.setAttribute('x2', b[0].toFixed(1)); ln.setAttribute('y2', b[1].toFixed(1));
+      ln.setAttribute('opacity', z === 0 ? '0.45' : '1');
+      ln.setAttribute('stroke-width', z === 0 ? '1.4' : '1');
+    }
+    // Lines parallel to Z (vary X)
+    for (let k = 0; k < N; k++) {
+      const x = -HALF + k;
+      const a = _projectWorld([x, 0, -HALF], view, proj, cssW, cssH);
+      const b = _projectWorld([x, 0, +HALF], view, proj, cssW, cssH);
+      const ln = _overlay.gridLines[li++];
+      if (!a || !b) { ln.setAttribute('x1', '0'); ln.setAttribute('y1', '0'); ln.setAttribute('x2', '0'); ln.setAttribute('y2', '0'); ln.setAttribute('opacity', '0'); continue; }
+      ln.setAttribute('x1', a[0].toFixed(1)); ln.setAttribute('y1', a[1].toFixed(1));
+      ln.setAttribute('x2', b[0].toFixed(1)); ln.setAttribute('y2', b[1].toFixed(1));
+      ln.setAttribute('opacity', x === 0 ? '0.45' : '1');
+      ln.setAttribute('stroke-width', x === 0 ? '1.4' : '1');
+    }
+  }
+  // ── constraint.box wireframe ──
+  const cb = _findConstraintBox();
+  if (cb) {
+    const { sx, sy, sz } = cb;
+    // 8 corners of the cuboid centered at origin.
+    const c = [
+      [-sx,-sy,-sz], [+sx,-sy,-sz], [+sx,-sy,+sz], [-sx,-sy,+sz],   // bottom (0..3)
+      [-sx,+sy,-sz], [+sx,+sy,-sz], [+sx,+sy,+sz], [-sx,+sy,+sz],   // top    (4..7)
+    ];
+    // 12 edges: 4 bottom, 4 top, 4 vertical.
+    const edges = [
+      [0,1],[1,2],[2,3],[3,0],
+      [4,5],[5,6],[6,7],[7,4],
+      [0,4],[1,5],[2,6],[3,7],
+    ];
+    const projected = c.map(p => _projectWorld(p, view, proj, cssW, cssH));
+    _overlay.boxGroup.style.display = '';
+    for (let i = 0; i < 12; i++) {
+      const [a, b] = edges[i];
+      const pa = projected[a], pb = projected[b];
+      const ln = _overlay.boxLines[i];
+      if (!pa || !pb) { ln.setAttribute('opacity', '0'); continue; }
+      ln.setAttribute('x1', pa[0].toFixed(1)); ln.setAttribute('y1', pa[1].toFixed(1));
+      ln.setAttribute('x2', pb[0].toFixed(1)); ln.setAttribute('y2', pb[1].toFixed(1));
+      ln.setAttribute('opacity', '1');
+    }
+  } else {
+    _overlay.boxGroup.style.display = 'none';
+  }
+  // ── selection markers ──
+  // Grow pool to cover any selected emitter.
+  const sel = (panelState.active.type === 'em') ? getSelectedEmitters() : [];
+  while (_overlay.markers.length < sel.length) {
+    const g = document.createElementNS(SVG_NS, 'g');
+    const r = document.createElementNS(SVG_NS, 'rect');
+    r.setAttribute('width', '14'); r.setAttribute('height', '14');
+    r.setAttribute('fill', 'none');
+    r.setAttribute('stroke-width', '1.5');
+    g.appendChild(r);
+    const dot = document.createElementNS(SVG_NS, 'circle');
+    dot.setAttribute('r', '2');
+    g.appendChild(dot);
+    _overlay.markerGroup.appendChild(g);
+    _overlay.markers.push(g);
+  }
+  for (let i = 0; i < _overlay.markers.length; i++) {
+    const g = _overlay.markers[i];
+    if (i >= sel.length) { g.style.display = 'none'; continue; }
+    const em = sel[i];
+    const pos = em.config.position || [0, 0, 0];
+    const s = _projectWorld(pos, view, proj, cssW, cssH);
+    if (!s) { g.style.display = 'none'; continue; }
+    g.style.display = '';
+    const c = em.config.initial?.color || [1, 0.5, 0.1, 1];
+    const css = rgbCss(c);
+    const rect = g.children[0];
+    const dot  = g.children[1];
+    rect.setAttribute('x', (s[0] - 7).toFixed(1));
+    rect.setAttribute('y', (s[1] - 7).toFixed(1));
+    rect.setAttribute('stroke', css);
+    dot.setAttribute('cx', s[0].toFixed(1));
+    dot.setAttribute('cy', s[1].toFixed(1));
+    dot.setAttribute('fill', css);
+  }
+}
+
+// ============================================================ translate gizmo
+// 3-axis translate gizmo at the selection centroid (or single emitter origin).
+// Fixed pixel length so it stays usable at any camera distance. Pointer events
+// are re-enabled on the gizmo handles only; the rest of the SVG overlay stays
+// transparent to mouse so canvas orbit/zoom keep working.
+const _gizmo = {
+  group: null,
+  axisLines: [null, null, null],
+  arrows:    [null, null, null],
+  axisScreen: [null, null, null], // {ux, uy, perPixelToWorld}
+  screen:     null,                // [x, y] of gizmo origin in CSS px
+  drag:       null,                // { axis, startX, startY, orig: Map<em, [x,y,z]>, sel: Em[] }
+};
+
+function _initGizmo() {
+  if (_gizmo.group) return;
+  if (!_overlay.svg) return;
+  if (typeof window !== 'undefined') window._g = _gizmo;
+  _gizmo.group = document.createElementNS(SVG_NS, 'g');
+  _gizmo.group.setAttribute('id', 'overlay-gizmo');
+  _overlay.svg.appendChild(_gizmo.group);
+  const COLORS = ['#ff5566', '#66ff66', '#5599ff'];
+  for (let i = 0; i < 3; i++) {
+    const ln = document.createElementNS(SVG_NS, 'line');
+    ln.setAttribute('stroke', COLORS[i]);
+    ln.setAttribute('stroke-width', '3');
+    ln.setAttribute('stroke-linecap', 'round');
+    ln.style.cursor = 'grab';
+    ln.style.pointerEvents = 'stroke';
+    ln.dataset.axis = String(i);
+    ln.addEventListener('mousedown', (ev) => _gizmoMouseDown(ev, i));
+    _gizmo.group.appendChild(ln);
+    _gizmo.axisLines[i] = ln;
+    const tip = document.createElementNS(SVG_NS, 'circle');
+    tip.setAttribute('r', '5');
+    tip.setAttribute('fill', COLORS[i]);
+    tip.style.cursor = 'grab';
+    tip.style.pointerEvents = 'auto';
+    tip.dataset.axis = String(i);
+    tip.addEventListener('mousedown', (ev) => _gizmoMouseDown(ev, i));
+    _gizmo.group.appendChild(tip);
+    _gizmo.arrows[i] = tip;
+  }
+}
+
+function updateGizmo() {
+  _initGizmo();
+  if (!_gizmo.group) return;
+  const sel = (panelState.active.type === 'em') ? getSelectedEmitters() : [];
+  if (sel.length === 0) { _gizmo.group.style.display = 'none'; return; }
+  const cssW = canvas.clientWidth || canvas.width;
+  const cssH = canvas.clientHeight || canvas.height;
+  let cx = 0, cy = 0, cz = 0;
+  for (const e of sel) {
+    const p = e.config.position || [0, 0, 0];
+    cx += p[0]; cy += p[1]; cz += p[2];
+  }
+  cx /= sel.length; cy /= sel.length; cz /= sel.length;
+  const center = _projectWorld([cx, cy, cz], view, proj, cssW, cssH);
+  if (!center) { _gizmo.group.style.display = 'none'; return; }
+  _gizmo.group.style.display = '';
+  _gizmo.screen = [center[0], center[1]];
+  const GIZMO_PX = 60;
+  for (let i = 0; i < 3; i++) {
+    const dp = [cx, cy, cz]; dp[i] += 1;
+    const sp = _projectWorld(dp, view, proj, cssW, cssH);
+    if (!sp) { _gizmo.axisLines[i].style.display = 'none'; _gizmo.arrows[i].style.display = 'none'; _gizmo.axisScreen[i] = null; continue; }
+    _gizmo.axisLines[i].style.display = '';
+    _gizmo.arrows[i].style.display    = '';
+    const dx = sp[0] - center[0], dy = sp[1] - center[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const tipX = center[0] + ux * GIZMO_PX, tipY = center[1] + uy * GIZMO_PX;
+    const ln = _gizmo.axisLines[i];
+    ln.setAttribute('x1', center[0].toFixed(1)); ln.setAttribute('y1', center[1].toFixed(1));
+    ln.setAttribute('x2', tipX.toFixed(1));      ln.setAttribute('y2', tipY.toFixed(1));
+    const tip = _gizmo.arrows[i];
+    tip.setAttribute('cx', tipX.toFixed(1));     tip.setAttribute('cy', tipY.toFixed(1));
+    // For drag math: 1 px of mouse along (ux,uy) corresponds to (1/len) world units along axis.
+    _gizmo.axisScreen[i] = { ux, uy, perPixelToWorld: 1 / len };
+  }
+}
+
+function _gizmoMouseDown(ev, axis) {
+  if (ev.button !== 0) return;
+  ev.stopImmediatePropagation();
+  ev.preventDefault();
+  const sel = getSelectedEmitters();
+  if (!sel.length) return;
+  const orig = new Map();
+  for (const e of sel) orig.set(e, (e.config.position || [0, 0, 0]).slice());
+  _gizmo.drag = { axis, startX: ev.clientX, startY: ev.clientY, orig, sel };
+  window.addEventListener('mousemove', _gizmoMouseMove, true);
+  window.addEventListener('mouseup',   _gizmoMouseUp,   true);
+  window.addEventListener('keydown',   _gizmoKey,       true);
+  window.addEventListener('contextmenu', _gizmoCancel,  true);
+}
+
+function _gizmoMouseMove(ev) {
+  if (!_gizmo.drag) return;
+  const a = _gizmo.axisScreen[_gizmo.drag.axis];
+  if (!a) return;
+  const dx = ev.clientX - _gizmo.drag.startX;
+  const dy = ev.clientY - _gizmo.drag.startY;
+  const screenAlong = dx * a.ux + dy * a.uy;
+  const worldDelta  = screenAlong * a.perPixelToWorld;
+  for (const [em, p0] of _gizmo.drag.orig) {
+    const p = em.config.position;
+    p[0] = p0[0]; p[1] = p0[1]; p[2] = p0[2];
+    p[_gizmo.drag.axis] += worldDelta;
+  }
+}
+
+function _gizmoMouseUp(ev) {
+  ev.stopImmediatePropagation();
+  _gizmoEnd();
+  buildPanel();
+}
+
+function _gizmoCancel(ev) {
+  if (ev) { ev.preventDefault(); ev.stopImmediatePropagation(); }
+  if (!_gizmo.drag) return;
+  for (const [em, p0] of _gizmo.drag.orig) {
+    const p = em.config.position;
+    p[0] = p0[0]; p[1] = p0[1]; p[2] = p0[2];
+  }
+  _gizmoEnd();
+  buildPanel();
+}
+
+function _gizmoKey(ev) {
+  if (ev.key === 'Escape') _gizmoCancel(ev);
+}
+
+function _gizmoEnd() {
+  _gizmo.drag = null;
+  window.removeEventListener('mousemove',   _gizmoMouseMove, true);
+  window.removeEventListener('mouseup',     _gizmoMouseUp,   true);
+  window.removeEventListener('keydown',     _gizmoKey,       true);
+  window.removeEventListener('contextmenu', _gizmoCancel,    true);
+}
+
+// ============================================================ click-pick
+// Capture-phase mousedown on the canvas: if cursor is within 12 px of any
+// emitter origin's projected position, that emitter is selected (with the
+// same Shift/Ctrl/Cmd modifier rules as the tab list) and the orbit handler
+// is suppressed via stopImmediatePropagation. Misses fall through to orbit.
+canvas.addEventListener('mousedown', (ev) => {
+  if (ev.button !== 0) return;
+  if (ev.altKey)  return;          // Alt held → fall through to legacy burst
+  if (!ps || !ps.emitters || !ps.emitters.length) return;
+  const rect = canvas.getBoundingClientRect();
+  const px = ev.clientX - rect.left;
+  const py = ev.clientY - rect.top;
+  const cssW = canvas.clientWidth, cssH = canvas.clientHeight;
+  const TH = 12;
+  let best = null, bestD = TH * TH + 1;
+  for (const em of ps.emitters) {
+    const s = _projectWorld(em.config.position || [0, 0, 0], view, proj, cssW, cssH);
+    if (!s) continue;
+    const d = (s[0] - px) * (s[0] - px) + (s[1] - py) * (s[1] - py);
+    if (d < bestD) { bestD = d; best = em; }
+  }
+  if (!best) return; // miss → orbit handles it
+  ev.stopImmediatePropagation();
+  const idx = ps.emitters.indexOf(best);
+  if (ev.shiftKey && panelState.active.type === 'em') {
+    const lo = Math.min(panelState.active.idx, idx);
+    const hi = Math.max(panelState.active.idx, idx);
+    panelState.selectedIdx.clear();
+    for (let i = lo; i <= hi; i++) panelState.selectedIdx.add(ps.emitters[i]);
+    panelState.active = { type: 'em', idx };
+  } else if (ev.ctrlKey || ev.metaKey) {
+    if (panelState.selectedIdx.has(best)) panelState.selectedIdx.delete(best);
+    else { panelState.selectedIdx.add(best); panelState.active = { type: 'em', idx }; }
+  } else {
+    panelState.selectedIdx.clear();
+    panelState.selectedIdx.add(best);
+    panelState.active = { type: 'em', idx };
+  }
+  buildPanel();
+}, { capture: true });
+
+const warmup = parseInt(params.get('warmup') || '0', 10);
+await loadPreset(PRESETS.includes(initialPreset) ? initialPreset : 'fountain');
+if (warmup > 0) ps.runFrames(warmup, 1 / 60);
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

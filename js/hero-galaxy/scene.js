@@ -1,8 +1,10 @@
-// Phase 3: one rotating sphere at origin via the default planet shader.
+// Phase 4: render the 3 suns at their galaxy positions, each with sun.wgsl.
 
 import { createCamera, setAspect } from './render/camera.js';
 import { makeIcosphere } from './render/sphere-mesh.js';
 import { getMeshPipeline } from './render/pipeline.js';
+import { loadGalaxyData } from './data-loader.js';
+import { createBody, writeBodyUbo, bodyDescFromSun } from './bodies.js';
 import { mat4Identity } from '../particles/core/math.js';
 
 const CLEAR_COLOR = { r: 0.004, g: 0.004, b: 0.004, a: 1.0 };
@@ -15,15 +17,14 @@ export async function mountScene({ section }) {
     function resizeBacking() {
         const w = Math.floor(canvas.clientWidth  * dpr);
         const h = Math.floor(canvas.clientHeight * dpr);
-        if (canvas.width !== w || canvas.height !== h) {
-            canvas.width = w; canvas.height = h; return true;
-        }
+        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; return true; }
         return false;
     }
     resizeBacking();
 
+    const galaxy = await loadGalaxyData();
+
     const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) throw new Error('no adapter');
     const device = await adapter.requestDevice();
     const context = canvas.getContext('webgpu');
     const format = navigator.gpu.getPreferredCanvasFormat();
@@ -31,7 +32,8 @@ export async function mountScene({ section }) {
 
     const camera = createCamera();
     setAspect(camera, canvas.width / canvas.height);
-    camera.distance = 4;
+    camera.distance = 80;
+    camera.target.set([0, 0, 0]);
 
     const ico = makeIcosphere(5);
     const vbuf = device.createBuffer({ size: ico.vertexData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
@@ -51,21 +53,34 @@ export async function mountScene({ section }) {
     }
     ensureDepth();
 
-    const camUbo  = device.createBuffer({ size: 192, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-    const bodyUbo = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    const camUbo = device.createBuffer({ size: 192, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
 
-    const { pipeline, cameraBGL, bodyBGL } = await getMeshPipeline(device, format, 'default-planet.wgsl');
+    // Warm the default-planet pipeline to get cameraBGL + bodyBGL
+    const { pipeline: defaultPipeline, cameraBGL, bodyBGL } =
+        await getMeshPipeline(device, format, 'default-planet.wgsl');
     const cameraBG = device.createBindGroup({
         layout: cameraBGL,
         entries: [{ binding: 0, resource: { buffer: camUbo } }],
     });
-    const bodyBG = device.createBindGroup({
-        layout: bodyBGL,
-        entries: [{ binding: 0, resource: { buffer: bodyUbo } }],
-    });
 
-    const accent = new Float32Array([1.0, 0.30, 0.10, 1.0]);
-    const model = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+    const { pipeline: sunPipeline } = await getMeshPipeline(device, format, 'sun.wgsl');
+
+    // Build sun bodies from data
+    const suns = [];
+    for (const sys of galaxy.systems) {
+        const body = createBody(device, bodyBGL, {
+            ...bodyDescFromSun(sys),
+            label: `sun ${sys.id}`,
+        });
+        body.accent[0] = sys.sunTint[0];
+        body.accent[1] = sys.sunTint[1];
+        body.accent[2] = sys.sunTint[2];
+        body.accent[3] = 1.0;
+        body.worldPos[0] = sys.galaxyPosition[0];
+        body.worldPos[1] = sys.galaxyPosition[1];
+        body.worldPos[2] = sys.galaxyPosition[2];
+        suns.push(body);
+    }
 
     function frame(now) {
         if (resizeBacking()) { setAspect(camera, canvas.width / canvas.height); ensureDepth(); }
@@ -77,15 +92,14 @@ export async function mountScene({ section }) {
         camArr.set([camera.eye[0], camera.eye[1], camera.eye[2], 0], 32);
         device.queue.writeBuffer(camUbo, 0, camArr);
 
-        // Rotate the sphere around Y over time
-        const c = Math.cos(t * 0.5), s = Math.sin(t * 0.5);
-        mat4Identity(model);
-        model[0] = c; model[2] = s; model[8] = -s; model[10] = c;
-        const bodyArr = new Float32Array(32);
-        bodyArr.set(model, 0);
-        bodyArr.set(accent, 16);
-        bodyArr.set([t, 1.0, 0.0, 0.0], 20);
-        device.queue.writeBuffer(bodyUbo, 0, bodyArr);
+        for (const s of suns) {
+            const M = new Float32Array(16);
+            mat4Identity(M);
+            const sc = s.scale;
+            M[0] = sc; M[5] = sc; M[10] = sc;
+            M[12] = s.worldPos[0]; M[13] = s.worldPos[1]; M[14] = s.worldPos[2];
+            writeBodyUbo(device, s, M, t);
+        }
 
         const enc = device.createCommandEncoder();
         const pass = enc.beginRenderPass({
@@ -100,12 +114,14 @@ export async function mountScene({ section }) {
                 depthLoadOp: 'clear', depthStoreOp: 'store',
             },
         });
-        pass.setPipeline(pipeline);
+        pass.setPipeline(sunPipeline);
         pass.setBindGroup(0, cameraBG);
-        pass.setBindGroup(1, bodyBG);
         pass.setVertexBuffer(0, vbuf);
         pass.setIndexBuffer(ibuf, ico.indexFormat);
-        pass.drawIndexed(ico.indexCount);
+        for (const s of suns) {
+            pass.setBindGroup(1, s.bg);
+            pass.drawIndexed(ico.indexCount);
+        }
         pass.end();
         device.queue.submit([enc.finish()]);
 
@@ -113,5 +129,5 @@ export async function mountScene({ section }) {
     }
     requestAnimationFrame(frame);
 
-    return { device, context, format, camera, canvas };
+    return { device, context, format, camera, canvas, galaxy, suns };
 }

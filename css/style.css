@@ -571,6 +571,32 @@ button {
     .hero-galaxy.is-fallback .hero-fallback { padding: 64px 20px 48px; }
 }
 
+/* Stats relocated from the hero into the About section. */
+.about-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: var(--s-4, 24px);
+    margin-bottom: var(--s-5, 32px);
+    padding: var(--s-3, 16px) 0;
+    border-top: 1px solid rgba(28, 22, 14, 0.15);
+    border-bottom: 1px solid rgba(28, 22, 14, 0.15);
+    font-family: var(--f-mono, monospace);
+}
+.about-stats dt {
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(28, 22, 14, 0.5);
+    margin-bottom: 4px;
+}
+.about-stats dd {
+    margin: 0;
+    font-family: var(--f-display, serif);
+    font-size: 28px;
+    color: var(--accent, #ff4b1f);
+}
+.about-stats .stat-sup { font-size: 11px; vertical-align: super; opacity: 0.6; }
+
 .hero-name {
     font-family: var(--f-display);
     font-size: var(--t-hero);

@@ -415,39 +415,157 @@ button {
     50%      { opacity: 0.35; }
 }
 
-/* Hero name stage — wraps H1 + particle canvas with cross-fade states. */
-.hero-name-stage {
+/* ─── Hero galaxy — 100vh dedicated landing (3D WebGPU galaxy) ─── */
+.hero-galaxy {
     position: relative;
-    /* Stage is the visual home for the particle swarm — give it serious vertical
-       presence so the canvas reads as a hero-band, not a strip. The H1 inside
-       sits centred via flex; on .is-live it fades to 0 and the canvas takes over. */
-    min-height: clamp(280px, 50vh, 560px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    height: 100vh;
     width: 100%;
+    background: #010101;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
 }
-.hero-particles {
+.hero-galaxy #galaxy-canvas {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 400ms var(--ease-out);
+    display: block;
 }
-.hero-name-stage.is-live .hero-particles { opacity: 1; }
-/* H1 is hidden whenever the engine is mounting / mounted — the particle swarm
-   IS the typography. The H1 stays in the DOM for a11y/SEO, but is visually
-   suppressed even when the page-wide `.revealable.is-in` animation tries to
-   fade it in (hence `!important` — we're deliberately overriding that system).
-   On the fallback path (no WebGPU / reduced motion / SDF fail) the JS swaps
-   to `.is-fallback`, which restores the H1 as the static text. */
-.hero-name-stage .hero-name { opacity: 0 !important; visibility: hidden; }
-.hero-name-stage.is-fallback .hero-name {
-    opacity: 1 !important;
-    visibility: visible;
-    transition: opacity 400ms var(--ease-out);
+/* Live-mode overlay chrome */
+.hero-galaxy .galaxy-breadcrumb {
+    position: absolute;
+    top: 88px;
+    left: 24px;
+    z-index: 5;
+    font-family: var(--f-mono, monospace);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(240, 235, 224, 0.5);
+}
+.hero-galaxy .galaxy-breadcrumb ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+}
+.hero-galaxy .galaxy-breadcrumb li {
+    cursor: pointer;
+    transition: color 200ms var(--ease-out, ease-out);
+}
+.hero-galaxy .galaxy-breadcrumb li:hover { color: var(--accent, #ff4b1f); }
+.hero-galaxy .galaxy-breadcrumb li.is-active {
+    color: var(--accent, #ff4b1f);
+    cursor: default;
+}
+.hero-galaxy .galaxy-breadcrumb li + li::before {
+    content: '→';
+    margin-right: 12px;
+    color: rgba(240, 235, 224, 0.2);
+}
+.hero-galaxy .galaxy-scroll-hint {
+    position: absolute;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    font-family: var(--f-mono, monospace);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(240, 235, 224, 0.45);
+    pointer-events: none;
+}
+/* Fallback content is hidden in live mode (visually + from clicks; kept for SR/SEO) */
+.hero-galaxy .hero-fallback {
+    position: absolute;
+    inset: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+}
+/* Fallback path: WebGPU absent / reduced-motion / data fail
+   → un-hide editorial content, hide the canvas overlay chrome. */
+.hero-galaxy.is-fallback #galaxy-canvas,
+.hero-galaxy.is-fallback .galaxy-breadcrumb,
+.hero-galaxy.is-fallback .galaxy-scroll-hint { display: none; }
+.hero-galaxy.is-fallback {
+    height: auto;
+    background: var(--bg, #fbf4ea);
+}
+.hero-galaxy.is-fallback .hero-fallback {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    margin: 0 auto;
+    padding: var(--s-7, 88px) var(--s-5, 32px) var(--s-6, 56px);
+    display: grid;
+    gap: var(--s-4, 24px);
+    max-width: 1100px;
+}
+.hero-galaxy.is-fallback .hero-eyebrow {
+    font-family: var(--f-mono, monospace);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(28, 22, 14, 0.55);
+}
+.hero-galaxy.is-fallback .hero-name {
+    font-family: var(--f-display, serif);
+    font-size: var(--t-hero, clamp(56px, 9vw, 124px));
+    line-height: 0.95;
+    margin: 0;
+}
+.hero-galaxy.is-fallback .hero-name em { color: var(--accent, #ff4b1f); font-style: italic; }
+.hero-galaxy.is-fallback .hero-tagline {
+    font-family: var(--f-display, serif);
+    font-size: var(--t-lede, clamp(20px, 2.4vw, 30px));
+    line-height: 1.35;
+    max-width: 32ch;
+    color: rgba(28, 22, 14, 0.85);
+}
+.hero-galaxy.is-fallback .hero-disciplines {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--s-5, 32px);
+    margin-top: var(--s-4, 24px);
+}
+.hero-galaxy.is-fallback .discipline-head {
+    font-family: var(--f-display, serif);
+    font-size: 18px;
+    margin: 0 0 12px;
+}
+.hero-galaxy.is-fallback .discipline-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-family: var(--f-mono, monospace);
+    font-size: 11px;
+    line-height: 1.7;
+    color: rgba(28, 22, 14, 0.75);
+}
+.hero-galaxy.is-fallback .hero-catalogue-link a {
+    font-family: var(--f-mono, monospace);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent, #ff4b1f);
+    text-decoration: none;
+}
+@media (max-width: 720px) {
+    .hero-galaxy .galaxy-breadcrumb { top: 72px; left: 16px; font-size: 10px; }
+    .hero-galaxy.is-fallback .hero-fallback { padding: 64px 20px 48px; }
 }
 
 .hero-name {

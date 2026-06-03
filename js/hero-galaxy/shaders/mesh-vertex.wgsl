@@ -4,7 +4,7 @@
 struct BodyUniforms {
     model     : mat4x4<f32>,
     accent    : vec4<f32>,
-    meta      : vec4<f32>,    // x = time, y = radius_world, z = body_id, w = hover_t
+    params    : vec4<f32>,    // x = time, y = radius_world, z = body_id, w = hover_t
 };
 
 struct CameraUniforms {

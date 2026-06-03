@@ -63,7 +63,7 @@ struct VertexOut {
 struct BodyUniforms {
     model  : mat4x4<f32>,
     accent : vec4<f32>,
-    meta   : vec4<f32>,
+    params : vec4<f32>,
 };
 @group(1) @binding(0) var<uniform> body : BodyUniforms;
 
@@ -74,9 +74,9 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     s.world_normal = normalize(in.world_normal);
     s.uv_sphere    = in.uv_sphere;
     s.view_dir     = normalize(in.view_dir);
-    s.time         = body.meta.x;
+    s.time         = body.params.x;
     s.accent       = body.accent.rgb;
-    s.hover_t      = body.meta.w;
+    s.hover_t      = body.params.w;
     return surface(s);
 }
 `;

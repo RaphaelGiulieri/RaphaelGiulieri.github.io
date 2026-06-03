@@ -1,6 +1,7 @@
 // Phase 4: render the 3 suns at their galaxy positions, each with sun.wgsl.
 
 import { createCamera, setAspect } from './render/camera.js';
+import { wireControls } from './render/controls.js';
 import { makeIcosphere } from './render/sphere-mesh.js';
 import { getMeshPipeline } from './render/pipeline.js';
 import { loadGalaxyData } from './data-loader.js';
@@ -34,6 +35,8 @@ export async function mountScene({ section }) {
     setAspect(camera, canvas.width / canvas.height);
     camera.distance = 80;
     camera.target.set([0, 0, 0]);
+    // getState is a closure on the future state machine; Phase 5 always reports galaxy.
+    const controls = wireControls({ canvas, camera, getState: () => 'galaxy' });
 
     const ico = makeIcosphere(5);
     const vbuf = device.createBuffer({ size: ico.vertexData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
@@ -85,6 +88,10 @@ export async function mountScene({ section }) {
     function frame(now) {
         if (resizeBacking()) { setAspect(camera, canvas.width / canvas.height); ensureDepth(); }
         const t = now * 0.001;
+        const lastNow = frame._lastNow ?? now;
+        const dt = Math.min(0.05, (now - lastNow) / 1000);
+        frame._lastNow = now;
+        controls.tickInertia(dt);
 
         const camArr = new Float32Array(48);
         camArr.set(camera.view, 0);

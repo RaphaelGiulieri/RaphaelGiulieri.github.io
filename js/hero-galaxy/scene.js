@@ -12,6 +12,7 @@ import { loadGalaxyData } from './data-loader.js';
 import { createBody, writeBodyUbo, bodyDescFromSun, bodyDescFromPlanet, bodyDescFromMoon } from './bodies.js';
 import { mat4Identity } from '../particles/core/math.js';
 import { screenToRay, hitTestBodies } from './render/raycast.js';
+import { createBreadcrumb } from './breadcrumb.js';
 
 const CLEAR_COLOR = { r: 0.004, g: 0.004, b: 0.004, a: 1.0 };
 
@@ -47,6 +48,18 @@ export async function mountScene({ section }) {
         focusedSystemId: null,
         focusedPlanetId: null,
     };
+
+    // Breadcrumb DOM manager. `onCrumbClick` is wired below to call transitionTo
+    // (defined after state, since it closes over `transitionTo`).
+    const breadcrumb = createBreadcrumb({
+        root: section,
+        galaxyData: galaxy,
+        onCrumbClick: (key) => {
+            if (key === 'galaxy') transitionTo({ level: 'galaxy' });
+            else if (key.startsWith('system:')) transitionTo({ level: 'system', focusedSystemId: key.slice(7) });
+            else if (key.startsWith('planet:')) transitionTo({ level: 'planet', focusedSystemId: state.focusedSystemId, focusedPlanetId: key.slice(7) });
+        },
+    });
 
     const controls = wireControls({ canvas, camera, getState: () => state.level });
 
@@ -167,6 +180,12 @@ export async function mountScene({ section }) {
             end: { yaw: camera.yaw, pitch: camera.pitch, distance: endDist, target: endTarget },
             t0: performance.now(), ms, goal,
         };
+        // Reflect the destination in the breadcrumb during the fly.
+        breadcrumb.render({
+            level: goal.level,
+            focusedSystemId: goal.focusedSystemId ?? state.focusedSystemId,
+            focusedPlanetId: goal.focusedPlanetId ?? state.focusedPlanetId,
+        });
     }
     function tickTransition(now) {
         if (!transition) return;
@@ -183,6 +202,7 @@ export async function mountScene({ section }) {
             state.focusedSystemId = transition.goal.focusedSystemId ?? null;
             state.focusedPlanetId = transition.goal.focusedPlanetId ?? null;
             transition = null;
+            breadcrumb.render(state);
         }
     }
     function cubicBezier(t, p1x, p1y, p2x, p2y) {
@@ -385,6 +405,7 @@ export async function mountScene({ section }) {
 
         requestAnimationFrame(frame);
     }
+    breadcrumb.render(state);
     requestAnimationFrame(frame);
 
     // Expose programmatic navigation for verification + Phase 7 click handlers

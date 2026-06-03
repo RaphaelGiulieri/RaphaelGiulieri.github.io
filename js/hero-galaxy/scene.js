@@ -14,6 +14,7 @@ import { mat4Identity } from '../particles/core/math.js';
 import { screenToRay, hitTestBodies } from './render/raycast.js';
 import { createBreadcrumb } from './breadcrumb.js';
 import { mountStarfield } from './render/starfield.js';
+import { mat4Multiply } from '../particles/core/math.js';
 
 // Mesh canvas is layered ON TOP of the starfield canvas; clear with alpha=0
 // so the stars show through wherever meshes don't draw.
@@ -204,10 +205,45 @@ export async function mountScene({ section }) {
         }
     }
 
+    // Per-body floating labels (DOM-positioned in CSS px each frame).
+    const labelsRoot = section.querySelector('#galaxy-labels');
+    const labels = new Map();   // body → { el, body }
+    if (labelsRoot) {
+        for (const sun of suns) {
+            const sys = galaxy.systems.find(s => s.id === sun.id);
+            const el = document.createElement('div');
+            el.className = 'galaxy-label is-sun';
+            el.textContent = sys?.name || sun.id;
+            labelsRoot.appendChild(el);
+            labels.set(sun, { el, body: sun });
+        }
+        for (const { body } of planets) {
+            const el = document.createElement('div');
+            el.className = 'galaxy-label is-planet';
+            el.textContent = body.meta.planetName || body.id;
+            labelsRoot.appendChild(el);
+            labels.set(body, { el, body });
+        }
+        for (const { body } of moons) {
+            const el = document.createElement('div');
+            el.className = 'galaxy-label is-moon';
+            el.textContent = body.meta.title || body.meta.projectId;
+            labelsRoot.appendChild(el);
+            labels.set(body, { el, body });
+        }
+    }
+    // Reused per-frame scratch (avoid GC pressure projecting ~40 bodies/frame).
+    const _vp     = new Float32Array(16);
+    const _proj4  = new Float32Array(4);
+
     function visibleSuns()    { return suns; }
     function visiblePlanets() {
-        if (state.level === 'galaxy') return [];
-        return planets.filter(p => p.body.meta.systemId === state.focusedSystemId);
+        // Render planets at EVERY level — at galaxy view they read as tiny
+        // companions to each sun, drawing the eye and previewing what each
+        // system contains. Only at planet view do we restrict to the focal
+        // system's planets to keep the depth-of-field clean.
+        if (state.level === 'planet') return planets.filter(p => p.body.meta.systemId === state.focusedSystemId);
+        return planets;
     }
     function visibleMoons() {
         if (state.level !== 'planet') return [];
@@ -482,11 +518,52 @@ export async function mountScene({ section }) {
             writeBodyUbo(device, body, M, t);
         }
 
+        // Project + position floating labels. Labels stay constant CSS px
+        // regardless of zoom — CSS units, not world units. Visibility rules:
+        // — galaxy view shows only sun labels (planets too small)
+        // — system view shows the focal system's sun + planets
+        // — planet view shows the focal planet + its moons
+        if (labelsRoot) {
+            mat4Multiply(camera.proj, camera.view, _vp);
+            const rect = canvas.getBoundingClientRect();
+            const sectionRect = section.getBoundingClientRect();
+            const w = rect.width, h = rect.height;
+            const offX = rect.left - sectionRect.left;
+            const offY = rect.top  - sectionRect.top;
+            for (const { el, body } of labels.values()) {
+                let show = false;
+                if (state.level === 'galaxy') {
+                    show = body.kind === 'sun';
+                } else if (state.level === 'system') {
+                    show = (body.kind === 'sun' && body.id === state.focusedSystemId)
+                        || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId);
+                } else if (state.level === 'planet') {
+                    show = (body.kind === 'planet' && body.id === state.focusedPlanetId)
+                        || (body.kind === 'moon'   && body.meta.planetId === state.focusedPlanetId);
+                }
+                if (!show) { el.classList.remove('is-visible'); continue; }
+                // Project worldPos → clip
+                const wp = body.worldPos;
+                _proj4[0] = _vp[0]*wp[0] + _vp[4]*wp[1] + _vp[8] *wp[2] + _vp[12];
+                _proj4[1] = _vp[1]*wp[0] + _vp[5]*wp[1] + _vp[9] *wp[2] + _vp[13];
+                _proj4[2] = _vp[2]*wp[0] + _vp[6]*wp[1] + _vp[10]*wp[2] + _vp[14];
+                _proj4[3] = _vp[3]*wp[0] + _vp[7]*wp[1] + _vp[11]*wp[2] + _vp[15];
+                if (_proj4[3] <= 0.001) { el.classList.remove('is-visible'); continue; }
+                const ndcX = _proj4[0] / _proj4[3];
+                const ndcY = _proj4[1] / _proj4[3];
+                if (ndcX < -1.05 || ndcX > 1.05 || ndcY < -1.05 || ndcY > 1.05) { el.classList.remove('is-visible'); continue; }
+                const px = offX + (ndcX * 0.5 + 0.5) * w;
+                const py = offY + (-ndcY * 0.5 + 0.5) * h;
+                el.style.setProperty('--x', px + 'px');
+                el.style.setProperty('--y', py + 'px');
+                el.classList.add('is-visible');
+            }
+        }
+
         // Starfield in its own pass on its own canvas + device. We feed it
         // our view/proj matrices so the stars track the camera. Bloom is
-        // off (would over-light the swap target) and the bg is opaque so
-        // the mesh canvas's premultiplied alpha compositing shows stars
-        // behind everything.
+        // tuned subtle so brighter stars get a halo without blobbing out;
+        // threshold is high so only the brightest pixels contribute.
         // NOTE (Task 14.1): full-frame bloom over meshes + particles is
         // deferred to v2. Sun + planet shaders rely on their own fresnel
         // for body glow in v1.
@@ -496,7 +573,15 @@ export async function mountScene({ section }) {
                 view: camera.view,
                 proj: camera.proj,
                 bgColor: [0.004, 0.004, 0.004, 1],
-                postfx: { enableBloom: false, exposure: 1.0, vignette: 0.1 },
+                postfx: {
+                    enableBloom: true,
+                    bloomThreshold: 0.6,
+                    bloomSoftKnee: 0.7,
+                    bloomIntensity: 0.45,
+                    blurPasses: 2,
+                    exposure: 1.0,
+                    vignette: 0.08,
+                },
             });
         }
 

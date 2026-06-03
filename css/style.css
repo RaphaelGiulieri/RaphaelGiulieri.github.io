@@ -482,6 +482,43 @@ button {
     color: rgba(240, 235, 224, 0.45);
     pointer-events: none;
 }
+/* Floating body-labels: anchored over each body's projected screen position,
+   updated every frame by JS via the --x / --y custom properties. Constant
+   on-screen size regardless of zoom level. */
+.hero-galaxy .galaxy-labels {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+}
+.hero-galaxy .galaxy-label {
+    position: absolute;
+    left: 0; top: 0;
+    transform: translate(calc(var(--x, 0px) - 50%), calc(var(--y, 0px) - 100% - 14px));
+    font-family: var(--f-mono, monospace);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(240, 235, 224, 0.85);
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 200ms var(--ease-out, ease-out);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+    will-change: transform, opacity;
+}
+.hero-galaxy .galaxy-label.is-visible { opacity: 1; }
+.hero-galaxy .galaxy-label.is-sun    { color: var(--accent, #ff4b1f); font-weight: 600; }
+.hero-galaxy .galaxy-label.is-moon   { font-size: 9px; opacity: 0; }
+.hero-galaxy .galaxy-label.is-moon.is-visible { opacity: 0.85; }
+.hero-galaxy .galaxy-label::before {
+    content: '';
+    position: absolute;
+    left: 50%; bottom: -8px;
+    width: 1px; height: 6px;
+    background: rgba(240, 235, 224, 0.3);
+    transform: translateX(-50%);
+}
+.hero-galaxy .galaxy-label.is-sun::before { background: var(--accent, #ff4b1f); }
 /* Fallback content is hidden in live mode (visually + from clicks; kept for SR/SEO) */
 .hero-galaxy .hero-fallback {
     position: absolute;

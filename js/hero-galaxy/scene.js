@@ -9,12 +9,15 @@ import { wireControls } from './render/controls.js';
 import { makeIcosphere } from './render/sphere-mesh.js';
 import { getMeshPipeline } from './render/pipeline.js';
 import { loadGalaxyData } from './data-loader.js';
-import { createBody, writeBodyUbo, bodyDescFromSun, bodyDescFromPlanet, bodyDescFromMoon } from './bodies.js';
+import { createBody, writeBodyUbo, bodyDescFromStar, bodyDescFromPlanet, bodyDescFromMoon } from './bodies.js';
 import { mat4Identity } from '../particles/core/math.js';
 import { screenToRay, hitTestBodies } from './render/raycast.js';
 import { createBreadcrumb } from './breadcrumb.js';
 import { mountStarfield } from './render/starfield.js';
 import { mat4Multiply } from '../particles/core/math.js';
+import { setupDevPanel } from './dev-panel.js';
+
+const HERO_GALAXY_DEV_PANEL = true;   // flip to false in production
 
 // Mesh canvas is layered ON TOP of the starfield canvas; clear with alpha=0
 // so the stars show through wherever meshes don't draw.
@@ -76,6 +79,22 @@ export async function mountScene({ section }) {
         onInput: () => { lastInputAt = performance.now(); },
     });
 
+    // Live-mutable tuning state for the dev panel + render loop.
+    const postfx = {
+        enableBloom:    true,
+        bloomThreshold: 0.55,
+        bloomSoftKnee:  0.6,
+        bloomIntensity: 0.7,
+        blurPasses:     2,
+        exposure:       1.0,
+        vignette:       0.08,
+    };
+    const ambient = {
+        galaxySpinRate: 0.5,   // deg/sec when idle at galaxy
+        planetSpinRate: 0.2,   // rad/sec planet self-rotation factor
+        idleSeconds:    4,     // seconds before auto-orbit kicks in
+    };
+
     const ico = makeIcosphere(5);
     const vbuf = device.createBuffer({ size: ico.vertexData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(vbuf, 0, ico.vertexData);
@@ -103,7 +122,7 @@ export async function mountScene({ section }) {
         layout: cameraBGL,
         entries: [{ binding: 0, resource: { buffer: camUbo } }],
     });
-    const { pipeline: sunPipeline } = await getMeshPipeline(device, format, 'sun.wgsl');
+    const { pipeline: starPipeline } = await getMeshPipeline(device, format, 'star.wgsl');
     const { pipeline: moonPipeline } = await getMeshPipeline(device, format, 'default-moon.wgsl');
 
     // Mount the starfield (on its own canvas, its own GPUDevice). Mobile gets
@@ -185,28 +204,30 @@ export async function mountScene({ section }) {
         await Promise.all(Array.from(allShaderPaths).map(planetPipelineFor));
     }
 
-    // Build sun, planet, and moon bodies
-    const suns = [];
-    const planets = []; // [{ body, sun }]
+    // Build star, planet, and moon bodies (each system's centre IS a star,
+    // not "our sun" — the rename reflects that. Some metadata keys remain
+    // `sun*` in the JSON for back-compat with the spec; the runtime is star-).
+    const stars = [];
+    const planets = []; // [{ body, star }]
     const moons   = []; // [{ body, planet }]
     for (const sys of galaxy.systems) {
-        const sun = createBody(device, bodyBGL, {
-            ...bodyDescFromSun(sys),
-            label: `sun ${sys.id}`,
+        const star = createBody(device, bodyBGL, {
+            ...bodyDescFromStar(sys),
+            label: `star ${sys.id}`,
         });
-        sun.accent[0] = sys.sunTint[0];
-        sun.accent[1] = sys.sunTint[1];
-        sun.accent[2] = sys.sunTint[2];
-        sun.accent[3] = 1.0;
-        sun.worldPos[0] = sys.galaxyPosition[0];
-        sun.worldPos[1] = sys.galaxyPosition[1];
-        sun.worldPos[2] = sys.galaxyPosition[2];
-        suns.push(sun);
+        star.accent[0] = sys.sunTint[0];
+        star.accent[1] = sys.sunTint[1];
+        star.accent[2] = sys.sunTint[2];
+        star.accent[3] = 1.0;
+        star.worldPos[0] = sys.galaxyPosition[0];
+        star.worldPos[1] = sys.galaxyPosition[1];
+        star.worldPos[2] = sys.galaxyPosition[2];
+        stars.push(star);
         for (const p of sys.planets) {
             const planetBody = createBody(device, bodyBGL, {
                 ...bodyDescFromPlanet(p, sys), label: `planet ${p.id}`,
             });
-            planets.push({ body: planetBody, sun });
+            planets.push({ body: planetBody, star });
             for (const m of p.moons || []) {
                 const moonBody = createBody(device, bodyBGL, {
                     ...bodyDescFromMoon(m, p, sys), label: `moon ${m.projectId}`,
@@ -220,13 +241,13 @@ export async function mountScene({ section }) {
     const labelsRoot = section.querySelector('#galaxy-labels');
     const labels = new Map();   // body → { el, body }
     if (labelsRoot) {
-        for (const sun of suns) {
-            const sys = galaxy.systems.find(s => s.id === sun.id);
+        for (const star of stars) {
+            const sys = galaxy.systems.find(s => s.id === star.id);
             const el = document.createElement('div');
-            el.className = 'galaxy-label is-sun';
-            el.textContent = sys?.name || sun.id;
+            el.className = 'galaxy-label is-star';
+            el.textContent = sys?.name || star.id;
             labelsRoot.appendChild(el);
-            labels.set(sun, { el, body: sun });
+            labels.set(star, { el, body: star });
         }
         for (const { body } of planets) {
             const el = document.createElement('div');
@@ -247,7 +268,7 @@ export async function mountScene({ section }) {
     const _vp     = new Float32Array(16);
     const _proj4  = new Float32Array(4);
 
-    function visibleSuns()    { return suns; }
+    function visibleStars()   { return stars; }
     function visiblePlanets() {
         // Render planets at EVERY level — at galaxy view they read as tiny
         // companions to each sun, drawing the eye and previewing what each
@@ -266,9 +287,9 @@ export async function mountScene({ section }) {
             camera.target.set([0, 0, 0]);
             camera.distance = 80;
         } else if (state.level === 'system') {
-            const sun = suns.find(s => s.id === state.focusedSystemId);
-            if (sun) {
-                camera.target.set(sun.worldPos);
+            const star = stars.find(s => s.id === state.focusedSystemId);
+            if (star) {
+                camera.target.set(star.worldPos);
                 camera.distance = 18;
             }
         } else if (state.level === 'planet') {
@@ -300,8 +321,8 @@ export async function mountScene({ section }) {
             }
         }
         if (goal.level === 'system') {
-            const sun = suns.find(s => s.id === goal.focusedSystemId);
-            if (sun) { endTarget = [sun.worldPos[0], sun.worldPos[1], sun.worldPos[2]]; endDist = 18; }
+            const star = stars.find(s => s.id === goal.focusedSystemId);
+            if (star) { endTarget = [star.worldPos[0], star.worldPos[1], star.worldPos[2]]; endDist = 18; }
         } else if (goal.level === 'planet') {
             const planetEntry = planets.find(p => p.body.id === goal.focusedPlanetId);
             if (planetEntry) {
@@ -396,14 +417,14 @@ export async function mountScene({ section }) {
     });
 
     function currentSelectionTargets() {
-        if (state.level === 'galaxy') return suns;
+        if (state.level === 'galaxy') return stars;
         if (state.level === 'system') return visiblePlanets().map(p => p.body);
         if (state.level === 'planet') return visibleMoons().map(m => m.body);
         return [];
     }
 
     function handleBodyClick(body) {
-        if (body.kind === 'sun') {
+        if (body.kind === 'star') {
             transitionTo({ level: 'system', focusedSystemId: body.id });
         } else if (body.kind === 'planet') {
             transitionTo({ level: 'planet', focusedSystemId: body.meta.systemId, focusedPlanetId: body.id });
@@ -443,20 +464,20 @@ export async function mountScene({ section }) {
         controls.tickInertia(dt);
         tickTransition(now);
 
-        // Galaxy auto-orbit (0.5°/s) after 4s idle; sub-states stay static so
-        // the orbital motion of planets/moons provides the "alive" feel.
-        if (state.level === 'galaxy' && !transition && (now - lastInputAt > 4000)) {
-            applyOrbitDelta(camera, 0.5 * (Math.PI / 180) * dt, 0);
+        // Galaxy auto-orbit after `idleSeconds` of no input; rate is the
+        // dev-panel-tunable `ambient.galaxySpinRate` (deg/sec).
+        if (state.level === 'galaxy' && !transition && (now - lastInputAt > ambient.idleSeconds * 1000)) {
+            applyOrbitDelta(camera, ambient.galaxySpinRate * (Math.PI / 180) * dt, 0);
         }
 
         // Update planet positions (orbit around their sun)
-        for (const { body, sun } of planets) {
+        for (const { body, star } of planets) {
             const o = body.orbit; if (!o) continue;
             const a = (t * (2 * Math.PI / o.period)) + (o.phase || 0);
             const tilt = (o.tilt || 0) * Math.PI / 180;
-            body.worldPos[0] = sun.worldPos[0] + Math.cos(a) * o.radius;
-            body.worldPos[1] = sun.worldPos[1] + Math.sin(tilt) * o.radius * 0.15;
-            body.worldPos[2] = sun.worldPos[2] + Math.sin(a) * o.radius * Math.cos(tilt);
+            body.worldPos[0] = star.worldPos[0] + Math.cos(a) * o.radius;
+            body.worldPos[1] = star.worldPos[1] + Math.sin(tilt) * o.radius * 0.15;
+            body.worldPos[2] = star.worldPos[2] + Math.sin(a) * o.radius * Math.cos(tilt);
         }
         for (const { body, planet } of moons) {
             const o = body.orbit; if (!o) continue;
@@ -482,7 +503,7 @@ export async function mountScene({ section }) {
             if (hit) newHovered = hit.body;
         }
         hovered = newHovered;
-        const allBodies = suns.concat(planets.map(p => p.body), moons.map(m => m.body));
+        const allBodies = stars.concat(planets.map(p => p.body), moons.map(m => m.body));
         for (const b of allBodies) {
             const target = (b === hovered) ? 1.0 : 0.0;
             b.hoverT += (target - b.hoverT) * Math.min(1, dt * 8);
@@ -496,7 +517,7 @@ export async function mountScene({ section }) {
         device.queue.writeBuffer(camUbo, 0, camArr);
 
         // Suns UBOs
-        for (const s of visibleSuns()) {
+        for (const s of visibleStars()) {
             const M = new Float32Array(16);
             mat4Identity(M);
             const sc = s.scale;
@@ -509,7 +530,7 @@ export async function mountScene({ section }) {
         const visPls = visiblePlanets();
         for (const { body } of visPls) {
             const M = new Float32Array(16);
-            const spin = t * 0.2 + (body.id.length * 0.7);
+            const spin = t * ambient.planetSpinRate + (body.id.length * 0.7);
             const cs = Math.cos(spin), sn = Math.sin(spin);
             const sc = body.scale;
             M[0]  =  cs * sc; M[2]  =  sn * sc;
@@ -544,9 +565,9 @@ export async function mountScene({ section }) {
             for (const { el, body } of labels.values()) {
                 let show = false;
                 if (state.level === 'galaxy') {
-                    show = body.kind === 'sun';
+                    show = body.kind === 'star';
                 } else if (state.level === 'system') {
-                    show = (body.kind === 'sun' && body.id === state.focusedSystemId)
+                    show = (body.kind === 'star' && body.id === state.focusedSystemId)
                         || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId);
                 } else if (state.level === 'planet') {
                     show = (body.kind === 'planet' && body.id === state.focusedPlanetId)
@@ -582,15 +603,7 @@ export async function mountScene({ section }) {
                 view: camera.view,
                 proj: camera.proj,
                 bgColor: [0.004, 0.004, 0.004, 1],
-                postfx: {
-                    enableBloom: true,
-                    bloomThreshold: 0.18,
-                    bloomSoftKnee: 0.6,
-                    bloomIntensity: 1.2,
-                    blurPasses: 4,
-                    exposure: 1.15,
-                    vignette: 0.1,
-                },
+                postfx,
             });
         }
 
@@ -608,11 +621,11 @@ export async function mountScene({ section }) {
             },
         });
         // Suns
-        pass.setPipeline(sunPipeline);
+        pass.setPipeline(starPipeline);
         pass.setBindGroup(0, cameraBG);
         pass.setVertexBuffer(0, vbuf);
         pass.setIndexBuffer(ibuf, ico.indexFormat);
-        for (const s of visibleSuns()) {
+        for (const s of visibleStars()) {
             pass.setBindGroup(1, s.bg);
             pass.drawIndexed(ico.indexCount);
         }
@@ -639,6 +652,7 @@ export async function mountScene({ section }) {
         requestAnimationFrame(frame);
     }
     breadcrumb.render(state);
+    if (HERO_GALAXY_DEV_PANEL) setupDevPanel({ postfx, ambient });
     requestAnimationFrame(frame);
 
     // Expose programmatic navigation for verification + Phase 7 click handlers
@@ -654,8 +668,8 @@ export async function mountScene({ section }) {
             if (!pl) { console.warn('no planet', planetId); return; }
             transitionTo({ level: 'planet', focusedSystemId: pl.body.meta.systemId, focusedPlanetId: planetId });
         },
-        state, suns, planets, moons, galaxy,
+        state, stars, planets, moons, galaxy,
     };
 
-    return { device, context, format, camera, canvas, galaxy, suns, planets, moons, state, applyStateCamera };
+    return { device, context, format, camera, canvas, galaxy, stars, planets, moons, state, applyStateCamera };
 }

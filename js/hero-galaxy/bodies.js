@@ -41,15 +41,15 @@ export function writeBodyUbo(device, body, model16, time) {
     device.queue.writeBuffer(body.buf, 0, arr);
 }
 
-export function bodyDescFromSun(sys) {
+export function bodyDescFromStar(sys) {
     return {
-        kind: 'sun',
+        kind: 'star',
         id: sys.id,
-        shaderPath: sys.sunShader || 'sun.wgsl',
+        shaderPath: sys.sunShader || 'star.wgsl',
         accent: new Float32Array(parseAccent(sys.accent || '#ffffff')),
         radiusWorld: sys.sunRadius || 2.0,
         scale: sys.sunRadius || 2.0,
-        meta: { systemId: sys.id, sunTint: sys.sunTint || [1, 1, 1] },
+        meta: { systemId: sys.id, starTint: sys.sunTint || [1, 1, 1] },
     };
 }
 

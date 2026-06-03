@@ -507,7 +507,7 @@ button {
     will-change: transform, opacity;
 }
 .hero-galaxy .galaxy-label.is-visible { opacity: 1; }
-.hero-galaxy .galaxy-label.is-sun    { color: var(--accent, #ff4b1f); font-weight: 600; }
+.hero-galaxy .galaxy-label.is-star    { color: var(--accent, #ff4b1f); font-weight: 600; }
 .hero-galaxy .galaxy-label.is-moon   { font-size: 9px; opacity: 0; }
 .hero-galaxy .galaxy-label.is-moon.is-visible { opacity: 0.85; }
 .hero-galaxy .galaxy-label::before {
@@ -518,7 +518,7 @@ button {
     background: rgba(240, 235, 224, 0.3);
     transform: translateX(-50%);
 }
-.hero-galaxy .galaxy-label.is-sun::before { background: var(--accent, #ff4b1f); }
+.hero-galaxy .galaxy-label.is-star::before { background: var(--accent, #ff4b1f); }
 /* Fallback content is hidden in live mode (visually + from clicks; kept for SR/SEO) */
 .hero-galaxy .hero-fallback {
     position: absolute;

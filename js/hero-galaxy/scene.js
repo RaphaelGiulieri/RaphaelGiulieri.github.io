@@ -571,13 +571,11 @@ export async function mountScene({ section }) {
             }
         }
 
-        // Starfield in its own pass on its own canvas + device. We feed it
-        // our view/proj matrices so the stars track the camera. Bloom is
-        // tuned subtle so brighter stars get a halo without blobbing out;
-        // threshold is high so only the brightest pixels contribute.
+        // Starfield in its own pass on its own canvas + device. Bloom is on
+        // with a low threshold + wider blur so even the dim shells get a
+        // visible halo — gives the field the "deep-space photograph" feel.
         // NOTE (Task 14.1): full-frame bloom over meshes + particles is
-        // deferred to v2. Sun + planet shaders rely on their own fresnel
-        // for body glow in v1.
+        // deferred to v2; sun + planet shaders rely on their own fresnel.
         if (starPs) {
             starPs.update(dt);
             starPs.render({
@@ -586,12 +584,12 @@ export async function mountScene({ section }) {
                 bgColor: [0.004, 0.004, 0.004, 1],
                 postfx: {
                     enableBloom: true,
-                    bloomThreshold: 0.6,
-                    bloomSoftKnee: 0.7,
-                    bloomIntensity: 0.45,
-                    blurPasses: 2,
-                    exposure: 1.0,
-                    vignette: 0.08,
+                    bloomThreshold: 0.18,
+                    bloomSoftKnee: 0.6,
+                    bloomIntensity: 1.2,
+                    blurPasses: 4,
+                    exposure: 1.15,
+                    vignette: 0.1,
                 },
             });
         }

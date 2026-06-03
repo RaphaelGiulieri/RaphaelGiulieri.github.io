@@ -338,7 +338,8 @@ export async function mountScene({ section }) {
     window.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
         // Scope ESC: if the existing project modal is open, let it own ESC.
-        const modal = document.querySelector('.dossier.is-open, #modal.is-open');
+        // js/main.js signals open via aria-hidden="false" on #modal.
+        const modal = document.querySelector('#modal[aria-hidden="false"]');
         if (modal) return;
         handleEmptyClick();
     });

@@ -67,10 +67,19 @@
 
     <main id="main">
 
-        <!-- § 00 — Hero -->
-        <section id="hero" class="hero" data-section="hero">
-            <div class="hero-grid">
-                <p class="hero-eyebrow revealable">
+        <!-- § 00 — Hero (galaxy: 100vh WebGPU dedicated landing with fallback) -->
+        <section id="hero" class="hero-galaxy" data-section="hero">
+            <canvas id="galaxy-canvas" aria-hidden="true"></canvas>
+
+            <!-- Live overlay (visible when canvas runs) -->
+            <nav class="galaxy-breadcrumb" aria-label="Galaxy navigation">
+                <ol id="breadcrumb-list"></ol>
+            </nav>
+            <p class="galaxy-scroll-hint" aria-hidden="true">scroll <span aria-hidden="true">↓</span></p>
+
+            <!-- Accessible content (visually hidden when canvas runs; revealed on .is-fallback) -->
+            <div class="hero-fallback">
+                <p class="hero-eyebrow">
                     <span class="eyebrow-dot"></span>
                     Creative technologist
                     <span class="eyebrow-sep">/</span>
@@ -78,67 +87,56 @@
                     <span class="eyebrow-sep">/</span>
                     <span class="eyebrow-avail">Available for freelance</span>
                 </p>
-                <div class="hero-name-stage is-static">
-                    <canvas class="hero-particles" aria-hidden="true"></canvas>
-                    <h1 class="hero-name revealable">
-                        <span class="name-line name-line-1">Raphael</span>
-                        <span class="name-line name-line-2"><em>Giulieri.</em></span>
-                    </h1>
-                </div>
-                <p class="hero-tagline revealable">
+                <h1 class="hero-name">
+                    <span class="name-line name-line-1">Raphael</span>
+                    <span class="name-line name-line-2"><em>Giulieri.</em></span>
+                </h1>
+                <p class="hero-tagline">
                     Multi-disciplinary creative technologist — games, web, ML, 3D, automation. I work across engines and stacks on the problems that need a graphics mindset, a systems mindset, and an engineering mindset all at once.
                 </p>
-                <dl class="hero-stats revealable">
-                    <div><dt>Since</dt><dd>2021</dd></div>
-                    <div><dt>Catalogue</dt><dd data-stat="catalogue">—</dd></div>
-                    <div><dt>Clients</dt><dd><span data-stat="clients">—</span><span class="stat-sup">*</span></dd></div>
-                    <div><dt>Disciplines</dt><dd data-stat="disciplines">—</dd></div>
-                </dl>
+                <section class="hero-disciplines" aria-label="Disciplines">
+                    <div class="discipline-col">
+                        <h3 class="discipline-head"><em>Graphics &amp; shading</em></h3>
+                        <ul class="discipline-list">
+                            <li>WebGPU &amp; WGSL</li>
+                            <li>HLSL (URP, HDRP, Wallpaper Engine)</li>
+                            <li>GLSL (Three.js, WebGL2)</li>
+                            <li>GPGPU compute &amp; Navier-Stokes</li>
+                            <li>Reaction-diffusion</li>
+                            <li>Raymarching, signed-distance fields</li>
+                            <li>Procedural worlds (WFC, L-systems, simplex, Voronoi)</li>
+                            <li>Retro post-processing (Kuwahara, CRT, Bayer dither)</li>
+                        </ul>
+                    </div>
+                    <div class="discipline-col">
+                        <h3 class="discipline-head"><em>ML &amp; AI</em></h3>
+                        <ul class="discipline-list">
+                            <li>Claude API + tool use</li>
+                            <li>Multi-agent orchestration</li>
+                            <li>Local diffusion stack (ComfyUI, SDXL, IP-Adapter, LoRA)</li>
+                            <li>XGBoost + walk-forward validation</li>
+                            <li>Conformal prediction</li>
+                            <li>Kelly / HRP sizing</li>
+                            <li>Cheap-inference NPCs (4-layer LLM stack)</li>
+                        </ul>
+                    </div>
+                    <div class="discipline-col">
+                        <h3 class="discipline-head"><em>Web, systems, tooling</em></h3>
+                        <ul class="discipline-list">
+                            <li>FastAPI / Flask back-ends</li>
+                            <li>React 19 + TypeScript</li>
+                            <li>Cloudflare Workers + KV</li>
+                            <li>Browser automation (nodriver, curl-cffi, Akamai-grade)</li>
+                            <li>3D CAD scripting (SketchUp Python)</li>
+                            <li>Engine modding (Hytale Java, Darktide DMF/Lua, Bitsquid)</li>
+                            <li>Custom C++ engines, Unity URP &amp; HDRP</li>
+                        </ul>
+                    </div>
+                </section>
+                <p class="hero-catalogue-link">
+                    <a href="#about"><em>About this work</em> <span aria-hidden="true">↓</span></a>
+                </p>
             </div>
-
-            <section class="hero-disciplines revealable" aria-label="Disciplines">
-                <div class="discipline-col">
-                    <h3 class="discipline-head"><em>Graphics &amp; shading</em></h3>
-                    <ul class="discipline-list">
-                        <li>WebGPU &amp; WGSL</li>
-                        <li>HLSL (URP, HDRP, Wallpaper Engine)</li>
-                        <li>GLSL (Three.js, WebGL2)</li>
-                        <li>GPGPU compute &amp; Navier-Stokes</li>
-                        <li>Reaction-diffusion</li>
-                        <li>Raymarching, signed-distance fields</li>
-                        <li>Procedural worlds (WFC, L-systems, simplex, Voronoi)</li>
-                        <li>Retro post-processing (Kuwahara, CRT, Bayer dither)</li>
-                    </ul>
-                </div>
-                <div class="discipline-col">
-                    <h3 class="discipline-head"><em>ML &amp; AI</em></h3>
-                    <ul class="discipline-list">
-                        <li>Claude API + tool use</li>
-                        <li>Multi-agent orchestration</li>
-                        <li>Local diffusion stack (ComfyUI, SDXL, IP-Adapter, LoRA)</li>
-                        <li>XGBoost + walk-forward validation</li>
-                        <li>Conformal prediction</li>
-                        <li>Kelly / HRP sizing</li>
-                        <li>Cheap-inference NPCs (4-layer LLM stack)</li>
-                    </ul>
-                </div>
-                <div class="discipline-col">
-                    <h3 class="discipline-head"><em>Web, systems, tooling</em></h3>
-                    <ul class="discipline-list">
-                        <li>FastAPI / Flask back-ends</li>
-                        <li>React 19 + TypeScript</li>
-                        <li>Cloudflare Workers + KV</li>
-                        <li>Browser automation (nodriver, curl-cffi, Akamai-grade)</li>
-                        <li>3D CAD scripting (SketchUp Python)</li>
-                        <li>Engine modding (Hytale Java, Darktide DMF/Lua, Bitsquid)</li>
-                        <li>Custom C++ engines, Unity URP &amp; HDRP</li>
-                    </ul>
-                </div>
-            </section>
-
-            <p class="hero-catalogue-link revealable">
-                <a href="#about"><em>About this work</em> <span aria-hidden="true">↓</span></a>
-            </p>
         </section>
 
         <!-- § 01 — About -->
@@ -327,6 +325,7 @@
     </div>
 
     <script src="js/main.js" defer></script>
+    <script type="module" src="js/hero-galaxy/index.js"></script>
     <script src="js/chat.js" defer></script>
 
     <!-- Cloudflare Web Analytics — privacy-first, no cookies, no PII.

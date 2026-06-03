@@ -163,8 +163,8 @@ export async function mountScene({ section }) {
         }
     }
 
-    // Per-planet pipeline cache. Keys are shader paths; values are built pipelines.
-    // Lazy: first system entry warms its planet's pipelines.
+    // Per-planet pipeline cache. Keys are shader paths; values are built
+    // pipelines (or the default-planet pipeline on fetch/compile failure).
     const planetPipelineCache = new Map();
     planetPipelineCache.set('default-planet.wgsl', { pipeline: defaultPipeline });
     async function planetPipelineFor(shaderPath) {
@@ -172,6 +172,17 @@ export async function mountScene({ section }) {
         const built = await getMeshPipeline(device, format, shaderPath);
         planetPipelineCache.set(shaderPath, built);
         return built;
+    }
+    // Warm pipelines for EVERY planet up-front, in parallel, so they render
+    // immediately at galaxy view rather than only after a system has been
+    // visited. Most fall back to default-planet.wgsl; the 4 distinctive
+    // shaders compile genuinely. Cost is one-time at boot (<150ms typical).
+    {
+        const allShaderPaths = new Set();
+        for (const sys of galaxy.systems) {
+            for (const p of sys.planets) allShaderPaths.add(p.shader || 'default-planet.wgsl');
+        }
+        await Promise.all(Array.from(allShaderPaths).map(planetPipelineFor));
     }
 
     // Build sun, planet, and moon bodies

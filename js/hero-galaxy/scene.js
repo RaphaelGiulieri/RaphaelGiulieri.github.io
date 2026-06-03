@@ -113,6 +113,51 @@ export async function mountScene({ section }) {
         }
     }
 
+    // ── Phase 12: per-planet particle rings ──
+    // Disc-mesh rings + bloom are deferred to v2 (see spec § Out of scope and
+    // Task 14.1). Particle rings work today by adding emitters to the
+    // starfield ps and binding the orbit module's centre params to live
+    // planet positions (we update them in the frame loop below).
+    const ringOrbits = [];   // [{ planetBody, orbitMod }]
+    if (starPs) {
+        try {
+            const { Emitter, shapes, modules } = await import('../particles/index.js');
+            for (const sys of galaxy.systems) {
+                for (const p of sys.planets) {
+                    const r = p.ring;
+                    if (!r || r.type !== 'particles') continue;
+                    const planetEntry = planets.find(pl => pl.body.id === p.id);
+                    if (!planetEntry) continue;
+                    const body = planetEntry.body;
+                    const meanR = (r.innerRadius + r.outerRadius) / 2;
+                    const thick = r.outerRadius - r.innerRadius;
+                    const tiltRad = (r.tilt || 0) * Math.PI / 180;
+                    const axis = [0, Math.cos(tiltRad), Math.sin(tiltRad)];
+                    const orbitMod = modules.orbit({
+                        center: [body.worldPos[0], body.worldPos[1], body.worldPos[2]],
+                        axis, speed: 0.4, radius: meanR, springK: 8,
+                    });
+                    ringOrbits.push({ planetBody: body, orbitMod });
+                    await starPs.addEmitter(new Emitter({
+                        position: [body.worldPos[0], body.worldPos[1], body.worldPos[2]],
+                        shape: shapes.ring({ radius: meanR, thickness: thick, height: 0.05 }),
+                        rate: 0,
+                        bursts: [{ time: 0, count: isMobile ? Math.floor((r.count || 3000) * 0.4) : (r.count || 3000) }],
+                        initial: {
+                            lifetime: { min: 1e9, max: 1e9 },
+                            speed:    { min: 0, max: 0 },
+                            size:     { min: 0.6, max: 1.4 },
+                            color:    [body.accent[0], body.accent[1], body.accent[2], 1],
+                        },
+                        modules: [orbitMod],
+                    }));
+                }
+            }
+        } catch (e) {
+            console.warn('[hero-galaxy] particle rings setup failed (continuing without rings):', e);
+        }
+    }
+
     // Per-planet pipeline cache. Keys are shader paths; values are built pipelines.
     // Lazy: first system entry warms its planet's pipelines.
     const planetPipelineCache = new Map();
@@ -351,6 +396,13 @@ export async function mountScene({ section }) {
             body.worldPos[0] = planet.worldPos[0] + Math.cos(a) * o.radius;
             body.worldPos[1] = planet.worldPos[1] + Math.sin(tilt) * o.radius * 0.2;
             body.worldPos[2] = planet.worldPos[2] + Math.sin(a) * o.radius * Math.cos(tilt);
+        }
+
+        // Ring orbit centres track their planet's current world position
+        for (const { planetBody, orbitMod } of ringOrbits) {
+            orbitMod.params.cx = planetBody.worldPos[0];
+            orbitMod.params.cy = planetBody.worldPos[1];
+            orbitMod.params.cz = planetBody.worldPos[2];
         }
 
         // Hover detection + hover_t tween

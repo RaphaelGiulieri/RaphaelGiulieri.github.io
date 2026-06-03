@@ -1296,3 +1296,85 @@ export function sdfAttract({
 }
 register({ name: 'sdfAttract', category: 'Forces', factory: sdfAttract,
   doc: 'Attracts particles toward the zero-isoline of a baked SDF texture (system.updateSdfTexture).' });
+
+// ─────────────────────── orbit ───────────────────────
+// Forces particles into a circular orbit around `center` at `radius`,
+// in the plane perpendicular to `axis`, at angular `speed` (rad/s).
+// Position is projected onto the plane each frame, velocity overwritten to
+// tangent × (speed × radius) plus a radial spring toward `radius`.
+// Use case: planet rings, satellites.
+
+export function orbit({ center = [0, 0, 0], axis = [0, 1, 0], speed = 0.5, radius = 1.5, springK = 6 } = {}) {
+    const params = {
+        cx: center[0], cy: center[1], cz: center[2],
+        ax: axis[0], ay: axis[1], az: axis[2],
+        speed, radius, springK,
+    };
+    const apply = (sys, i, dt) => {
+        const cx = evalBoundScalar(params.cx, i, sys, null);
+        const cy = evalBoundScalar(params.cy, i, sys, null);
+        const cz = evalBoundScalar(params.cz, i, sys, null);
+        let nx = evalBoundScalar(params.ax, i, sys, null),
+            ny = evalBoundScalar(params.ay, i, sys, null),
+            nz = evalBoundScalar(params.az, i, sys, null);
+        const al = Math.hypot(nx, ny, nz) || 1; nx /= al; ny /= al; nz /= al;
+        const ks = evalBoundScalar(params.speed, i, sys, null);
+        const rt = evalBoundScalar(params.radius, i, sys, null);
+        const sk = evalBoundScalar(params.springK, i, sys, null);
+        const rx = sys.pos[i*3]     - cx;
+        const ry = sys.pos[i*3 + 1] - cy;
+        const rz = sys.pos[i*3 + 2] - cz;
+        const rn = rx * nx + ry * ny + rz * nz;
+        const px = rx - rn * nx, py = ry - rn * ny, pz = rz - rn * nz;
+        const pl = Math.hypot(px, py, pz) || 1e-6;
+        const ux = px / pl, uy = py / pl, uz = pz / pl;
+        const tx = ny * uz - nz * uy;
+        const ty = nz * ux - nx * uz;
+        const tz = nx * uy - ny * ux;
+        const rerr = rt - pl;
+        sys.vel[i*3]     = tx * ks * rt + ux * rerr * sk;
+        sys.vel[i*3 + 1] = ty * ks * rt + uy * rerr * sk;
+        sys.vel[i*3 + 2] = tz * ks * rt + uz * rerr * sk;
+    };
+    apply.moduleName = 'orbit';
+    apply.kind = 'force-field';
+    apply.forceMode = 'set';
+    apply.params = params;
+    apply.schema = {
+        cx: { type: 'float', min: -50, max: 50, step: 0.1, bindable: true },
+        cy: { type: 'float', min: -50, max: 50, step: 0.1, bindable: true },
+        cz: { type: 'float', min: -50, max: 50, step: 0.1, bindable: true },
+        ax: { type: 'float', min: -1, max: 1, step: 0.01 },
+        ay: { type: 'float', min: -1, max: 1, step: 0.01 },
+        az: { type: 'float', min: -1, max: 1, step: 0.01 },
+        speed:   { type: 'float', min: -10, max: 10, step: 0.01, bindable: true },
+        radius:  { type: 'float', min: 0,   max: 20, step: 0.01, bindable: true },
+        springK: { type: 'float', min: 0,   max: 20, step: 0.1, bindable: true },
+    };
+    apply.wgslSnippet = (paramRefs) => `
+{
+  let o_cx = eval_bound(module_params.${paramRefs.cx}, p, i);
+  let o_cy = eval_bound(module_params.${paramRefs.cy}, p, i);
+  let o_cz = eval_bound(module_params.${paramRefs.cz}, p, i);
+  let o_ax = eval_bound(module_params.${paramRefs.ax}, p, i);
+  let o_ay = eval_bound(module_params.${paramRefs.ay}, p, i);
+  let o_az = eval_bound(module_params.${paramRefs.az}, p, i);
+  let o_sp = eval_bound(module_params.${paramRefs.speed}, p, i);
+  let o_rt = eval_bound(module_params.${paramRefs.radius}, p, i);
+  let o_sk = eval_bound(module_params.${paramRefs.springK}, p, i);
+  let o_axis_raw = vec3<f32>(o_ax, o_ay, o_az);
+  let o_aLen = max(length(o_axis_raw), 0.000001);
+  let o_n = o_axis_raw / o_aLen;
+  let o_r = p.pos - vec3<f32>(o_cx, o_cy, o_cz);
+  let o_rn = dot(o_r, o_n);
+  let o_perp = o_r - o_n * o_rn;
+  let o_pl = max(length(o_perp), 0.000001);
+  let o_u = o_perp / o_pl;
+  let o_t = cross(o_n, o_u);
+  let o_err = o_rt - o_pl;
+  p.vel = o_t * o_sp * o_rt + o_u * o_err * o_sk;
+}`;
+    return apply;
+}
+register({ name: 'orbit', category: 'Forces', factory: orbit,
+  doc: 'Locks particles to a circular orbit around `center` at `radius` in the plane perpendicular to `axis`.' });

@@ -13,19 +13,27 @@ import { createBody, writeBodyUbo, bodyDescFromSun, bodyDescFromPlanet, bodyDesc
 import { mat4Identity } from '../particles/core/math.js';
 import { screenToRay, hitTestBodies } from './render/raycast.js';
 import { createBreadcrumb } from './breadcrumb.js';
+import { mountStarfield } from './render/starfield.js';
 
-const CLEAR_COLOR = { r: 0.004, g: 0.004, b: 0.004, a: 1.0 };
+// Mesh canvas is layered ON TOP of the starfield canvas; clear with alpha=0
+// so the stars show through wherever meshes don't draw.
+const CLEAR_COLOR = { r: 0, g: 0, b: 0, a: 0 };
 
 export async function mountScene({ section }) {
     const canvas = section.querySelector('#galaxy-canvas');
     if (!canvas) throw new Error('no #galaxy-canvas');
+    const starsCanvas = section.querySelector('#galaxy-stars');
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     function resizeBacking() {
         const w = Math.floor(canvas.clientWidth  * dpr);
         const h = Math.floor(canvas.clientHeight * dpr);
-        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; return true; }
-        return false;
+        let changed = false;
+        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; changed = true; }
+        if (starsCanvas && (starsCanvas.width !== w || starsCanvas.height !== h)) {
+            starsCanvas.width = w; starsCanvas.height = h;
+        }
+        return changed;
     }
     resizeBacking();
 
@@ -35,7 +43,7 @@ export async function mountScene({ section }) {
     const device = await adapter.requestDevice();
     const context = canvas.getContext('webgpu');
     const format = navigator.gpu.getPreferredCanvasFormat();
-    context.configure({ device, format, alphaMode: 'opaque' });
+    context.configure({ device, format, alphaMode: 'premultiplied' });
 
     const camera = createCamera();
     setAspect(camera, canvas.width / canvas.height);
@@ -92,6 +100,18 @@ export async function mountScene({ section }) {
     });
     const { pipeline: sunPipeline } = await getMeshPipeline(device, format, 'sun.wgsl');
     const { pipeline: moonPipeline } = await getMeshPipeline(device, format, 'default-moon.wgsl');
+
+    // Mount the starfield (on its own canvas, its own GPUDevice). Mobile gets
+    // a smaller count for budget; matched to spec § 5.3.
+    const isMobile = window.matchMedia('(max-width: 720px)').matches;
+    let starPs = null;
+    if (starsCanvas) {
+        try {
+            starPs = await mountStarfield({ canvas: starsCanvas, particleCount: isMobile ? 8000 : 20000 });
+        } catch (e) {
+            console.warn('[hero-galaxy] starfield mount failed (continuing without stars):', e);
+        }
+    }
 
     // Per-planet pipeline cache. Keys are shader paths; values are built pipelines.
     // Lazy: first system entry warms its planet's pipelines.
@@ -381,6 +401,21 @@ export async function mountScene({ section }) {
             M[0] = sc; M[5] = sc; M[10] = sc;
             M[12] = body.worldPos[0]; M[13] = body.worldPos[1]; M[14] = body.worldPos[2];
             writeBodyUbo(device, body, M, t);
+        }
+
+        // Starfield in its own pass on its own canvas + device. We feed it
+        // our view/proj matrices so the stars track the camera. Bloom is
+        // off (would over-light the swap target) and the bg is opaque so
+        // the mesh canvas's premultiplied alpha compositing shows stars
+        // behind everything.
+        if (starPs) {
+            starPs.update(dt);
+            starPs.render({
+                view: camera.view,
+                proj: camera.proj,
+                bgColor: [0.004, 0.004, 0.004, 1],
+                postfx: { enableBloom: false, exposure: 1.0, vignette: 0.1 },
+            });
         }
 
         const enc = device.createCommandEncoder();

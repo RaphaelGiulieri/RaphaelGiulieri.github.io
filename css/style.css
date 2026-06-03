@@ -425,6 +425,7 @@ button {
     padding: 0;
     margin: 0;
 }
+.hero-galaxy #galaxy-stars,
 .hero-galaxy #galaxy-canvas {
     position: absolute;
     inset: 0;
@@ -432,6 +433,8 @@ button {
     height: 100%;
     display: block;
 }
+.hero-galaxy #galaxy-stars  { z-index: 0; pointer-events: none; }
+.hero-galaxy #galaxy-canvas { z-index: 1; background: transparent; }
 /* Live-mode overlay chrome */
 .hero-galaxy .galaxy-breadcrumb {
     position: absolute;

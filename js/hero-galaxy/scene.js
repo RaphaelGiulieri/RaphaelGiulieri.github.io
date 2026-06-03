@@ -11,6 +11,7 @@ import { getMeshPipeline } from './render/pipeline.js';
 import { loadGalaxyData } from './data-loader.js';
 import { createBody, writeBodyUbo, bodyDescFromSun, bodyDescFromPlanet, bodyDescFromMoon } from './bodies.js';
 import { mat4Identity } from '../particles/core/math.js';
+import { screenToRay, hitTestBodies } from './render/raycast.js';
 
 const CLEAR_COLOR = { r: 0.004, g: 0.004, b: 0.004, a: 1.0 };
 
@@ -140,6 +141,130 @@ export async function mountScene({ section }) {
         applyOrbitDelta(camera, 0, 0);
     }
 
+    // ── Bezier-eased camera transitions ────────────────────────────────────
+    let transition = null;
+    function transitionTo(goal) {
+        const start = {
+            yaw: camera.yaw, pitch: camera.pitch, distance: camera.distance,
+            target: [camera.target[0], camera.target[1], camera.target[2]],
+        };
+        let endTarget = [0, 0, 0], endDist = 80;
+        if (goal.level === 'system') {
+            const sun = suns.find(s => s.id === goal.focusedSystemId);
+            if (sun) { endTarget = [sun.worldPos[0], sun.worldPos[1], sun.worldPos[2]]; endDist = 18; }
+        } else if (goal.level === 'planet') {
+            const planetEntry = planets.find(p => p.body.id === goal.focusedPlanetId);
+            if (planetEntry) {
+                const body = planetEntry.body;
+                endTarget = [body.worldPos[0], body.worldPos[1], body.worldPos[2]];
+                endDist = 3.5;
+            }
+        }
+        const fromLevel = state.level, toLevel = goal.level;
+        const ms = (fromLevel === 'galaxy' || toLevel === 'galaxy') ? 1200 : 900;
+        transition = {
+            start,
+            end: { yaw: camera.yaw, pitch: camera.pitch, distance: endDist, target: endTarget },
+            t0: performance.now(), ms, goal,
+        };
+    }
+    function tickTransition(now) {
+        if (!transition) return;
+        const u = Math.min(1, (now - transition.t0) / transition.ms);
+        const e = cubicBezier(u, 0.4, 0, 0.2, 1);
+        const { start, end } = transition;
+        camera.target[0] = start.target[0] + (end.target[0] - start.target[0]) * e;
+        camera.target[1] = start.target[1] + (end.target[1] - start.target[1]) * e;
+        camera.target[2] = start.target[2] + (end.target[2] - start.target[2]) * e;
+        camera.distance = start.distance + (end.distance - start.distance) * e;
+        applyOrbitDelta(camera, 0, 0);
+        if (u >= 1) {
+            state.level = transition.goal.level;
+            state.focusedSystemId = transition.goal.focusedSystemId ?? null;
+            state.focusedPlanetId = transition.goal.focusedPlanetId ?? null;
+            transition = null;
+        }
+    }
+    function cubicBezier(t, p1x, p1y, p2x, p2y) {
+        const cx = 3 * p1x, bx = 3 * (p2x - p1x) - cx, ax = 1 - cx - bx;
+        const cy = 3 * p1y, by = 3 * (p2y - p1y) - cy, ay = 1 - cy - by;
+        function sampleCurveX(u) { return ((ax * u + bx) * u + cx) * u; }
+        function sampleCurveY(u) { return ((ay * u + by) * u + cy) * u; }
+        function sampleCurveDerivX(u) { return (3 * ax * u + 2 * bx) * u + cx; }
+        let u = t;
+        for (let i = 0; i < 8; i++) {
+            const x = sampleCurveX(u) - t;
+            const d = sampleCurveDerivX(u);
+            if (Math.abs(x) < 1e-4) break;
+            if (Math.abs(d) < 1e-6) break;
+            u -= x / d;
+        }
+        return sampleCurveY(u);
+    }
+
+    // ── Hit testing + click navigation ─────────────────────────────────────
+    let cursorNdc = null;
+    let hovered = null;
+
+    canvas.addEventListener('pointermove', (e) => {
+        const r = canvas.getBoundingClientRect();
+        cursorNdc = {
+            x: ((e.clientX - r.left) / r.width)  * 2 - 1,
+            y: -((e.clientY - r.top)  / r.height) * 2 + 1,
+        };
+    });
+    canvas.addEventListener('pointerleave', () => { cursorNdc = null; });
+
+    canvas.addEventListener('click', (e) => {
+        const r = canvas.getBoundingClientRect();
+        const ndc = {
+            x: ((e.clientX - r.left) / r.width)  * 2 - 1,
+            y: -((e.clientY - r.top)  / r.height) * 2 + 1,
+        };
+        const ray = screenToRay(camera, ndc.x, ndc.y);
+        if (!ray) return;
+        const targets = currentSelectionTargets();
+        const hit = hitTestBodies(ray, targets);
+        if (hit) handleBodyClick(hit.body);
+        else     handleEmptyClick();
+    });
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        // Scope ESC: if the existing project modal is open, let it own ESC.
+        const modal = document.querySelector('.dossier.is-open, #modal.is-open');
+        if (modal) return;
+        handleEmptyClick();
+    });
+
+    function currentSelectionTargets() {
+        if (state.level === 'galaxy') return suns;
+        if (state.level === 'system') return visiblePlanets().map(p => p.body);
+        if (state.level === 'planet') return visibleMoons().map(m => m.body);
+        return [];
+    }
+
+    function handleBodyClick(body) {
+        if (body.kind === 'sun') {
+            transitionTo({ level: 'system', focusedSystemId: body.id });
+        } else if (body.kind === 'planet') {
+            transitionTo({ level: 'planet', focusedSystemId: body.meta.systemId, focusedPlanetId: body.id });
+        } else if (body.kind === 'moon') {
+            const projectId = body.meta.projectId;
+            if (typeof window.openModal === 'function') {
+                window.openModal(projectId, section);
+            }
+        }
+    }
+
+    function handleEmptyClick() {
+        if (state.level === 'planet') {
+            transitionTo({ level: 'system', focusedSystemId: state.focusedSystemId });
+        } else if (state.level === 'system') {
+            transitionTo({ level: 'galaxy' });
+        }
+    }
+
     function frame(now) {
         if (resizeBacking()) { setAspect(camera, canvas.width / canvas.height); ensureDepth(); }
         const t = now * 0.001;
@@ -147,6 +272,7 @@ export async function mountScene({ section }) {
         const dt = Math.min(0.05, (now - lastNow) / 1000);
         frame._lastNow = now;
         controls.tickInertia(dt);
+        tickTransition(now);
 
         // Update planet positions (orbit around their sun)
         for (const { body, sun } of planets) {
@@ -164,6 +290,20 @@ export async function mountScene({ section }) {
             body.worldPos[0] = planet.worldPos[0] + Math.cos(a) * o.radius;
             body.worldPos[1] = planet.worldPos[1] + Math.sin(tilt) * o.radius * 0.2;
             body.worldPos[2] = planet.worldPos[2] + Math.sin(a) * o.radius * Math.cos(tilt);
+        }
+
+        // Hover detection + hover_t tween
+        let newHovered = null;
+        if (cursorNdc) {
+            const ray = screenToRay(camera, cursorNdc.x, cursorNdc.y);
+            const hit = hitTestBodies(ray, currentSelectionTargets());
+            if (hit) newHovered = hit.body;
+        }
+        hovered = newHovered;
+        const allBodies = suns.concat(planets.map(p => p.body), moons.map(m => m.body));
+        for (const b of allBodies) {
+            const target = (b === hovered) ? 1.0 : 0.0;
+            b.hoverT += (target - b.hoverT) * Math.min(1, dt * 8);
         }
 
         // Camera UBO
@@ -249,27 +389,16 @@ export async function mountScene({ section }) {
 
     // Expose programmatic navigation for verification + Phase 7 click handlers
     window.HERO_GALAXY = {
-        gotoGalaxy() {
-            state.level = 'galaxy';
-            state.focusedSystemId = null;
-            state.focusedPlanetId = null;
-            applyStateCamera();
-        },
+        gotoGalaxy() { transitionTo({ level: 'galaxy' }); },
         gotoSystem(systemId) {
             const sys = galaxy.systems.find(s => s.id === systemId);
             if (!sys) { console.warn('no system', systemId); return; }
-            state.level = 'system';
-            state.focusedSystemId = systemId;
-            state.focusedPlanetId = null;
-            applyStateCamera();
+            transitionTo({ level: 'system', focusedSystemId: systemId });
         },
         gotoPlanet(planetId) {
             const pl = planets.find(p => p.body.id === planetId);
             if (!pl) { console.warn('no planet', planetId); return; }
-            state.level = 'planet';
-            state.focusedSystemId = pl.body.meta.systemId;
-            state.focusedPlanetId = planetId;
-            applyStateCamera();
+            transitionTo({ level: 'planet', focusedSystemId: pl.body.meta.systemId, focusedPlanetId: planetId });
         },
         state, suns, planets, moons, galaxy,
     };

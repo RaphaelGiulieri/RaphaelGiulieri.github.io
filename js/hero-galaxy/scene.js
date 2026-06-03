@@ -69,7 +69,11 @@ export async function mountScene({ section }) {
         },
     });
 
-    const controls = wireControls({ canvas, camera, getState: () => state.level });
+    let lastInputAt = performance.now();
+    const controls = wireControls({
+        canvas, camera, getState: () => state.level,
+        onInput: () => { lastInputAt = performance.now(); },
+    });
 
     const ico = makeIcosphere(5);
     const vbuf = device.createBuffer({ size: ico.vertexData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
@@ -372,7 +376,18 @@ export async function mountScene({ section }) {
         }
     }
 
+    let running = true;
+    const io = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+            const wasRunning = running;
+            running = e.intersectionRatio >= 0.1;
+            if (running && !wasRunning) requestAnimationFrame(frame);
+        }
+    }, { threshold: [0, 0.1] });
+    io.observe(section);
+
     function frame(now) {
+        if (!running) return;
         if (resizeBacking()) { setAspect(camera, canvas.width / canvas.height); ensureDepth(); }
         const t = now * 0.001;
         const lastNow = frame._lastNow ?? now;
@@ -380,6 +395,12 @@ export async function mountScene({ section }) {
         frame._lastNow = now;
         controls.tickInertia(dt);
         tickTransition(now);
+
+        // Galaxy auto-orbit (0.5°/s) after 4s idle; sub-states stay static so
+        // the orbital motion of planets/moons provides the "alive" feel.
+        if (state.level === 'galaxy' && !transition && (now - lastInputAt > 4000)) {
+            applyOrbitDelta(camera, 0.5 * (Math.PI / 180) * dt, 0);
+        }
 
         // Update planet positions (orbit around their sun)
         for (const { body, sun } of planets) {
@@ -436,13 +457,18 @@ export async function mountScene({ section }) {
             M[12] = s.worldPos[0]; M[13] = s.worldPos[1]; M[14] = s.worldPos[2];
             writeBodyUbo(device, s, M, t);
         }
-        // Planet + moon UBOs (only visible ones)
+        // Planet + moon UBOs (only visible ones). Planet self-rotates slowly
+        // on Y; phase derived from its id so each planet spins out-of-sync.
         const visPls = visiblePlanets();
         for (const { body } of visPls) {
             const M = new Float32Array(16);
-            mat4Identity(M);
+            const spin = t * 0.2 + (body.id.length * 0.7);
+            const cs = Math.cos(spin), sn = Math.sin(spin);
             const sc = body.scale;
-            M[0] = sc; M[5] = sc; M[10] = sc;
+            M[0]  =  cs * sc; M[2]  =  sn * sc;
+            M[5]  =        sc;
+            M[8]  = -sn * sc; M[10] =  cs * sc;
+            M[15] = 1;
             M[12] = body.worldPos[0]; M[13] = body.worldPos[1]; M[14] = body.worldPos[2];
             writeBodyUbo(device, body, M, t);
         }
@@ -461,6 +487,9 @@ export async function mountScene({ section }) {
         // off (would over-light the swap target) and the bg is opaque so
         // the mesh canvas's premultiplied alpha compositing shows stars
         // behind everything.
+        // NOTE (Task 14.1): full-frame bloom over meshes + particles is
+        // deferred to v2. Sun + planet shaders rely on their own fresnel
+        // for body glow in v1.
         if (starPs) {
             starPs.update(dt);
             starPs.render({

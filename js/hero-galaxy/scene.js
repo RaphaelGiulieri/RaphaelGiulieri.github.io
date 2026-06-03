@@ -93,6 +93,17 @@ export async function mountScene({ section }) {
     const { pipeline: sunPipeline } = await getMeshPipeline(device, format, 'sun.wgsl');
     const { pipeline: moonPipeline } = await getMeshPipeline(device, format, 'default-moon.wgsl');
 
+    // Per-planet pipeline cache. Keys are shader paths; values are built pipelines.
+    // Lazy: first system entry warms its planet's pipelines.
+    const planetPipelineCache = new Map();
+    planetPipelineCache.set('default-planet.wgsl', { pipeline: defaultPipeline });
+    async function planetPipelineFor(shaderPath) {
+        if (planetPipelineCache.has(shaderPath)) return planetPipelineCache.get(shaderPath);
+        const built = await getMeshPipeline(device, format, shaderPath);
+        planetPipelineCache.set(shaderPath, built);
+        return built;
+    }
+
     // Build sun, planet, and moon bodies
     const suns = [];
     const planets = []; // [{ body, sun }]
@@ -162,6 +173,16 @@ export async function mountScene({ section }) {
             target: [camera.target[0], camera.target[1], camera.target[2]],
         };
         let endTarget = [0, 0, 0], endDist = 80;
+        if (goal.level === 'system' || goal.level === 'planet') {
+            const sysId = goal.focusedSystemId || state.focusedSystemId;
+            const sys = galaxy.systems.find(s => s.id === sysId);
+            if (sys) {
+                for (const p of sys.planets) {
+                    // Fire-and-forget — pipelines build during the Bezier fly.
+                    planetPipelineFor(p.shader || 'default-planet.wgsl');
+                }
+            }
+        }
         if (goal.level === 'system') {
             const sun = suns.find(s => s.id === goal.focusedSystemId);
             if (sun) { endTarget = [sun.worldPos[0], sun.worldPos[1], sun.worldPos[2]]; endDist = 18; }
@@ -384,13 +405,14 @@ export async function mountScene({ section }) {
             pass.setBindGroup(1, s.bg);
             pass.drawIndexed(ico.indexCount);
         }
-        // Planets (default shader for Phase 6; per-planet pipelines arrive in Phase 9)
-        if (visPls.length) {
-            pass.setPipeline(defaultPipeline);
-            for (const { body } of visPls) {
-                pass.setBindGroup(1, body.bg);
-                pass.drawIndexed(ico.indexCount);
-            }
+        // Planets — per-planet pipeline if compiled, else default. Pipelines
+        // not yet ready (compile pending) skip this frame and render next time.
+        for (const { body } of visPls) {
+            const built = planetPipelineCache.get(body.shaderPath);
+            if (!built) continue;
+            pass.setPipeline(built.pipeline);
+            pass.setBindGroup(1, body.bg);
+            pass.drawIndexed(ico.indexCount);
         }
         // Moons
         if (visMs.length) {

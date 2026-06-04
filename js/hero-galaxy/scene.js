@@ -59,6 +59,7 @@ export async function mountScene({ section }) {
         level: 'galaxy',
         focusedSystemId: null,
         focusedPlanetId: null,
+        focusedMoonId:   null,
     };
 
     // Breadcrumb DOM manager. `onCrumbClick` is wired below to call transitionTo
@@ -70,6 +71,7 @@ export async function mountScene({ section }) {
             if (key === 'galaxy') transitionTo({ level: 'galaxy' });
             else if (key.startsWith('system:')) transitionTo({ level: 'system', focusedSystemId: key.slice(7) });
             else if (key.startsWith('planet:')) transitionTo({ level: 'planet', focusedSystemId: state.focusedSystemId, focusedPlanetId: key.slice(7) });
+            else if (key.startsWith('moon:'))   transitionTo({ level: 'moon',   focusedSystemId: state.focusedSystemId, focusedPlanetId: state.focusedPlanetId, focusedMoonId: key.slice(5) });
         },
     });
 
@@ -124,6 +126,7 @@ export async function mountScene({ section }) {
         camDistGalaxy:     140,
         camDistSystem:     32,
         camDistPlanet:     6,
+        camDistMoon:       1.5,
         // Label positioning — see CSS --gap and the per-kind silhouette
         // multipliers used in the per-frame projection.
         labelGapPx:        6,
@@ -349,12 +352,8 @@ export async function mountScene({ section }) {
         return planets;
     }
     function visibleMoons() {
-        // Render moons at EVERY level so they're present from the first frame,
-        // not lazily after zoom-in. At galaxy view they're tiny dots that read
-        // as additional structure around their planet; at planet view we
-        // filter to the focal planet's moons to keep the scene clean.
-        if (state.level === 'planet') return moons.filter(m => m.body.meta.planetId === state.focusedPlanetId);
-        if (state.level === 'system') return moons.filter(m => m.body.meta.systemId === state.focusedSystemId);
+        // Render every moon at every level — keeps the full structure of the
+        // galaxy visible whatever the user is focused on.
         return moons;
     }
 
@@ -373,6 +372,12 @@ export async function mountScene({ section }) {
             if (planetBody) {
                 camera.target.set(planetBody.worldPos);
                 camera.distance = world.camDistPlanet;
+            }
+        } else if (state.level === 'moon') {
+            const moonBody = moons.find(m => m.body.id === state.focusedMoonId)?.body;
+            if (moonBody) {
+                camera.target.set(moonBody.worldPos);
+                camera.distance = world.camDistMoon;
             }
         }
         applyOrbitDelta(camera, 0, 0);
@@ -405,6 +410,13 @@ export async function mountScene({ section }) {
                 endTarget = [body.worldPos[0], body.worldPos[1], body.worldPos[2]];
                 endDist = world.camDistPlanet;
             }
+        } else if (goal.level === 'moon') {
+            const moonEntry = moons.find(m => m.body.id === goal.focusedMoonId);
+            if (moonEntry) {
+                const body = moonEntry.body;
+                endTarget = [body.worldPos[0], body.worldPos[1], body.worldPos[2]];
+                endDist = world.camDistMoon;
+            }
         }
         const fromLevel = state.level, toLevel = goal.level;
         const ms = (fromLevel === 'galaxy' || toLevel === 'galaxy') ? 1200 : 900;
@@ -418,6 +430,7 @@ export async function mountScene({ section }) {
             level: goal.level,
             focusedSystemId: goal.focusedSystemId ?? state.focusedSystemId,
             focusedPlanetId: goal.focusedPlanetId ?? state.focusedPlanetId,
+            focusedMoonId:   goal.focusedMoonId   ?? state.focusedMoonId,
         });
     }
     function tickTransition(now) {
@@ -436,6 +449,9 @@ export async function mountScene({ section }) {
         } else if (goal.level === 'planet') {
             const pb = planets.find(p => p.body.id === goal.focusedPlanetId)?.body;
             if (pb) endTarget = pb.worldPos;
+        } else if (goal.level === 'moon') {
+            const mb = moons.find(m => m.body.id === goal.focusedMoonId)?.body;
+            if (mb) endTarget = mb.worldPos;
         }
         camera.target[0] = start.target[0] + (endTarget[0] - start.target[0]) * e;
         camera.target[1] = start.target[1] + (endTarget[1] - start.target[1]) * e;
@@ -446,6 +462,7 @@ export async function mountScene({ section }) {
             state.level = transition.goal.level;
             state.focusedSystemId = transition.goal.focusedSystemId ?? null;
             state.focusedPlanetId = transition.goal.focusedPlanetId ?? null;
+            state.focusedMoonId   = transition.goal.focusedMoonId   ?? null;
             transition = null;
             breadcrumb.render(state);
         }
@@ -501,6 +518,7 @@ export async function mountScene({ section }) {
         // clicking on it (or empty space) falls through to handleEmptyClick.
         const focusedId = state.level === 'system' ? state.focusedSystemId
                         : state.level === 'planet' ? state.focusedPlanetId
+                        : state.level === 'moon'   ? state.focusedMoonId
                         : null;
         const targets = currentSelectionTargets().filter(b => b.id !== focusedId);
 
@@ -577,15 +595,19 @@ export async function mountScene({ section }) {
         } else if (body.kind === 'planet') {
             transitionTo({ level: 'planet', focusedSystemId: body.meta.systemId, focusedPlanetId: body.id });
         } else if (body.kind === 'moon') {
-            const projectId = body.meta.projectId;
-            if (typeof window.openModal === 'function') {
-                window.openModal(projectId, section);
-            }
+            transitionTo({
+                level: 'moon',
+                focusedSystemId: body.meta.systemId,
+                focusedPlanetId: body.meta.planetId,
+                focusedMoonId:   body.id,
+            });
         }
     }
 
     function handleEmptyClick() {
-        if (state.level === 'planet') {
+        if (state.level === 'moon') {
+            transitionTo({ level: 'planet', focusedSystemId: state.focusedSystemId, focusedPlanetId: state.focusedPlanetId });
+        } else if (state.level === 'planet') {
             transitionTo({ level: 'system', focusedSystemId: state.focusedSystemId });
         } else if (state.level === 'system') {
             transitionTo({ level: 'galaxy' });
@@ -663,6 +685,14 @@ export async function mountScene({ section }) {
                     camera.target[0] = pl.worldPos[0];
                     camera.target[1] = pl.worldPos[1];
                     camera.target[2] = pl.worldPos[2];
+                    applyOrbitDelta(camera, 0, 0);
+                }
+            } else if (state.level === 'moon') {
+                const mn = moons.find(m => m.body.id === state.focusedMoonId)?.body;
+                if (mn) {
+                    camera.target[0] = mn.worldPos[0];
+                    camera.target[1] = mn.worldPos[1];
+                    camera.target[2] = mn.worldPos[2];
                     applyOrbitDelta(camera, 0, 0);
                 }
             }
@@ -766,11 +796,14 @@ export async function mountScene({ section }) {
                 // so the visitor never loses orientation. Planet/moon labels
                 // appear only when we're inside their parent body.
                 if (state.level === 'galaxy') {
-                    show = body.kind === 'star';
+                    // Stars + every planet — lets visitors skim every
+                    // skill/sub-category from the top-down view without
+                    // having to zoom into each system.
+                    show = body.kind === 'star' || body.kind === 'planet';
                 } else if (state.level === 'system') {
                     show = body.kind === 'star'
                         || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId);
-                } else if (state.level === 'planet') {
+                } else if (state.level === 'planet' || state.level === 'moon') {
                     show = body.kind === 'star'
                         || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId)
                         || (body.kind === 'moon'   && body.meta.planetId === state.focusedPlanetId);

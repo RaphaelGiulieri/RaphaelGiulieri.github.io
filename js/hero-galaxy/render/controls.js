@@ -8,6 +8,7 @@ const ZOOM_CLAMPS = {
     galaxy:  { min: 45, max: 260 },
     system:  { min: 12, max: 70  },
     planet:  { min: 3,  max: 16  },
+    moon:    { min: 0.6, max: 5  },
 };
 
 export function wireControls({ canvas, camera, getState, onInput }) {

@@ -251,6 +251,9 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sCam, 'planet dist', world, 'camDistPlanet', 1.5, 30, 0.1,
             'Camera distance at planet zoom level. Re-enter a planet to re-apply.',
             { factory: fw.camDistPlanet });
+        row(sCam, 'moon dist', world, 'camDistMoon', 0.6, 8, 0.05,
+            'Camera distance at moon zoom level. Click a moon to re-apply.',
+            { factory: fw.camDistMoon });
     }
 
     // ── Footer actions: Reset to default + Save as default ────────────────

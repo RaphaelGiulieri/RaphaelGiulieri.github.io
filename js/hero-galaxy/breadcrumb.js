@@ -24,6 +24,16 @@ export function createBreadcrumb({ root, galaxyData, onCrumbClick }) {
                 active: state.level === 'planet',
             });
         }
+        if (state.focusedMoonId) {
+            const sys = galaxyData.systems.find(s => s.id === state.focusedSystemId);
+            const pl  = sys?.planets.find(p => p.id === state.focusedPlanetId);
+            const mn  = pl?.moons?.find(m => m.projectId === state.focusedMoonId);
+            items.push({
+                key: `moon:${state.focusedMoonId}`,
+                label: mn?.title || state.focusedMoonId,
+                active: state.level === 'moon',
+            });
+        }
         ol.innerHTML = items.map(it =>
             `<li class="${it.active ? 'is-active' : ''}" data-key="${it.key}">${escapeHtml(it.label)}</li>`
         ).join('');

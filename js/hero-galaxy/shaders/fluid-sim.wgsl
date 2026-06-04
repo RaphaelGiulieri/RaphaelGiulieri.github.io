@@ -28,8 +28,8 @@ struct SimParams {
     vortex_rate     : f32,    // expected fraction of cells injected per second
     vortex_strength : f32,    // magnitude of injected velocity impulse
     dye_injection   : f32,    // amount of dye added at each vortex site
+    dye_decay       : f32,    // dye decay rate per second (counterbalances injection)
     seed_phase      : f32,    // per-planet phase offset (rotates RNG sequence)
-    _pad            : f32,
 };
 
 @group(0) @binding(0) var src_vel  : texture_2d<f32>;
@@ -109,25 +109,26 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // finite lifetime.
     let v_out = v_with_band * (1.0 - params.damping * params.dt);
 
-    // Dye decays slightly each step too — without ANY decay it would
-    // saturate from continuous vortex injection. A small bleed keeps the
-    // dynamic range usable.
-    let dye_decayed = dye_advected * (1.0 - 0.02 * params.dt);
+    // Dye decay — counterbalances continuous vortex injection so the field
+    // doesn't saturate. Tunable from JS (gasGiantDyeDecay) so you can dial
+    // it in alongside injection.
+    let dye_decayed = dye_advected * (1.0 - clamp(params.dye_decay * params.dt, 0.0, 1.0));
 
     // ── Vortex injection ──
-    // Each frame, a random fraction of cells gets BOTH a rotational
-    // velocity impulse AND a dye spike. Damping bleeds off the velocity
-    // over a few seconds so the impulse forms a transient eddy, while
-    // the dye left behind shows the trail. Together this means the
-    // texture can start black and the visible pattern emerges from
-    // accumulated injection + advection alone.
+    // Vortices form at MID-LATITUDES (not uniformly) — matches real
+    // gas-giant dynamics where Coriolis-driven storms concentrate in
+    // belt zones, not at the poles. A gaussian latitude weight peaks at
+    // the equator (lat = 0.5 in uv space) and falls off toward the poles.
+    let lat_centered = (uv.y - 0.5) * 2.0;                  // -1 (S pole) … +1 (N pole)
+    let lat_weight   = exp(-lat_centered * lat_centered * 4.0);   // gaussian centered on equator
+
     let frame_seed = fract(sin(params.time * 12.9898 + params.seed_phase) * 43758.5453);
     let cell_seed  = fract(sin(f32(gid.x) * 12.345
                              + f32(gid.y) * 78.901
                              + frame_seed * 37.719) * 43758.5453);
     var v_out_final   = v_out;
     var dye_out_final = dye_decayed;
-    if (cell_seed < params.vortex_rate * params.dt) {
+    if (cell_seed < params.vortex_rate * params.dt * lat_weight) {
         let angle = cell_seed * 6.2831;
         v_out_final = v_out_final
             + vec2<f32>(cos(angle), sin(angle)) * params.vortex_strength;

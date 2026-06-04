@@ -286,8 +286,8 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sGas, 'navier sim', world, 'gasGiantSim', 0, 1, 1,
             'Toggle the live 2D Navier-Stokes-ish fluid sim. ON = each gas planet\'s velocity field advects itself once per frame (only for the focused system; other systems\' sims freeze). OFF = field stays at its initial banded condition (no compute cost).',
             { toUI: (v) => v ? 1 : 0, fromUI: (v) => v >= 0.5, factory: fw.gasGiantSim });
-        row(sGas, 'damping', world, 'gasGiantDamping', 0, 0.5, 0.005,
-            'Per-step velocity damping. Higher = jets bleed off faster (more static look); lower = turbulence persists longer.',
+        row(sGas, 'damping', world, 'gasGiantDamping', 0, 4, 0.01,
+            'Velocity damping per second. Counterbalances vortex injection so the field doesn\'t accumulate energy. Higher = jets bleed off fast (calmer look); lower = turbulence persists longer.',
             { factory: fw.gasGiantDamping });
         row(sGas, 'band force', world, 'gasGiantBandForce', 0, 3, 0.01,
             'Strength of the jet-stream restoring torque pulling each cell toward the alternating east/west zonal pattern. 0 = no bands; high = strong banded structure.',
@@ -304,6 +304,24 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sGas, 'dye injection', world, 'gasGiantDyeInjection', 0, 2, 0.01,
             'Amount of dye added at every vortex site. Higher = brighter, more saturated trails left by each eddy. 0 = velocity-only sim (no visible dye).',
             { factory: fw.gasGiantDyeInjection });
+        row(sGas, 'dye decay', world, 'gasGiantDyeDecay', 0, 4, 0.01,
+            'Dye decay per second. Must balance injection × vortex rate or the field saturates to white. At injection=0.4 × rate=0.4, decay≈1.0 gives a dynamic steady-state around the visible smoothstep range.',
+            { factory: fw.gasGiantDyeDecay });
+
+        // ── Particle rings ──────────────────────────────────────────────
+        const sRing = section('Particle rings');
+        row(sRing, 'distance', world, 'ringDistanceMul', 0.3, 3, 0.005,
+            'Live multiplier on ring orbit radius. Slider drag re-radiuses the existing particles via the orbit module — no reload needed. 1.0 = JSON value.',
+            { factory: fw.ringDistanceMul });
+        row(sRing, 'width', world, 'ringWidthMul', 0.1, 4, 0.01,
+            'Multiplier on ring thickness (outerRadius − innerRadius). Applied at spawn — RELOAD to take effect on existing rings.',
+            { factory: fw.ringWidthMul });
+        row(sRing, 'count', world, 'ringCountMul', 0.01, 1.5, 0.005,
+            'Multiplier on particle count. Default 0.18 keeps the ring sparse enough that the starfield bloom postfx can\'t sum overlapping particles past its threshold. RELOAD to apply.',
+            { factory: fw.ringCountMul });
+        row(sRing, 'brightness', world, 'ringBrightnessMul', 0, 2, 0.005,
+            'Multiplier on particle colour. Default 0.12 keeps each particle individually well below the bloom threshold (0.55), so no torus-of-light artefact. RELOAD to apply colour changes.',
+            { factory: fw.ringBrightnessMul });
     }
 
     // ── Footer actions: Reset / Save / Factory ────────────────────────────

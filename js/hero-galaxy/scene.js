@@ -168,12 +168,21 @@ export async function mountScene({ section }) {
         // samples whichever ping-pong texture currently holds the latest
         // state. OFF = sim is frozen at its initial banded condition.
         gasGiantSim:            false,
-        gasGiantDamping:        0.04,   // velocity damping per second
+        gasGiantDamping:        0.4,    // velocity damping per second
         gasGiantBandForce:      0.5,    // jet-stream restoring torque strength
         gasGiantAdvectMul:      1.0,    // advection step multiplier
-        gasGiantVortexRate:     1.2,    // expected vortex births per cell per second
+        gasGiantVortexRate:     0.4,    // expected vortex births per equator cell per sec
         gasGiantVortexStrength: 0.35,   // magnitude of each injected velocity impulse
-        gasGiantDyeInjection:   0.65,   // amount of dye added at each vortex site
+        gasGiantDyeInjection:   0.4,    // amount of dye added at each vortex site
+        gasGiantDyeDecay:       1.0,    // dye decay per second (balances injection)
+        // Particle ring tunables. Apply only to planets without moons (the
+        // rings-XOR-moons rule). Distance is LIVE (updated via the orbit
+        // module each frame); width / count / brightness are baked into the
+        // emitter at spawn time so they require a page reload to re-apply.
+        ringDistanceMul:        1.0,
+        ringWidthMul:           1.0,
+        ringCountMul:           0.18,   // count cap × this — keeps total particles low
+        ringBrightnessMul:      0.12,   // accent multiplier — well below bloom threshold
         // Label positioning — see CSS --gap and the per-kind silhouette
         // multipliers used in the per-frame projection.
         labelGapPx:        6,
@@ -418,15 +427,23 @@ export async function mountScene({ section }) {
                     const planetEntry = planets.find(pl => pl.body.id === p.id);
                     if (!planetEntry) continue;
                     const body = planetEntry.body;
-                    const meanR = (r.innerRadius + r.outerRadius) / 2;
-                    const thick = r.outerRadius - r.innerRadius;
+                    // Base ring geometry from JSON. Width / count multipliers
+                    // are baked at boot; distance multiplier is applied live
+                    // each frame via orbitMod.params.radius.
+                    const baseMean  = (r.innerRadius + r.outerRadius) / 2;
+                    const baseThick = (r.outerRadius - r.innerRadius);
+                    const meanR     = baseMean  * world.ringDistanceMul;
+                    const thick     = baseThick * world.ringWidthMul;
                     const tiltRad = (r.tilt || 0) * Math.PI / 180;
                     const axis = [0, Math.cos(tiltRad), Math.sin(tiltRad)];
                     const orbitMod = modules.orbit({
                         center: [body.worldPos[0], body.worldPos[1], body.worldPos[2]],
                         axis, speed: 0.4, radius: meanR, springK: 8,
                     });
-                    ringOrbits.push({ planetBody: body, orbitMod });
+                    // Track baseMean so the per-frame loop can recompute
+                    // orbitMod.params.radius = baseMean × world.ringDistanceMul
+                    // and the ring "breathes" live as the slider moves.
+                    ringOrbits.push({ planetBody: body, orbitMod, baseMean });
                     // Ring particles ride the STARFIELD canvas (where the
                     // engine's bloom postfx lives), with ADDITIVE blending.
                     // That means N overlapping particles sum their luminance
@@ -446,9 +463,12 @@ export async function mountScene({ section }) {
                     //
                     // Result: a subtle Saturn-dust band that reads as a ring
                     // but never blooms.
-                    const ringCount = isMobile
-                        ? Math.min(250, Math.floor((r.count || 3000) * 0.15))
-                        : Math.min(600, Math.floor((r.count || 3000) * 0.18));
+                    const baseCount = r.count || 3000;
+                    const mobileScale = isMobile ? 0.5 : 1.0;
+                    const ringCount = Math.max(
+                        20,
+                        Math.floor(baseCount * world.ringCountMul * mobileScale));
+                    const brightness = world.ringBrightnessMul;
                     await starPs.addEmitter(new Emitter({
                         position: [body.worldPos[0], body.worldPos[1], body.worldPos[2]],
                         shape: shapes.ring({ radius: meanR, thickness: thick, height: 0.05 }),
@@ -458,7 +478,10 @@ export async function mountScene({ section }) {
                             lifetime: { min: 1e9, max: 1e9 },
                             speed:    { min: 0, max: 0 },
                             size:     { min: 0.06, max: 0.14 },
-                            color:    [body.accent[0] * 0.12, body.accent[1] * 0.12, body.accent[2] * 0.12, 0.35],
+                            color:    [body.accent[0] * brightness,
+                                       body.accent[1] * brightness,
+                                       body.accent[2] * brightness,
+                                       0.35],
                         },
                         modules: [orbitMod],
                     }));
@@ -861,10 +884,14 @@ export async function mountScene({ section }) {
         }
 
         // Ring orbit centres track their planet's current world position
-        for (const { planetBody, orbitMod } of ringOrbits) {
+        for (const { planetBody, orbitMod, baseMean } of ringOrbits) {
             orbitMod.params.cx = planetBody.worldPos[0];
             orbitMod.params.cy = planetBody.worldPos[1];
             orbitMod.params.cz = planetBody.worldPos[2];
+            // Live ring-distance update — slider drag re-radiuses the orbit
+            // module's spring centre, so existing particles drift outward /
+            // inward instead of needing a reload.
+            orbitMod.params.radius = baseMean * world.ringDistanceMul;
         }
 
         // Hover detection + hover_t tween. Excludes the focused body — its
@@ -1070,6 +1097,7 @@ export async function mountScene({ section }) {
                         vortex_rate:     world.gasGiantVortexRate,
                         vortex_strength: world.gasGiantVortexStrength,
                         dye_injection:   world.gasGiantDyeInjection,
+                        dye_decay:       world.gasGiantDyeDecay,
                     });
                 }
                 const cpass = enc.beginComputePass({ label: 'fluid-sim tick' });

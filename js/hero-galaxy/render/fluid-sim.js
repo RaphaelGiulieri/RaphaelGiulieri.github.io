@@ -230,12 +230,13 @@ export function tickPlanetSim(pass, sim, state, dt, time, opts = {}) {
 // opening the compute pass. Layout MUST match WGSL SimParams in
 // shaders/fluid-sim.wgsl exactly.
 export function writeSimParams(device, state, dt, time, opts = {}) {
-    const damping         = opts.damping         ?? 0.04;
+    const damping         = opts.damping         ?? 0.4;
     const band_force      = opts.band_force      ?? 0.5;
     const advect_mul      = opts.advect_mul      ?? 1.0;
-    const vortex_rate     = opts.vortex_rate     ?? 1.2;
+    const vortex_rate     = opts.vortex_rate     ?? 0.4;
     const vortex_strength = opts.vortex_strength ?? 0.35;
-    const dye_injection   = opts.dye_injection   ?? 0.65;
+    const dye_injection   = opts.dye_injection   ?? 0.4;
+    const dye_decay       = opts.dye_decay       ?? 1.0;
     _params[0]  = Math.min(0.05, dt);
     _params[1]  = time;
     _params[2]  = GRID_W;
@@ -246,8 +247,8 @@ export function writeSimParams(device, state, dt, time, opts = {}) {
     _params[7]  = vortex_rate;
     _params[8]  = vortex_strength;
     _params[9]  = dye_injection;
-    _params[10] = state.seedPhase;
-    _params[11] = 0;
+    _params[10] = dye_decay;
+    _params[11] = state.seedPhase;
     device.queue.writeBuffer(state.paramBuf, 0, _params);
 }
 

@@ -504,8 +504,15 @@ export async function mountScene({ section }) {
         if (!ray) return;
         const targets = currentSelectionTargets();
         const hit = hitTestBodies(ray, targets);
-        if (hit) handleBodyClick(hit.body);
-        else     handleEmptyClick();
+        // A click on the body the camera is already focused on means "back
+        // out one level", not "re-enter the same body". Without this, at
+        // system view the centre-of-screen sun catches every click and
+        // `handleEmptyClick` (the back-step) never runs.
+        const focusedId = state.level === 'system' ? state.focusedSystemId
+                        : state.level === 'planet' ? state.focusedPlanetId
+                        : null;
+        if (hit && hit.body.id !== focusedId) handleBodyClick(hit.body);
+        else                                  handleEmptyClick();
     });
 
     window.addEventListener('keydown', (e) => {

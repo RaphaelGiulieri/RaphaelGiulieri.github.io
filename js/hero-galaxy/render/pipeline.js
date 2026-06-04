@@ -63,10 +63,11 @@ struct VertexOut {
 };
 
 struct BodyUniforms {
-    model     : mat4x4<f32>,
-    accent    : vec4<f32>,
-    params    : vec4<f32>,
-    light_pos : vec4<f32>,    // xyz = parent star world pos, w = ambient floor (1.0 = self-lit)
+    model       : mat4x4<f32>,
+    accent      : vec4<f32>,
+    params      : vec4<f32>,
+    light_pos   : vec4<f32>,    // xyz = parent star world pos, w = ambient floor (1.0 = self-lit)
+    light_color : vec4<f32>,    // rgb = parent star tint,      w = tint strength (0 = colour-neutral)
 };
 @group(1) @binding(0) var<uniform> body : BodyUniforms;
 
@@ -92,7 +93,14 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     let ndl = max(0.0, dot(s.world_normal, L));
     let ambient_floor = body.light_pos.w;
     let lit = ambient_floor + (1.0 - ambient_floor) * ndl;
-    return vec4<f32>(col.rgb * lit, col.a);
+    // Sun-colour tint — blend the day-side toward the parent star's tint by
+    // (ndl * tint_strength). At tint_strength = 0 (default for self-lit
+    // bodies) the multiplier is white → no colour shift. At tint_strength
+    // = 1 the day-side fully picks up the sun's colour while the night-side
+    // (ndl = 0) keeps the planet's own accent identity.
+    let tint_strength = body.light_color.w;
+    let sun_tint = mix(vec3<f32>(1.0, 1.0, 1.0), body.light_color.rgb, ndl * tint_strength);
+    return vec4<f32>(col.rgb * sun_tint * lit, col.a);
 }
 `;
 

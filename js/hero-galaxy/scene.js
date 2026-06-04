@@ -143,8 +143,11 @@ export async function mountScene({ section }) {
         camDistMoon:       1.5,
         // Lighting. Each planet + moon is lit by its parent star via Lambert
         // in fs_main; ambientFloor is the night-side luminance it keeps so
-        // the dark side still reads (editorial > realism).
+        // the dark side still reads (editorial > realism). sunTintStrength
+        // bleeds the parent star's tint onto the day-side (0 = colour-neutral
+        // Lambert, 1 = day-side fully picks up the sun's colour).
         ambientFloor:      0.18,
+        sunTintStrength:   0.55,
         // Label positioning — see CSS --gap and the per-kind silhouette
         // multipliers used in the per-frame projection.
         labelGapPx:        6,
@@ -775,6 +778,8 @@ export async function mountScene({ section }) {
             arr[23] = s.hoverT;
             // light_pos.w = 1.0 → halo is self-lit, ignored by Lambert wrap.
             arr[24] = 0; arr[25] = 0; arr[26] = 0; arr[27] = 1.0;
+            // light_color.w = 0 → no sun-tint blend (halo keeps its own glow).
+            arr[28] = 1; arr[29] = 1; arr[30] = 1; arr[31] = 0;
             device.queue.writeBuffer(s.haloBuf, 0, arr);
         }
         // Planet + moon UBOs (only visible ones). Planet self-rotates slowly
@@ -791,7 +796,7 @@ export async function mountScene({ section }) {
             M[8]  = -sn * sc; M[10] =  cs * sc;
             M[15] = 1;
             M[12] = body.worldPos[0]; M[13] = body.worldPos[1]; M[14] = body.worldPos[2];
-            writeBodyUbo(device, body, M, t, star.worldPos, world.ambientFloor);
+            writeBodyUbo(device, body, M, t, star.worldPos, world.ambientFloor, star.accent, world.sunTintStrength);
         }
         const visMs = visibleMoons();
         for (const { body, star } of visMs) {
@@ -800,7 +805,7 @@ export async function mountScene({ section }) {
             const sc = body.scale;
             M[0] = sc; M[5] = sc; M[10] = sc;
             M[12] = body.worldPos[0]; M[13] = body.worldPos[1]; M[14] = body.worldPos[2];
-            writeBodyUbo(device, body, M, t, star.worldPos, world.ambientFloor);
+            writeBodyUbo(device, body, M, t, star.worldPos, world.ambientFloor, star.accent, world.sunTintStrength);
         }
 
         // Project + position floating labels. Labels stay constant CSS px

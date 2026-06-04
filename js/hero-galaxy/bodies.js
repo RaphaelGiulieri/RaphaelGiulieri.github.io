@@ -32,15 +32,24 @@ export function createBody(device, bodyBGL, opts) {
 
 // Writes the 128-byte body UBO. Layout (Float32 offsets):
 //   0..15  model
-//   16..19 accent (rgba)
-//   20..23 params: time, radiusWorld, _, hoverT
-//   24..27 light_pos: x, y, z, ambient_floor
+//   16..19 accent       (rgba)
+//   20..23 params       (time, radiusWorld, _, hoverT)
+//   24..27 light_pos    (x, y, z, ambient_floor)
+//   28..31 light_color  (r, g, b, tint_strength)
 //
 // `lightPos` is the parent star's world position. `ambientFloor` is the
 // night-side luminance the body retains (0 = pure black at the terminator,
 // 1 = fully lit / self-emissive — pass 1 for stars and halos so the Lambert
 // wrap in fs_main collapses to lit=1 and they render unchanged).
-export function writeBodyUbo(device, body, model16, time, lightPos = null, ambientFloor = 1.0) {
+//
+// `lightColor` is the parent star's tint (rgb). `tintStrength` controls how
+// strongly the day-side picks up that colour (0 = colour-neutral Lambert,
+// 1 = day-side fully multiplied by the sun colour).
+export function writeBodyUbo(
+    device, body, model16, time,
+    lightPos = null, ambientFloor = 1.0,
+    lightColor = null, tintStrength = 0.0,
+) {
     const arr = new Float32Array(32);
     arr.set(model16, 0);
     arr.set(body.accent, 16);
@@ -54,6 +63,14 @@ export function writeBodyUbo(device, body, model16, time, lightPos = null, ambie
         arr[26] = lightPos[2];
     }
     arr[27] = ambientFloor;
+    if (lightColor) {
+        arr[28] = lightColor[0];
+        arr[29] = lightColor[1];
+        arr[30] = lightColor[2];
+    } else {
+        arr[28] = 1; arr[29] = 1; arr[30] = 1;
+    }
+    arr[31] = tintStrength;
     device.queue.writeBuffer(body.buf, 0, arr);
 }
 

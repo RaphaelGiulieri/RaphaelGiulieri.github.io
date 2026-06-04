@@ -2,10 +2,11 @@
 // planet-specific surface() function into one module.
 
 struct BodyUniforms {
-    model     : mat4x4<f32>,
-    accent    : vec4<f32>,
-    params    : vec4<f32>,    // x = time, y = radius_world, z = body_id, w = hover_t
-    light_pos : vec4<f32>,    // xyz = parent star world pos, w = ambient floor
+    model       : mat4x4<f32>,
+    accent      : vec4<f32>,
+    params      : vec4<f32>,    // x = time, y = radius_world, z = body_id, w = hover_t
+    light_pos   : vec4<f32>,    // xyz = parent star world pos, w = ambient floor
+    light_color : vec4<f32>,    // rgb = parent star tint,      w = tint strength
 };
 
 struct CameraUniforms {

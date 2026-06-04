@@ -112,10 +112,11 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
     panel.className = 'hg-dev-panel';
     panel.innerHTML = `<header><span>dev · hero galaxy</span><button type="button" data-act="toggle">−</button></header>`;
 
-    // Track every row so reset can iterate them. Each row holds a closure that
-    // copies the corresponding `factoryDefaults` value back into the live state
-    // and refreshes the slider thumb + displayed text.
-    const rowResets = [];
+    // Track every row so reset can iterate them. Each row stores enough state
+    // to resolve a target value at reset time (from the saved snapshot in
+    // localStorage if present, otherwise the code-side factory default) and
+    // push it back into both the live state and the slider thumb.
+    const rowRegistry = [];
 
     function row(parent, label, ref, key, min, max, step, desc, opts = {}) {
         const toUI   = opts.toUI   || ((v) => v);
@@ -145,11 +146,15 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         parent.appendChild(el);
 
         if (factoryValue !== undefined) {
-            rowResets.push(() => {
-                ref[key] = factoryValue;
-                apply(toUI(factoryValue));
-            });
+            rowRegistry.push({ ref, key, factoryValue, toUI, apply });
         }
+    }
+
+    function refName(ref) {
+        if (ref === postfx)  return 'postfx';
+        if (ref === ambient) return 'ambient';
+        if (ref === world)   return 'world';
+        return null;
     }
 
     function section(title) {
@@ -260,14 +265,18 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sLight, 'ambient floor', world, 'ambientFloor', 0, 1, 0.01,
             'Night-side luminance kept by planets / moons under the sun-lit Lambert wrap. 0 = pure black at the terminator (realistic). 1 = no shading effect (self-lit, like the suns).',
             { factory: fw.ambientFloor });
+        row(sLight, 'sun tint', world, 'sunTintStrength', 0, 1, 0.01,
+            'How strongly each planet / moon picks up the parent star\'s colour on its day-side. 0 = colour-neutral Lambert (luminance only). 1 = day-side fully multiplied by the sun\'s tint; night-side keeps the planet\'s own accent.',
+            { factory: fw.sunTintStrength });
     }
 
-    // ── Footer actions: Reset to default + Save as default ────────────────
+    // ── Footer actions: Reset / Save / Factory ────────────────────────────
     const actions = document.createElement('div');
     actions.className = 'hg-actions';
     actions.innerHTML = `
-        <button type="button" data-act="reset" title="Restore every slider to the code-side factory default + clear the localStorage snapshot.">reset</button>
-        <button type="button" data-act="save"  title="Persist the current slider values to localStorage. On next load they replace the factory defaults until cleared.">save as default</button>
+        <button type="button" data-act="reset"   title="Revert every slider to the values you last saved with 'save as default'. If you've never saved, falls back to the code-side factory defaults.">reset</button>
+        <button type="button" data-act="save"    title="Persist the current slider values to localStorage. On the next reload (and every 'reset' from now on) they become the baseline.">save as default</button>
+        <button type="button" data-act="factory" title="Clear the saved snapshot in localStorage and snap every slider back to the code-side factory defaults. Use this if you want to nuke a bad save.">factory</button>
     `;
     const toast = document.createElement('div');
     toast.className = 'hg-toast';
@@ -280,10 +289,28 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         setTimeout(() => toast.classList.remove('is-on'), 1400);
     }
 
+    function readSaved() {
+        try {
+            const raw = localStorage.getItem(LS_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch { return null; }
+    }
+
+    function restoreAll(savedSnap) {
+        for (const r of rowRegistry) {
+            const name = refName(r.ref);
+            const target = (savedSnap && name && r.key in (savedSnap[name] || {}))
+                ? savedSnap[name][r.key]
+                : r.factoryValue;
+            r.ref[r.key] = target;
+            r.apply(r.toUI(target));
+        }
+    }
+
     actions.querySelector('[data-act="reset"]').addEventListener('click', () => {
-        for (const fn of rowResets) fn();
-        try { localStorage.removeItem(LS_KEY); } catch {}
-        flash('reset to factory defaults');
+        const saved = readSaved();
+        restoreAll(saved);
+        flash(saved ? 'reset to saved defaults' : 'no save — reset to factory');
     });
     actions.querySelector('[data-act="save"]').addEventListener('click', () => {
         const snapshot = {
@@ -293,10 +320,15 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         };
         try {
             localStorage.setItem(LS_KEY, JSON.stringify(snapshot));
-            flash('saved · reload to confirm');
+            flash('saved · reset will now revert here');
         } catch (e) {
             flash('save failed: ' + e.message);
         }
+    });
+    actions.querySelector('[data-act="factory"]').addEventListener('click', () => {
+        try { localStorage.removeItem(LS_KEY); } catch {}
+        restoreAll(null);
+        flash('save discarded · factory defaults restored');
     });
 
     panel.querySelector('[data-act="toggle"]').addEventListener('click', () => {

@@ -167,14 +167,20 @@ export async function mountScene({ section }) {
         // systems' sims pause (their textures freeze). The gas shader
         // samples whichever ping-pong texture currently holds the latest
         // state. OFF = sim is frozen at its initial banded condition.
-        gasGiantSim:            false,
-        gasGiantDamping:        0.4,    // velocity damping per second
-        gasGiantBandForce:      0.5,    // jet-stream restoring torque strength
-        gasGiantAdvectMul:      1.0,    // advection step multiplier
-        gasGiantVortexRate:     0.4,    // expected vortex births per equator cell per sec
-        gasGiantVortexStrength: 0.35,   // magnitude of each injected velocity impulse
-        gasGiantDyeInjection:   0.4,    // amount of dye added at each vortex site
-        gasGiantDyeDecay:       1.0,    // dye decay per second (balances injection)
+        gasGiantSim:             false,
+        // ── Navier-Stokes-ish sim parameters ──
+        // Standard fluid-dynamics naming so the controls map to physical
+        // concepts: viscosity bleeds velocity; jet_force pulls the field
+        // toward a banded zonal pattern; the equatorial forcing band
+        // continuously injects velocity perturbation + tracer dye.
+        gasGiantViscosity:       0.4,    // velocity damping per second
+        gasGiantJetForce:        0.5,    // zonal-jet restoring torque
+        gasGiantAdvectMul:       1.0,    // backwards-advect step multiplier
+        gasGiantForcingRate:     0.6,    // global forcing rate multiplier
+        gasGiantForcingStrength: 0.5,    // velocity perturbation magnitude in the band
+        gasGiantForcingWidth:    0.30,   // gaussian σ (uv-space) of the equatorial band
+        gasGiantTracerSource:    0.5,    // dye flux into the band
+        gasGiantTracerDecay:     1.0,    // dye decay per second
         // Particle ring tunables. Apply only to planets without moons (the
         // rings-XOR-moons rule). Distance is LIVE (updated via the orbit
         // module each frame); width / count / brightness are baked into the
@@ -1091,13 +1097,14 @@ export async function mountScene({ section }) {
             if (activeGas.length) {
                 for (const { body } of activeGas) {
                     writeSimParams(device, body.fluidSim, dt, t, {
-                        damping:         world.gasGiantDamping,
-                        band_force:      world.gasGiantBandForce,
-                        advect_mul:      world.gasGiantAdvectMul,
-                        vortex_rate:     world.gasGiantVortexRate,
-                        vortex_strength: world.gasGiantVortexStrength,
-                        dye_injection:   world.gasGiantDyeInjection,
-                        dye_decay:       world.gasGiantDyeDecay,
+                        viscosity:        world.gasGiantViscosity,
+                        jet_force:        world.gasGiantJetForce,
+                        advect_mul:       world.gasGiantAdvectMul,
+                        forcing_rate:     world.gasGiantForcingRate,
+                        forcing_strength: world.gasGiantForcingStrength,
+                        forcing_width:    world.gasGiantForcingWidth,
+                        tracer_source:    world.gasGiantTracerSource,
+                        tracer_decay:     world.gasGiantTracerDecay,
                     });
                 }
                 const cpass = enc.beginComputePass({ label: 'fluid-sim tick' });

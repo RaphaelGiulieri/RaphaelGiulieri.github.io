@@ -281,32 +281,35 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
             'Gaussian sharpness exponent. Low = soft, wide glow (washes the screen). High = tight, point-like glow.',
             { factory: fw.sunBloomFalloff });
 
-        // ── Gas giants ───────────────────────────────────────────────────
-        const sGas = section('Gas giants');
+        // ── Gas giants (Navier-Stokes sim) ───────────────────────────────
+        const sGas = section('Gas giants — Navier-Stokes');
         row(sGas, 'navier sim', world, 'gasGiantSim', 0, 1, 1,
-            'Toggle the live 2D Navier-Stokes-ish fluid sim. ON = each gas planet\'s velocity field advects itself once per frame (only for the focused system; other systems\' sims freeze). OFF = field stays at its initial banded condition (no compute cost).',
+            'Toggle the live sim. ON = each gas planet\'s velocity field is integrated once per frame (focused system only). OFF = field stays at its initial black state.',
             { toUI: (v) => v ? 1 : 0, fromUI: (v) => v >= 0.5, factory: fw.gasGiantSim });
-        row(sGas, 'damping', world, 'gasGiantDamping', 0, 4, 0.01,
-            'Velocity damping per second. Counterbalances vortex injection so the field doesn\'t accumulate energy. Higher = jets bleed off fast (calmer look); lower = turbulence persists longer.',
-            { factory: fw.gasGiantDamping });
-        row(sGas, 'band force', world, 'gasGiantBandForce', 0, 3, 0.01,
-            'Strength of the jet-stream restoring torque pulling each cell toward the alternating east/west zonal pattern. 0 = no bands; high = strong banded structure.',
-            { factory: fw.gasGiantBandForce });
+        row(sGas, 'viscosity', world, 'gasGiantViscosity', 0, 4, 0.01,
+            'Velocity damping per second (kinematic-viscosity proxy). Higher = field bleeds energy faster, calmer look. Lower = momentum persists longer, more turbulent.',
+            { factory: fw.gasGiantViscosity });
+        row(sGas, 'jet force', world, 'gasGiantJetForce', 0, 3, 0.01,
+            'Strength of the zonal-jet restoring torque. The torque pulls each cell toward sin(lat·5)·0.35 — alternating east/west jets. 0 = no banded structure; high = bands dominate any forcing.',
+            { factory: fw.gasGiantJetForce });
         row(sGas, 'advect mul', world, 'gasGiantAdvectMul', 0, 4, 0.01,
-            'Multiplier on the per-step advection distance. Higher = wind moves faster across the surface.',
+            'Multiplier on the backwards-advect step distance. Higher = wind carries the tracer faster.',
             { factory: fw.gasGiantAdvectMul });
-        row(sGas, 'vortex rate', world, 'gasGiantVortexRate', 0, 6, 0.01,
-            'Per-second rate of random vortex injection. Each injected vortex adds BOTH a velocity impulse AND a dye spike — the sim starts from a black texture and builds the visible pattern up from accumulated vortex events. Higher = more swirling eddies forming.',
-            { factory: fw.gasGiantVortexRate });
-        row(sGas, 'vortex strength', world, 'gasGiantVortexStrength', 0, 1.5, 0.005,
-            'Magnitude of each injected velocity impulse. Higher = stronger eddies that survive longer before damping bleeds them off.',
-            { factory: fw.gasGiantVortexStrength });
-        row(sGas, 'dye injection', world, 'gasGiantDyeInjection', 0, 2, 0.01,
-            'Amount of dye added at every vortex site. Higher = brighter, more saturated trails left by each eddy. 0 = velocity-only sim (no visible dye).',
-            { factory: fw.gasGiantDyeInjection });
-        row(sGas, 'dye decay', world, 'gasGiantDyeDecay', 0, 4, 0.01,
-            'Dye decay per second. Must balance injection × vortex rate or the field saturates to white. At injection=0.4 × rate=0.4, decay≈1.0 gives a dynamic steady-state around the visible smoothstep range.',
-            { factory: fw.gasGiantDyeDecay });
+        row(sGas, 'forcing rate', world, 'gasGiantForcingRate', 0, 4, 0.01,
+            'Global rate multiplier on the equatorial forcing band. Multiplies both velocity perturbation and tracer source. 0 = no forcing (field decays to zero); high = strong continuous injection.',
+            { factory: fw.gasGiantForcingRate });
+        row(sGas, 'forcing strength', world, 'gasGiantForcingStrength', 0, 2, 0.01,
+            'Velocity perturbation magnitude in the band. Combined with forcing rate as: v_kick = strength × rate × dt × band. Random per-cell direction (stable across frames) so the result is turbulent rather than uniform flow.',
+            { factory: fw.gasGiantForcingStrength });
+        row(sGas, 'forcing width', world, 'gasGiantForcingWidth', 0.02, 1.5, 0.005,
+            'Gaussian σ of the equatorial forcing band in UV space. 0.05 = pinpoint equator; 0.30 = broad mid-latitude belt; 1.0 = almost the whole sphere.',
+            { factory: fw.gasGiantForcingWidth });
+        row(sGas, 'tracer source', world, 'gasGiantTracerSource', 0, 2, 0.01,
+            'Dye flux into the equatorial band. Combined as: dye_kick = source × rate × dt × band. Higher = brighter visible pattern.',
+            { factory: fw.gasGiantTracerSource });
+        row(sGas, 'tracer decay', world, 'gasGiantTracerDecay', 0, 4, 0.01,
+            'Dye decay per second. Steady-state ≈ tracer_source × forcing_rate / tracer_decay (per band cell). Tune so the steady-state lands in the visible smoothstep range (0.15…0.85).',
+            { factory: fw.gasGiantTracerDecay });
 
         // ── Particle rings ──────────────────────────────────────────────
         const sRing = section('Particle rings');

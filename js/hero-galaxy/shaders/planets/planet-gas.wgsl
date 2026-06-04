@@ -25,15 +25,37 @@ struct Surface {
 @group(1) @binding(1) var vel_field : texture_2d<f32>;
 @group(1) @binding(2) var vel_smp   : sampler;
 
-fn sample_vel(uv: vec2<f32>) -> vec2<f32> {
-    let wrap_uv = vec2<f32>(fract(uv.x + 1.0), clamp(uv.y, 0.0, 1.0));
-    return textureSampleLevel(vel_field, vel_smp, wrap_uv, 0.0).xy;
+// Match the compute shader's seam handling EXACTLY: integer-modulo wrap in
+// x + clamp in y + manual 4-tap bilinear via textureLoad. The sampler
+// (vel_smp) is bypassed entirely — its addressing mode doesn't matter to
+// this path. This is what kills the visible vertical seam on the rendered
+// sphere: `textureSampleLevel` would otherwise clamp at the texture edge
+// instead of blending texel W-1 with texel 0 across the wrap.
+//
+// Grid is 128×64 — must match fluid-sim.js / fluid-sim.wgsl constants.
+fn sample_full(uv: vec2<f32>) -> vec4<f32> {
+    let gw_i = 128;
+    let gh_i = 64;
+    let tex = uv * vec2<f32>(f32(gw_i), f32(gh_i)) - vec2<f32>(0.5);
+    let ix0 = i32(floor(tex.x));
+    let iy0 = i32(floor(tex.y));
+    let fx  = tex.x - f32(ix0);
+    let fy  = tex.y - f32(iy0);
+    let x0 = ((ix0 % gw_i) + gw_i) % gw_i;
+    let x1 = (((ix0 + 1) % gw_i) + gw_i) % gw_i;
+    let y0 = clamp(iy0,     0, gh_i - 1);
+    let y1 = clamp(iy0 + 1, 0, gh_i - 1);
+    let s00 = textureLoad(vel_field, vec2<i32>(x0, y0), 0);
+    let s10 = textureLoad(vel_field, vec2<i32>(x1, y0), 0);
+    let s01 = textureLoad(vel_field, vec2<i32>(x0, y1), 0);
+    let s11 = textureLoad(vel_field, vec2<i32>(x1, y1), 0);
+    let s0  = mix(s00, s10, fx);
+    let s1  = mix(s01, s11, fx);
+    return mix(s0, s1, fy);
 }
 
-fn sample_dye(uv: vec2<f32>) -> f32 {
-    let wrap_uv = vec2<f32>(fract(uv.x + 1.0), clamp(uv.y, 0.0, 1.0));
-    return textureSampleLevel(vel_field, vel_smp, wrap_uv, 0.0).z;
-}
+fn sample_vel(uv: vec2<f32>) -> vec2<f32> { return sample_full(uv).xy; }
+fn sample_dye(uv: vec2<f32>) -> f32       { return sample_full(uv).z; }
 
 fn surface(s: Surface) -> vec4<f32> {
     let p = s.local_pos;

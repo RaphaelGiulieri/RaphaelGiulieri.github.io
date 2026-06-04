@@ -153,7 +153,7 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
 
     const paramBuf = device.createBuffer({
         label: 'fluid-sim params',
-        size: 48,   // 12 f32 fields (padded to 16-byte alignment internally)
+        size: 64,   // 16 f32 fields, 16-byte aligned
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -193,7 +193,7 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
     };
 }
 
-const _params = new Float32Array(12);   // matches WGSL SimParams layout
+const _params = new Float32Array(16);   // matches WGSL SimParams layout (with padding)
 
 export function tickPlanetSim(pass, sim, state, dt, time, opts = {}) {
     const damping    = opts.damping    ?? 0.08;
@@ -226,29 +226,43 @@ export function tickPlanetSim(pass, sim, state, dt, time, opts = {}) {
     state.flipsToB = !state.flipsToB;
 }
 
-// Helper for the caller — writes the sim params into the buffer prior to
-// opening the compute pass. Layout MUST match WGSL SimParams in
-// shaders/fluid-sim.wgsl exactly.
+// Writes the Navier-Stokes parameters into the uniform buffer. Layout MUST
+// match WGSL SimParams in shaders/fluid-sim.wgsl exactly (16 f32 fields,
+// 16-byte aligned, with padding).
+//
+// Parameter naming uses physical-sim conventions:
+//   viscosity        ≈ kinematic viscosity / velocity damping
+//   jet_force        zonal-jet restoring torque (Coriolis-ish proxy)
+//   forcing_rate     global rate multiplier on the equatorial injection band
+//   forcing_strength velocity perturbation magnitude in the band
+//   forcing_width    gaussian sigma (uv) of the band
+//   tracer_source    dye flux into the band
+//   tracer_decay     dye decay rate per second
 export function writeSimParams(device, state, dt, time, opts = {}) {
-    const damping         = opts.damping         ?? 0.4;
-    const band_force      = opts.band_force      ?? 0.5;
-    const advect_mul      = opts.advect_mul      ?? 1.0;
-    const vortex_rate     = opts.vortex_rate     ?? 0.4;
-    const vortex_strength = opts.vortex_strength ?? 0.35;
-    const dye_injection   = opts.dye_injection   ?? 0.4;
-    const dye_decay       = opts.dye_decay       ?? 1.0;
+    const viscosity        = opts.viscosity        ?? 0.4;
+    const jet_force        = opts.jet_force        ?? 0.5;
+    const advect_mul       = opts.advect_mul       ?? 1.0;
+    const forcing_rate     = opts.forcing_rate     ?? 0.6;
+    const forcing_strength = opts.forcing_strength ?? 0.5;
+    const tracer_source    = opts.tracer_source    ?? 0.5;
+    const tracer_decay     = opts.tracer_decay     ?? 1.0;
+    const forcing_width    = opts.forcing_width    ?? 0.30;
     _params[0]  = Math.min(0.05, dt);
     _params[1]  = time;
     _params[2]  = GRID_W;
     _params[3]  = GRID_H;
-    _params[4]  = damping;
-    _params[5]  = band_force;
+    _params[4]  = viscosity;
+    _params[5]  = jet_force;
     _params[6]  = advect_mul;
-    _params[7]  = vortex_rate;
-    _params[8]  = vortex_strength;
-    _params[9]  = dye_injection;
-    _params[10] = dye_decay;
-    _params[11] = state.seedPhase;
+    _params[7]  = forcing_rate;
+    _params[8]  = forcing_strength;
+    _params[9]  = tracer_source;
+    _params[10] = tracer_decay;
+    _params[11] = forcing_width;
+    _params[12] = state.seedPhase;
+    _params[13] = 0;
+    _params[14] = 0;
+    _params[15] = 0;
     device.queue.writeBuffer(state.paramBuf, 0, _params);
 }
 

@@ -47,53 +47,59 @@ fn surface(s: Surface) -> vec4<f32> {
     let uv_lat = lat_y * 0.5 + 0.5;                // [0, 1] pole to pole
     let uv = vec2<f32>(uv_lon, uv_lat);
 
-    // Sample the velocity field + the passive dye field at this fragment.
-    // The dye is what makes flow visible — initialised with a marbled
-    // pattern in fluid-sim.js, advected by the velocity in fluid-sim.wgsl.
-    let v_here   = sample_vel(uv);
-    let dye      = sample_dye(uv);
-    let speed    = length(v_here);
-    let dir      = v_here / max(speed, 0.0001);
+    // Sample velocity + the passive dye field at this fragment. The dye
+    // carries the turbulent surface pattern — when sim is on, the dye
+    // visibly drifts with the velocity. When sim is off it stays put.
+    let v_here = sample_vel(uv);
+    let dye    = sample_dye(uv);
+    let speed  = length(v_here);
 
-    // Band intensity from wind speed: faster wind → brighter band.
-    let band_t = smoothstep(0.0, 0.7, speed);
-    let dark_band  = s.accent * 0.30;
-    let light_band = s.accent * 1.55;
-    let band = mix(dark_band, light_band, band_t);
+    // Dye is the dominant visual driver — it's a [0,1] organic-noise
+    // field. Smooth tone mapping gives soft cloud-like patches rather than
+    // hard cells. Multiplied gently by accent so each system's gas giants
+    // keep their discipline colour.
+    let dye_tone = smoothstep(0.15, 0.85, dye);
+    let cloud_dark  = s.accent * 0.45;
+    let cloud_light = s.accent * 1.25;
+    let dye_layer = mix(cloud_dark, cloud_light, dye_tone);
 
-    // Dye-driven marbling — dye is a [0,1] field that LIVES on the texture
-    // and advects with the flow. Mapping it through a smoothstep gives the
-    // dark eddies / bright cells classic Jovian look, and because the dye
-    // moves with the field, any motion the sim produces is visible here.
-    let dye_marble = smoothstep(0.35, 0.75, dye);
-    let dye_layer = mix(s.accent * 0.20, s.accent * 1.40, dye_marble);
-    let base = mix(band, dye_layer, 0.55);   // dye dominates so motion is obvious
+    // Soft latitudinal banding — adds a subtle east/west belt structure
+    // to the colour without painting crisp stripes. Five major zones
+    // across the planet (matching the sim's band target), low amplitude
+    // so they read as "subtle tonal shifts" not "painted bars".
+    let band_modulation = sin(lat_y * 5.0) * 0.5 + 0.5;
+    let band_tinted = mix(dye_layer * 0.92, dye_layer * 1.10, band_modulation);
 
-    // Direction-tint: eastward (vx > 0) leans warmer, westward leans cooler.
-    let warm = s.accent * vec3<f32>(1.15, 0.95, 0.78);
-    let cool = s.accent * vec3<f32>(0.78, 0.92, 1.15);
-    let dir_tint = mix(cool, warm, dir.x * 0.5 + 0.5);
-    let base_with_dir = mix(base, dir_tint, 0.18);
+    // Direction nudge — only kicks in where the wind is fast, and only
+    // very faintly. East-flowing bands lean warm, west lean cool.
+    let warm = vec3<f32>(1.05, 0.97, 0.88);
+    let cool = vec3<f32>(0.88, 0.96, 1.06);
+    let dir_x = v_here.x / max(speed, 0.0001);
+    let speed_weight = smoothstep(0.0, 0.5, speed);
+    let dir_tint = mix(vec3<f32>(1.0), mix(cool, warm, dir_x * 0.5 + 0.5), speed_weight * 0.25);
+    let base_with_dir = band_tinted * dir_tint;
 
-    // Object-space fbm detail — a high-frequency overlay that catches the
-    // light differently than the dye. Time-shifted, not advected, so it
-    // adds a "shimmering convection" feel on top of the dye flow.
-    let detail = fbm3(p * 8.0 + vec3<f32>(s.time * 0.05, 0.0, 0.0), 3);
+    // Object-space fbm shimmer — high-frequency overlay that catches the
+    // light differently than the dye. Time-shifted (not advected) so it
+    // adds a "convection cells" feel on top of the dye flow.
+    let detail = fbm3(p * 7.0 + vec3<f32>(s.time * 0.04, 0.0, 0.0), 3);
 
-    // Storm spot — kept as a 3D-space gaussian around a drifting axis so it
-    // composites consistently regardless of the sim state.
+    // Storm spot — soft gaussian around a drifting 3D axis. Reduced
+    // amplitude so it doesn't overpower the dye-based cloud surface.
     let storm_phase = s.time * 0.03 + 1.2;
     let storm_dir   = vec3<f32>(cos(storm_phase), 0.0, sin(storm_phase));
     let storm_axial = dot(p, storm_dir);
     let storm_lat   = lat_y + 0.3;
-    let spot        = exp(-(1.0 - storm_axial) * 28.0 - storm_lat * storm_lat * 20.0);
+    let spot        = exp(-(1.0 - storm_axial) * 26.0 - storm_lat * storm_lat * 18.0);
     let spot_swirl  = sin(storm_axial * 38.0 + storm_lat * 32.0 + s.time * 0.55) * 0.5 + 0.5;
-    let storm_hot   = mix(vec3<f32>(0.0), s.accent * 1.9, spot * (0.6 + spot_swirl * 0.4));
+    let storm_hot   = s.accent * spot * (0.5 + spot_swirl * 0.3) * 0.6;
 
-    let base_with_detail = base_with_dir + s.accent * (detail - 0.5) * 0.18;
+    // Detail at low amplitude — a "convection shimmer" that breaks up the
+    // dye field without re-introducing crisp pattern.
+    let base_with_detail = base_with_dir + s.accent * (detail - 0.5) * 0.10;
 
     let rim = fresnel(s.view_dir, s.world_normal, 2.4);
     return vec4<f32>(
-        base_with_detail + storm_hot * 0.35 + s.accent * rim * (0.45 + s.hover_t * 1.1),
+        base_with_detail + storm_hot + s.accent * rim * (0.35 + s.hover_t * 1.0),
         1.0);
 }

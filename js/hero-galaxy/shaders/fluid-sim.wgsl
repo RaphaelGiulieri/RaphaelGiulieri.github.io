@@ -70,9 +70,12 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Banded zonal jets — restore toward an alternating east/west wind
     // pattern at evenly-spaced latitudes. (`target` is a reserved WGSL
     // keyword so we call it `band_target` here.)
+    // Five major zonal jets across the planet (matches the visualisation
+    // band-modulation frequency). Lower amplitude than the v1 22-band
+    // version so the dye dominates the look.
     let lat = uv.y * 2.0 - 1.0;
-    let band_idx = sin(lat * 22.0);
-    let band_target = vec2<f32>(band_idx * 0.6, 0.0);
+    let band_idx = sin(lat * 5.0);
+    let band_target = vec2<f32>(band_idx * 0.35, 0.0);
     let v_with_band = mix(v_advected, band_target, params.band_force * params.dt);
 
     // Light damping — bleeds off the turbulent component without destroying

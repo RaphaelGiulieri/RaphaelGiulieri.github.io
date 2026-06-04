@@ -15,6 +15,51 @@ const GRID_W = 128;
 const GRID_H = 64;
 const WORKGROUP = 8;
 
+// Deterministic 3D value-noise + fbm, used to seed the dye field with an
+// organic non-banded pattern. The same noise call returns the same value
+// for the same (x,y,z) input — important so re-seeding a planet's sim
+// produces a reproducible texture, and so reloads of the page don't
+// suddenly shift everyone's gas giants to a new pattern.
+function hash3(x, y, z) {
+    const h = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+    return h - Math.floor(h);
+}
+
+function noise1(x, y, z) {
+    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+    const xf = x - xi,        yf = y - yi,        zf = z - zi;
+    const sx = xf * xf * (3 - 2 * xf);
+    const sy = yf * yf * (3 - 2 * yf);
+    const sz = zf * zf * (3 - 2 * zf);
+    // Trilinear-blend the 8 lattice corner hashes.
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    const c000 = hash3(xi,     yi,     zi    );
+    const c100 = hash3(xi + 1, yi,     zi    );
+    const c010 = hash3(xi,     yi + 1, zi    );
+    const c110 = hash3(xi + 1, yi + 1, zi    );
+    const c001 = hash3(xi,     yi,     zi + 1);
+    const c101 = hash3(xi + 1, yi,     zi + 1);
+    const c011 = hash3(xi,     yi + 1, zi + 1);
+    const c111 = hash3(xi + 1, yi + 1, zi + 1);
+    const x00 = lerp(c000, c100, sx);
+    const x10 = lerp(c010, c110, sx);
+    const x01 = lerp(c001, c101, sx);
+    const x11 = lerp(c011, c111, sx);
+    const y0  = lerp(x00,  x10,  sy);
+    const y1  = lerp(x01,  x11,  sy);
+    return lerp(y0, y1, sz);
+}
+
+function fbm3d(x, y, z, octaves) {
+    let v = 0, amp = 0.5, f = 1;
+    for (let i = 0; i < octaves; i++) {
+        v += amp * noise1(x * f, y * f, z * f);
+        f *= 2.03;
+        amp *= 0.55;
+    }
+    return v;
+}
+
 // f32 → IEEE 754 binary16 encoding. Returns a Uint16 of the bit pattern.
 // Used to pre-pack the initial velocity field into the format the GPU
 // expects for an rgba16float texture upload.
@@ -87,31 +132,35 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
     const viewA = texA.createView();
     const viewB = texB.createView();
 
-    // Seed: banded zonal jets in .xy + a marbled lon-varying dye field in
-    // .z. The dye gives the surface shader something to visualise that
-    // makes flow obvious — when sim is on, the dye drifts east/west with
-    // the jet streams; when sim is off, the dye stays put.
+    // Seed: gentle banded velocity in .xy + a 3D-fbm dye field sampled on
+    // the unit sphere in .z. The dye has organic turbulent structure (not
+    // sine harmonics) so the gas giant reads as a cloudy fluid surface
+    // even when the sim is paused. Per-planet seedOffset rotates the
+    // sample point so each gas giant gets a distinct pattern.
     const init16 = new Uint16Array(GRID_W * GRID_H * 4);
+    const phase = seedOffset * 17.31;
     for (let y = 0; y < GRID_H; y++) {
-        const lat = (y + 0.5) / GRID_H * 2.0 - 1.0;
-        const band = Math.sin(lat * 22.0) * 0.6;
+        const lat = (y + 0.5) / GRID_H * Math.PI - Math.PI / 2;       // -π/2 … π/2
+        const cosLat = Math.cos(lat);
+        const sinLat = Math.sin(lat);
+        // Soft banded zonal target — 5 major jets across the planet, not 22.
+        // Amplitude reduced so the bands aren't visually overwhelming.
+        const band = Math.sin(lat * 5.0) * 0.35;
         for (let x = 0; x < GRID_W; x++) {
-            const h = Math.sin((x * 12.9898 + y * 78.233 + seedOffset * 3.7) * 43758.5453);
-            const noise_x = (h - Math.floor(h)) - 0.5;
-            const h2 = Math.sin((x * 39.346 + y * 11.135 + seedOffset * 5.1) * 16807.0);
-            const noise_y = (h2 - Math.floor(h2)) - 0.5;
-            // Dye: cellular marbling. Multiple sine harmonics across lon
-            // produce a 2D-noise-like pattern; per-planet seed shifts the
-            // phase so different gas giants get distinct dye textures.
-            const lon = x / GRID_W * Math.PI * 2;
-            const dye =
-                0.5 +
-                0.30 * Math.sin(lon * 4 + lat * 6 + seedOffset * 1.7) +
-                0.20 * Math.sin(lon * 11 - lat * 3 + seedOffset * 2.1) +
-                0.15 * Math.sin(lon * 19 + lat * 9 + seedOffset * 0.7);
+            const lon = (x + 0.5) / GRID_W * Math.PI * 2;
+            // Unit-sphere position for noise sampling. fbm in 3D space is
+            // seamless across the longitude seam — no stitching artifacts.
+            const sx = Math.cos(lon) * cosLat;
+            const sy = sinLat;
+            const sz = Math.sin(lon) * cosLat;
+            const dye = fbm3d(sx * 2.4 + phase, sy * 2.4, sz * 2.4 - phase, 5);
+            // Light turbulent perturbation on the velocity too — gives the
+            // sim something non-uniform to advect from the first frame.
+            const nx = (noise1(sx * 4.0 + phase + 100, sy * 4.0, sz * 4.0) - 0.5) * 0.18;
+            const ny = (noise1(sx * 4.0, sy * 4.0 + phase + 200, sz * 4.0) - 0.5) * 0.10;
             const i = (y * GRID_W + x) * 4;
-            init16[i + 0] = f32ToF16(band + noise_x * 0.08);
-            init16[i + 1] = f32ToF16(noise_y * 0.04);
+            init16[i + 0] = f32ToF16(band + nx);
+            init16[i + 1] = f32ToF16(ny);
             init16[i + 2] = f32ToF16(Math.max(0, Math.min(1, dye)));
             init16[i + 3] = 0;
         }

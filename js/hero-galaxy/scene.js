@@ -16,6 +16,7 @@ import { createBreadcrumb } from './breadcrumb.js';
 import { mountStarfield } from './render/starfield.js';
 import { mat4Multiply } from '../particles/core/math.js';
 import { setupDevPanel, applySavedDefaults } from './dev-panel.js';
+import { mountConsole } from './console.js';
 
 const HERO_GALAXY_DEV_PANEL = true;   // flip to false in production
 
@@ -74,6 +75,19 @@ export async function mountScene({ section }) {
             else if (key.startsWith('moon:'))   transitionTo({ level: 'moon',   focusedSystemId: state.focusedSystemId, focusedPlanetId: state.focusedPlanetId, focusedMoonId: key.slice(5) });
         },
     });
+
+    // Spaceship-board console — context for the current focal body. Mounts
+    // bottom-left of the section, re-rendered whenever `state` transitions.
+    // "Open dossier" is the only path to the modal now that clicking a moon
+    // zooms in instead of opening it.
+    const consoleApi = await mountConsole({
+        section,
+        galaxyData: galaxy,
+        onOpenDossier: (projectId) => {
+            if (typeof window.openModal === 'function') window.openModal(projectId, section);
+        },
+    });
+    consoleApi.render(state);
 
     const controls = wireControls({
         canvas, camera, getState: () => state.level,
@@ -465,6 +479,7 @@ export async function mountScene({ section }) {
             state.focusedMoonId   = transition.goal.focusedMoonId   ?? null;
             transition = null;
             breadcrumb.render(state);
+            consoleApi.render(state);
         }
     }
     function cubicBezier(t, p1x, p1y, p2x, p2y) {

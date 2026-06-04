@@ -310,6 +310,12 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sGas, 'tracer decay', world, 'gasGiantTracerDecay', 0, 4, 0.01,
             'Dye decay per second. Steady-state ≈ tracer_source × forcing_rate / tracer_decay (per band cell). Tune so the steady-state lands in the visible smoothstep range (0.15…0.85).',
             { factory: fw.gasGiantTracerDecay });
+        row(sGas, 'vorticity', world, 'gasGiantVorticityStrength', 0, 80, 0.5,
+            'Vorticity confinement strength. Pushes fluid TOWARD existing curl regions so eddies grow instead of being viscosity-damped. The portfolio volumetric-fluid reference uses 18; higher = more aggressive vortex amplification.',
+            { factory: fw.gasGiantVorticityStrength });
+        row(sGas, 'pressure iters', world, 'gasGiantPressureIters', 0, 50, 1,
+            'Number of Jacobi iterations per frame for the pressure Poisson solve. The reference uses 30. Higher = better incompressibility (eddies sustain longer) but more compute cost per frame.',
+            { fromUI: (v) => v | 0, factory: fw.gasGiantPressureIters });
 
         // ── Particle rings ──────────────────────────────────────────────
         const sRing = section('Particle rings');

@@ -8,7 +8,7 @@ import { createCamera, setAspect, applyOrbitDelta } from './render/camera.js';
 import { wireControls } from './render/controls.js';
 import { makeIcosphere } from './render/sphere-mesh.js';
 import { getMeshPipeline, getBloomPipeline } from './render/pipeline.js';
-import { createFluidSim, createPlanetSim, writeSimParams } from './render/fluid-sim.js';
+import { createFluidSim, createPlanetSim, writeSimParams, tickPlanetSim } from './render/fluid-sim.js';
 import { loadGalaxyData } from './data-loader.js';
 import { createBody, writeBodyUbo, bodyDescFromStar, bodyDescFromPlanet, bodyDescFromMoon, PLANET_TIER_SHADERS } from './bodies.js';
 import { mat4Identity } from '../particles/core/math.js';
@@ -181,6 +181,8 @@ export async function mountScene({ section }) {
         gasGiantForcingWidth:    0.30,   // gaussian σ (uv-space) of the equatorial band
         gasGiantTracerSource:    0.5,    // dye flux into the band
         gasGiantTracerDecay:     1.0,    // dye decay per second
+        gasGiantVorticityStrength: 18.0, // matches the volumetric-fluid reference
+        gasGiantPressureIters:   20,     // Jacobi pressure iterations per frame
         // Particle ring tunables. Apply only to planets without moons (the
         // rings-XOR-moons rule). Distance is LIVE (updated via the orbit
         // module each frame); width / count / brightness are baked into the
@@ -392,22 +394,24 @@ export async function mountScene({ section }) {
     for (const { body } of planets) {
         if (body.meta.tier !== 'gas') continue;
         body.fluidSim = createPlanetSim(device, fluidSim, _seed++);
-        body.gasBG_sampleA = device.createBindGroup({
+        // Pre-build the 4 gas bind groups for every ping-pong parity
+        // combination (velA/B × trcA/B). Selected at render time by
+        // checking which texture each field "current" pointer references.
+        const mkBG = (velView, trcView) => device.createBindGroup({
             layout: gasBodyBGL,
             entries: [
                 { binding: 0, resource: { buffer: body.buf } },
-                { binding: 1, resource: body.fluidSim.viewA },
-                { binding: 2, resource: fluidSim.meshSampler },
+                { binding: 1, resource: velView },
+                { binding: 2, resource: trcView },
+                { binding: 3, resource: fluidSim.sampler },
             ],
         });
-        body.gasBG_sampleB = device.createBindGroup({
-            layout: gasBodyBGL,
-            entries: [
-                { binding: 0, resource: { buffer: body.buf } },
-                { binding: 1, resource: body.fluidSim.viewB },
-                { binding: 2, resource: fluidSim.meshSampler },
-            ],
-        });
+        body.gasBGs = {
+            vA_tA: mkBG(body.fluidSim.velA.view, body.fluidSim.trcA.view),
+            vA_tB: mkBG(body.fluidSim.velA.view, body.fluidSim.trcB.view),
+            vB_tA: mkBG(body.fluidSim.velB.view, body.fluidSim.trcA.view),
+            vB_tB: mkBG(body.fluidSim.velB.view, body.fluidSim.trcB.view),
+        };
     }
 
     // ── Per-planet particle rings ──
@@ -1097,30 +1101,20 @@ export async function mountScene({ section }) {
             if (activeGas.length) {
                 for (const { body } of activeGas) {
                     writeSimParams(device, body.fluidSim, dt, t, {
-                        viscosity:        world.gasGiantViscosity,
-                        jet_force:        world.gasGiantJetForce,
-                        advect_mul:       world.gasGiantAdvectMul,
-                        forcing_rate:     world.gasGiantForcingRate,
-                        forcing_strength: world.gasGiantForcingStrength,
-                        forcing_width:    world.gasGiantForcingWidth,
-                        tracer_source:    world.gasGiantTracerSource,
-                        tracer_decay:     world.gasGiantTracerDecay,
+                        viscosity:          world.gasGiantViscosity,
+                        jet_force:          world.gasGiantJetForce,
+                        advect_mul:         world.gasGiantAdvectMul,
+                        forcing_rate:       world.gasGiantForcingRate,
+                        forcing_strength:   world.gasGiantForcingStrength,
+                        forcing_width:      world.gasGiantForcingWidth,
+                        tracer_source:      world.gasGiantTracerSource,
+                        tracer_decay:       world.gasGiantTracerDecay,
+                        vorticity_strength: world.gasGiantVorticityStrength,
                     });
                 }
-                const cpass = enc.beginComputePass({ label: 'fluid-sim tick' });
+                const cpass = enc.beginComputePass({ label: 'fluid-sim multi-pass tick' });
                 for (const { body } of activeGas) {
-                    cpass.setPipeline(fluidSim.pipeline);
-                    if (body.fluidSim.flipsToB) {
-                        cpass.setBindGroup(0, body.fluidSim.computeBG_AB);
-                        body.fluidSim.currentSampledView = body.fluidSim.viewB;
-                        body.fluidSim.currentSampledTex  = body.fluidSim.texB;
-                    } else {
-                        cpass.setBindGroup(0, body.fluidSim.computeBG_BA);
-                        body.fluidSim.currentSampledView = body.fluidSim.viewA;
-                        body.fluidSim.currentSampledTex  = body.fluidSim.texA;
-                    }
-                    cpass.dispatchWorkgroups(Math.ceil(128 / 8), Math.ceil(64 / 8));
-                    body.fluidSim.flipsToB = !body.fluidSim.flipsToB;
+                    tickPlanetSim(cpass, fluidSim, body.fluidSim, world.gasGiantPressureIters | 0);
                 }
                 cpass.end();
             }
@@ -1154,10 +1148,14 @@ export async function mountScene({ section }) {
         for (const { body } of visPls) {
             if (body.meta.tier === 'gas' && body.fluidSim) {
                 pass.setPipeline(gasPipeline);
-                // Pick the bind group sampling whichever ping-pong texture
-                // currently holds the latest sim state (set by tickPlanetSim).
-                const useA = body.fluidSim.currentSampledTex === body.fluidSim.texA;
-                pass.setBindGroup(1, useA ? body.gasBG_sampleA : body.gasBG_sampleB);
+                // Pick the bind group matching the current ping-pong parity
+                // for BOTH velocity and tracer (they flip independently).
+                const vA = body.fluidSim.velCur === body.fluidSim.velA;
+                const tA = body.fluidSim.trcCur === body.fluidSim.trcA;
+                const bg = vA
+                    ? (tA ? body.gasBGs.vA_tA : body.gasBGs.vA_tB)
+                    : (tA ? body.gasBGs.vB_tA : body.gasBGs.vB_tB);
+                pass.setBindGroup(1, bg);
                 pass.drawIndexed(ico.indexCount);
             } else {
                 const built = planetPipelineCache.get(body.shaderPath);

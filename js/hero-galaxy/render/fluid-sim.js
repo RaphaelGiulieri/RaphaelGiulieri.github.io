@@ -1,68 +1,39 @@
-// Per-gas-giant 2D Navier-Stokes-ish fluid sim. Each gas planet allocates
-// a pair of ping-pong rg32float textures (128×64, lon × lat) and one
-// uniform buffer for sim params. The compute pass advects the velocity
-// field by itself with a band-restoring torque to keep Jovian jet streams
-// stable. The result is sampled by planets/planet-gas.wgsl.
+// Per-gas-giant 2D Navier-Stokes fluid sim. Multi-kernel pipeline with
+// pressure projection + vorticity confinement — architecture lifted from
+// the Remain WebGPU cloud-fluid solver + the Qatar/volumetric-fluid
+// vorticity-confinement passes.
 //
-// Lifecycle:
-//   const sim       = await createFluidSim(device);
-//   const state     = createPlanetSim(device, sim);   // per gas planet
-//   tickPlanetSim(pass, sim, state, dt, time, world); // each frame, while focused
-//   state.currentTextureView                          // sample THIS in the surface shader
-//   state.bindGroupForGasPipeline                     // pre-built bind group for the gas mesh pipeline
+// PER FRAME PER ACTIVE GAS PLANET:
+//   1. cs_advect_vel        velocity ← advect(velocity) · viscosity
+//   2. cs_add_forces        velocity += jet + equatorial forcing band
+//   3. cs_curl              curl     = curl(velocity)
+//   4. cs_vorticity_force   velocity += vorticity confinement
+//   5. cs_divergence        div      = -∇·velocity
+//   6. cs_jacobi × N        pressure ← Jacobi(pressure, div) (ping-pong)
+//   7. cs_pressure_project  velocity ← velocity - ∇pressure
+//   8. cs_advect_tracer     tracer   ← advect(tracer) · decay + source
+//
+// TEXTURES PER PLANET:
+//   velocity ping-pong   rgba16float (only .xy used) — 256·128·8·2 = 512 KB
+//   tracer   ping-pong   rgba16float (only .x  used) — 256·128·8·2 = 512 KB
+//   pressure ping-pong   rgba16float (only .x  used) — 256·128·8·2 = 512 KB
+//   curl                 rgba16float (only .x  used) — 256·128·8   = 256 KB
+//   divergence           rgba16float (only .x  used) — 256·128·8   = 256 KB
+//   Total per planet ≈ 2 MB.
+//
+// Using rgba16float everywhere (instead of r16float / rg16float) keeps
+// every storage texture compatible with a single storageTexture binding
+// type — simplifies the BGL layout at the cost of some wasted channels.
+// At 5 gas planets total this is ~10 MB. Fine.
 
-const GRID_W = 128;
-const GRID_H = 64;
+const GRID_W   = 256;
+const GRID_H   = 128;
 const WORKGROUP = 8;
+const PRESSURE_ITERS_DEFAULT = 20;
 
-// Deterministic 3D value-noise + fbm, used to seed the dye field with an
-// organic non-banded pattern. The same noise call returns the same value
-// for the same (x,y,z) input — important so re-seeding a planet's sim
-// produces a reproducible texture, and so reloads of the page don't
-// suddenly shift everyone's gas giants to a new pattern.
-function hash3(x, y, z) {
-    const h = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
-    return h - Math.floor(h);
-}
+export const FLUID_GRID = { W: GRID_W, H: GRID_H };
 
-function noise1(x, y, z) {
-    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
-    const xf = x - xi,        yf = y - yi,        zf = z - zi;
-    const sx = xf * xf * (3 - 2 * xf);
-    const sy = yf * yf * (3 - 2 * yf);
-    const sz = zf * zf * (3 - 2 * zf);
-    // Trilinear-blend the 8 lattice corner hashes.
-    function lerp(a, b, t) { return a + (b - a) * t; }
-    const c000 = hash3(xi,     yi,     zi    );
-    const c100 = hash3(xi + 1, yi,     zi    );
-    const c010 = hash3(xi,     yi + 1, zi    );
-    const c110 = hash3(xi + 1, yi + 1, zi    );
-    const c001 = hash3(xi,     yi,     zi + 1);
-    const c101 = hash3(xi + 1, yi,     zi + 1);
-    const c011 = hash3(xi,     yi + 1, zi + 1);
-    const c111 = hash3(xi + 1, yi + 1, zi + 1);
-    const x00 = lerp(c000, c100, sx);
-    const x10 = lerp(c010, c110, sx);
-    const x01 = lerp(c001, c101, sx);
-    const x11 = lerp(c011, c111, sx);
-    const y0  = lerp(x00,  x10,  sy);
-    const y1  = lerp(x01,  x11,  sy);
-    return lerp(y0, y1, sz);
-}
-
-function fbm3d(x, y, z, octaves) {
-    let v = 0, amp = 0.5, f = 1;
-    for (let i = 0; i < octaves; i++) {
-        v += amp * noise1(x * f, y * f, z * f);
-        f *= 2.03;
-        amp *= 0.55;
-    }
-    return v;
-}
-
-// f32 → IEEE 754 binary16 encoding. Returns a Uint16 of the bit pattern.
-// Used to pre-pack the initial velocity field into the format the GPU
-// expects for an rgba16float texture upload.
+// f32 → IEEE-754 binary16 encoding for texture seeding.
 const _f32buf = new Float32Array(1);
 const _u32buf = new Uint32Array(_f32buf.buffer);
 function f32ToF16(val) {
@@ -77,12 +48,21 @@ function f32ToF16(val) {
     if (exp <= 0) {
         if (exp < -10) return sign;
         const m = mantissa | 0x800000;
-        const shift = 14 - exp;
-        return sign | (m >>> shift);
+        return sign | (m >>> (14 - exp));
     }
     return sign | (exp << 10) | (mantissa >> 13);
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Build pipelines once. Each kernel gets its own GPUComputePipeline + BGL.
+// All 8 kernels share the same BGL layout — bindings:
+//   0: params uniform buffer
+//   1: src_a  (textureLoad-sampled texture_2d<f32>)
+//   2: src_b  (textureLoad-sampled texture_2d<f32>)
+//   3: dst    (rgba16float storage texture write-only)
+//   4: lin_smp  (sampler — unused, kept for layout compat)
+// Different kernels feed different combinations of textures into the
+// src_a/src_b/dst slots via bind groups created per-planet per-pass.
 export async function createFluidSim(device) {
     const url = new URL('../shaders/fluid-sim.wgsl', import.meta.url);
     const res = await fetch(url);
@@ -90,163 +70,118 @@ export async function createFluidSim(device) {
     const code = await res.text();
     const module = device.createShaderModule({ label: 'fluid-sim', code });
 
-    // rgba16float is filterable AND a permitted storage texture format, so
-    // both the compute back-trace and the mesh shader can use linear
-    // bilinear interpolation on the velocity field without any per-sample
-    // bit-twiddling. Only .xy is read — .zw stays zero (reserved for a
-    // future divergence/pressure channel).
-    const computeBGL = device.createBindGroupLayout({
-        label: 'fluid-sim compute BGL',
+    const bgl = device.createBindGroupLayout({
+        label: 'fluid-sim BGL',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } },
-            { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
+            { binding: 2, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } },
+            { binding: 4, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
         ],
     });
+    const layout = device.createPipelineLayout({ bindGroupLayouts: [bgl] });
 
-    const pipeline = device.createComputePipeline({
-        label: 'fluid-sim compute',
-        layout: device.createPipelineLayout({ bindGroupLayouts: [computeBGL] }),
-        compute: { module, entryPoint: 'cs_main' },
-    });
+    function pipe(entryPoint, label) {
+        return device.createComputePipeline({
+            label, layout, compute: { module, entryPoint },
+        });
+    }
 
-    // Compute side samples with textureLoad + manual bilinear that wraps
-    // explicitly across the longitude seam (the navier shader does its own
-    // boundary handling — no sampler config involved). The mesh sampler
-    // stays plain linear; the gas shader manually fract()s its uv.
-    const computeSampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-    const meshSampler    = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+    const pipelines = {
+        advectVel:       pipe('cs_advect_vel',         'fluid · advect velocity'),
+        addForces:       pipe('cs_add_forces',         'fluid · add forces'),
+        curl:            pipe('cs_curl',               'fluid · curl'),
+        vorticityForce:  pipe('cs_vorticity_force',    'fluid · vorticity force'),
+        divergence:      pipe('cs_divergence',         'fluid · divergence'),
+        jacobi:          pipe('cs_jacobi',             'fluid · jacobi pressure'),
+        pressureProject: pipe('cs_pressure_project',   'fluid · pressure project'),
+        advectTracer:    pipe('cs_advect_tracer',      'fluid · advect tracer'),
+    };
 
-    return { pipeline, computeBGL, computeSampler, meshSampler };
+    const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+
+    return { bgl, pipelines, sampler };
 }
 
-// One sim instance per gas-giant body. Allocates the ping-pong textures
-// plus the param buffer; seeds the initial velocity with banded zonal jets
-// plus a low-amplitude noise field so the sim has something to advect from.
+// ─────────────────────────────────────────────────────────────────────────
+// Per-planet sim state: 5 textures, all rgba16float for binding-type
+// uniformity. Ping-pong pairs: velocity, tracer, pressure. Single
+// textures: curl, divergence. Plus a param uniform buffer.
 export function createPlanetSim(device, sim, seedOffset = 0) {
     const usage = GPUTextureUsage.STORAGE_BINDING
                 | GPUTextureUsage.TEXTURE_BINDING
                 | GPUTextureUsage.COPY_DST;
-    const texA = device.createTexture({ label: `fluid-A`, size: [GRID_W, GRID_H], format: 'rgba16float', usage });
-    const texB = device.createTexture({ label: `fluid-B`, size: [GRID_W, GRID_H], format: 'rgba16float', usage });
-    const viewA = texA.createView();
-    const viewB = texB.createView();
+    function tex(label) {
+        const t = device.createTexture({
+            label, size: [GRID_W, GRID_H], format: 'rgba16float', usage,
+        });
+        return { tex: t, view: t.createView() };
+    }
+    const velA  = tex('velA');
+    const velB  = tex('velB');
+    const trcA  = tex('trcA');
+    const trcB  = tex('trcB');
+    const presA = tex('presA');
+    const presB = tex('presB');
+    const curl  = tex('curl');
+    const div   = tex('div');
 
-    // Start completely black. The vortex-injection in fluid-sim.wgsl puts
-    // both velocity AND dye into random cells every frame; the field
-    // builds up dynamically over the first few seconds of sim. No fbm
-    // seed, no banded init — just zero, and let the sim do its thing.
-    const init16 = new Uint16Array(GRID_W * GRID_H * 4);   // Uint16Array defaults to zero
-    device.queue.writeTexture(
-        { texture: texA },
-        init16,
-        { bytesPerRow: GRID_W * 4 * 2, rowsPerImage: GRID_H },
-        [GRID_W, GRID_H, 1],
-    );
-    device.queue.writeTexture(
-        { texture: texB },
-        init16,
-        { bytesPerRow: GRID_W * 4 * 2, rowsPerImage: GRID_H },
-        [GRID_W, GRID_H, 1],
-    );
+    // Seed everything to zero. Tracer + velocity + pressure all start
+    // empty; the field develops from the equatorial forcing alone.
+    const zero = new Uint16Array(GRID_W * GRID_H * 4);
+    for (const t of [velA, velB, trcA, trcB, presA, presB, curl, div]) {
+        device.queue.writeTexture(
+            { texture: t.tex }, zero,
+            { bytesPerRow: GRID_W * 4 * 2, rowsPerImage: GRID_H },
+            [GRID_W, GRID_H, 1],
+        );
+    }
 
     const paramBuf = device.createBuffer({
-        label: 'fluid-sim params',
-        size: 64,   // 16 f32 fields, 16-byte aligned
+        label: 'fluid params',
+        size: 64,   // 16 f32 fields = 64 bytes; matches WGSL FluidParams
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
-    // Two compute bind groups: A → B and B → A.
-    const computeBG_AB = device.createBindGroup({
-        layout: sim.computeBGL,
-        entries: [
-            { binding: 0, resource: viewA },
-            { binding: 1, resource: viewB },
-            { binding: 2, resource: { buffer: paramBuf } },
-            { binding: 3, resource: sim.computeSampler },
-        ],
-    });
-    const computeBG_BA = device.createBindGroup({
-        layout: sim.computeBGL,
-        entries: [
-            { binding: 0, resource: viewB },
-            { binding: 1, resource: viewA },
-            { binding: 2, resource: { buffer: paramBuf } },
-            { binding: 3, resource: sim.computeSampler },
-        ],
-    });
+    // Per-pass bind groups. Recomputed on flip so the ping-pong roles
+    // swap. We pre-build BOTH parities so flipping is just a flag toggle.
+    function bg(srcA, srcB, dstView) {
+        return device.createBindGroup({
+            layout: sim.bgl,
+            entries: [
+                { binding: 0, resource: { buffer: paramBuf } },
+                { binding: 1, resource: srcA },
+                { binding: 2, resource: srcB },
+                { binding: 3, resource: dstView },
+                { binding: 4, resource: sim.sampler },
+            ],
+        });
+    }
 
     return {
-        texA, texB, viewA, viewB,
-        paramBuf,
-        computeBG_AB, computeBG_BA,
-        // seedPhase MUST match the `phase` variable used by the JS seed
-        // above, so the GPU's dye-restoration target matches the on-load
-        // texture exactly.
+        velA, velB, trcA, trcB, presA, presB, curl, div, paramBuf, bg,
+        // Per-frame: which texture currently holds the "current" state for
+        // each ping-pong field. Toggled inside `tickPlanetSim`.
+        velCur: velA,  velNext: velB,
+        trcCur: trcA,  trcNext: trcB,
         seedPhase: seedOffset * 17.31,
-        // currentSampledView: which texture holds the latest valid state.
-        currentSampledView: viewA,
-        currentSampledTex:  texA,
-        // tick parity — false → next compute reads A writes B (output is B)
-        flipsToB: false,
     };
 }
 
-const _params = new Float32Array(16);   // matches WGSL SimParams layout (with padding)
+const _params = new Float32Array(16);
 
-export function tickPlanetSim(pass, sim, state, dt, time, opts = {}) {
-    const damping    = opts.damping    ?? 0.08;
-    const band_force = opts.band_force ?? 0.6;
-    const advect_mul = opts.advect_mul ?? 1.0;
-
-    _params[0] = Math.min(0.05, dt);   // clamp dt so a frame hitch doesn't blow up advection
-    _params[1] = time;
-    _params[2] = GRID_W;
-    _params[3] = GRID_H;
-    _params[4] = damping;
-    _params[5] = band_force;
-    _params[6] = advect_mul;
-    _params[7] = 0;
-    pass.encoder?.copyBufferToBuffer;   // (no-op; we use writeBuffer below)
-    // Note: writeBuffer is called by the caller before the pass is opened —
-    // here we just dispatch. See scene.js for the actual write.
-
-    pass.setPipeline(sim.pipeline);
-    if (state.flipsToB) {
-        pass.setBindGroup(0, state.computeBG_AB);
-        state.currentSampledView = state.viewB;
-        state.currentSampledTex  = state.texB;
-    } else {
-        pass.setBindGroup(0, state.computeBG_BA);
-        state.currentSampledView = state.viewA;
-        state.currentSampledTex  = state.texA;
-    }
-    pass.dispatchWorkgroups(Math.ceil(GRID_W / WORKGROUP), Math.ceil(GRID_H / WORKGROUP));
-    state.flipsToB = !state.flipsToB;
-}
-
-// Writes the Navier-Stokes parameters into the uniform buffer. Layout MUST
-// match WGSL SimParams in shaders/fluid-sim.wgsl exactly (16 f32 fields,
-// 16-byte aligned, with padding).
-//
-// Parameter naming uses physical-sim conventions:
-//   viscosity        ≈ kinematic viscosity / velocity damping
-//   jet_force        zonal-jet restoring torque (Coriolis-ish proxy)
-//   forcing_rate     global rate multiplier on the equatorial injection band
-//   forcing_strength velocity perturbation magnitude in the band
-//   forcing_width    gaussian sigma (uv) of the band
-//   tracer_source    dye flux into the band
-//   tracer_decay     dye decay rate per second
+// Writes the FluidParams UBO. Layout MUST match WGSL FluidParams exactly.
 export function writeSimParams(device, state, dt, time, opts = {}) {
-    const viscosity        = opts.viscosity        ?? 0.4;
-    const jet_force        = opts.jet_force        ?? 0.5;
-    const advect_mul       = opts.advect_mul       ?? 1.0;
-    const forcing_rate     = opts.forcing_rate     ?? 0.6;
-    const forcing_strength = opts.forcing_strength ?? 0.5;
-    const tracer_source    = opts.tracer_source    ?? 0.5;
-    const tracer_decay     = opts.tracer_decay     ?? 1.0;
-    const forcing_width    = opts.forcing_width    ?? 0.30;
+    const viscosity          = opts.viscosity          ?? 0.4;
+    const jet_force          = opts.jet_force          ?? 0.5;
+    const advect_mul         = opts.advect_mul         ?? 1.0;
+    const forcing_rate       = opts.forcing_rate       ?? 0.6;
+    const forcing_strength   = opts.forcing_strength   ?? 0.5;
+    const forcing_width      = opts.forcing_width      ?? 0.30;
+    const tracer_source      = opts.tracer_source      ?? 0.5;
+    const tracer_decay       = opts.tracer_decay       ?? 1.0;
+    const vorticity_strength = opts.vorticity_strength ?? 18.0;
     _params[0]  = Math.min(0.05, dt);
     _params[1]  = time;
     _params[2]  = GRID_W;
@@ -256,14 +191,86 @@ export function writeSimParams(device, state, dt, time, opts = {}) {
     _params[6]  = advect_mul;
     _params[7]  = forcing_rate;
     _params[8]  = forcing_strength;
-    _params[9]  = tracer_source;
-    _params[10] = tracer_decay;
-    _params[11] = forcing_width;
-    _params[12] = state.seedPhase;
-    _params[13] = 0;
+    _params[9]  = forcing_width;
+    _params[10] = tracer_source;
+    _params[11] = tracer_decay;
+    _params[12] = vorticity_strength;
+    _params[13] = state.seedPhase;
     _params[14] = 0;
     _params[15] = 0;
     device.queue.writeBuffer(state.paramBuf, 0, _params);
 }
 
-export const FLUID_GRID = { W: GRID_W, H: GRID_H };
+// Dispatches one full sim step on `state`. `cpass` must be an active
+// GPUComputePassEncoder. After this returns, state.velCur / trcCur point
+// at the textures holding the new state — those are what the surface
+// shader should sample.
+export function tickPlanetSim(cpass, sim, state, pressureIters = PRESSURE_ITERS_DEFAULT) {
+    const groups = Math.ceil(GRID_W / WORKGROUP);
+    const groupsY = Math.ceil(GRID_H / WORKGROUP);
+    const dispatch = () => cpass.dispatchWorkgroups(groups, groupsY);
+
+    // Pick the next ping-pong target for each field. After the pass
+    // completes, swap so the just-written texture becomes "cur".
+    const vCur = state.velCur;
+    const vNxt = state.velCur === state.velA ? state.velB : state.velA;
+
+    // 1. Advect velocity:  velNxt ← advect(vCur, vCur)
+    cpass.setPipeline(sim.pipelines.advectVel);
+    cpass.setBindGroup(0, state.bg(vCur.view, vCur.view, vNxt.view));
+    dispatch();
+
+    // 2. Add forces:       vCur   ← forces(vNxt)
+    cpass.setPipeline(sim.pipelines.addForces);
+    cpass.setBindGroup(0, state.bg(vNxt.view, vNxt.view, vCur.view));
+    dispatch();
+    // After step 2, vCur holds the forced velocity.
+
+    // 3. Curl:             curl   ← curl(vCur)
+    cpass.setPipeline(sim.pipelines.curl);
+    cpass.setBindGroup(0, state.bg(vCur.view, vCur.view, state.curl.view));
+    dispatch();
+
+    // 4. Vorticity force:  vNxt   ← vCur + vortForce(curl)
+    cpass.setPipeline(sim.pipelines.vorticityForce);
+    cpass.setBindGroup(0, state.bg(vCur.view, state.curl.view, vNxt.view));
+    dispatch();
+    // After step 4, vNxt has vorticity-confined velocity.
+
+    // 5. Divergence:       div    ← -∇·vNxt
+    cpass.setPipeline(sim.pipelines.divergence);
+    cpass.setBindGroup(0, state.bg(vNxt.view, vNxt.view, state.div.view));
+    dispatch();
+
+    // 6. Jacobi pressure ×N — ping-pong between presA / presB.
+    //    Initial pressure is whatever was in presA from last frame (warm
+    //    start gives faster convergence). Each iteration: presNext ← jac(presPrev, div).
+    let pSrc = state.presA, pDst = state.presB;
+    for (let i = 0; i < pressureIters; i++) {
+        cpass.setPipeline(sim.pipelines.jacobi);
+        cpass.setBindGroup(0, state.bg(pSrc.view, state.div.view, pDst.view));
+        dispatch();
+        const tmp = pSrc; pSrc = pDst; pDst = tmp;
+    }
+    // pSrc now holds the final pressure.
+    // Remember which texture holds the final pressure so next frame we warm-start from it.
+    state.presA = pSrc;
+    state.presB = pDst;
+
+    // 7. Pressure project: vCur ← vNxt - ∇pressure
+    cpass.setPipeline(sim.pipelines.pressureProject);
+    cpass.setBindGroup(0, state.bg(vNxt.view, pSrc.view, vCur.view));
+    dispatch();
+    // vCur now holds the divergence-free velocity.
+
+    // 8. Advect tracer:    trcNxt ← advect(trcCur, vCur) + source
+    const tCur = state.trcCur;
+    const tNxt = state.trcCur === state.trcA ? state.trcB : state.trcA;
+    cpass.setPipeline(sim.pipelines.advectTracer);
+    cpass.setBindGroup(0, state.bg(tCur.view, vCur.view, tNxt.view));
+    dispatch();
+
+    // Commit new "current" pointers for the surface shader to sample next frame.
+    state.velCur = vCur; state.velNext = vNxt;
+    state.trcCur = tNxt; state.trcNext = tCur;
+}

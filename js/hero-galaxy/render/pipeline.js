@@ -85,11 +85,13 @@ export async function getMeshPipeline(device, format, surfacePath, opts = {}) {
         { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
     ];
     if (opts.withVelocityField) {
-        // rgba16float texture + filtering sampler so the surface shader
-        // gets clean bilinear interpolation across the 128×64 sim grid.
+        // Velocity field (binding 1) + tracer field (binding 2) + sampler
+        // (binding 3). Both fields are rgba16float — surface shader reads
+        // velocity.xy and tracer.x.
         bodyEntries.push(
             { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-            { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+            { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+            { binding: 3, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
         );
     }
     const bodyBGL = device.createBindGroupLayout({ label: 'body BGL', entries: bodyEntries });

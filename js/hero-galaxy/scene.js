@@ -407,6 +407,14 @@ export async function mountScene({ section }) {
                 for (const p of sys.planets) {
                     const r = p.ring;
                     if (!r || r.type !== 'particles') continue;
+                    // Design rule: a planet has EITHER moons OR a ring, not
+                    // both. Real-world: Saturn-class systems rarely have
+                    // prominent moons + visible ring simultaneously, and
+                    // visually two parallel orbital systems around one body
+                    // create clutter that reads as a "rogue moon" — that's
+                    // exactly what bit us on WEBGPU+WGSL. Skip the ring
+                    // entirely whenever the planet has at least one moon.
+                    if ((p.moons || []).length > 0) continue;
                     const planetEntry = planets.find(pl => pl.body.id === p.id);
                     if (!planetEntry) continue;
                     const body = planetEntry.body;
@@ -419,32 +427,38 @@ export async function mountScene({ section }) {
                         axis, speed: 0.4, radius: meanR, springK: 8,
                     });
                     ringOrbits.push({ planetBody: body, orbitMod });
-                    // Ring particles share the starfield canvas's bloom postfx,
-                    // so any pixel above the bloom threshold gets blurred into
-                    // a glowing blob. At v1 sizes (0.6–1.4) + full accent
-                    // brightness, a tilted ring melted into a bright bloomed
-                    // torus that read as a "rogue moon" — the long-running
-                    // bug we couldn't pin down across multiple sessions.
+                    // Ring particles ride the STARFIELD canvas (where the
+                    // engine's bloom postfx lives), with ADDITIVE blending.
+                    // That means N overlapping particles sum their luminance
+                    // — and at 3500 particles in a tight ring, even small
+                    // per-particle brightness sums above the bloom threshold
+                    // and forms the bright torus that's been the long-running
+                    // "rogue" bug.
                     //
-                    // Fixed by dropping the particles WELL below the bloom
-                    // threshold:
-                    //   • size 0.10–0.22 — sub-pixel-ish, no individual particle
-                    //     dominates the bloom kernel.
-                    //   • color = accent × 0.35 with α=0.6 — luminance stays
-                    //     under the threshold (0.55) for typical accents.
-                    // Result: a fine Saturn-dust ring instead of a glowing
-                    // bloomed disc. Still visible at any zoom level, just no
-                    // longer mistakable for a separate body.
+                    // Fix has to attack BOTH sides of the additive product:
+                    //   • count: cap at ~600 desktop / 250 mobile (down from
+                    //     3500 / 1400) — sparser ring means less overlap per
+                    //     pixel, so the additive sum doesn't cross threshold.
+                    //   • brightness: accent × 0.12, α 0.35 — individual
+                    //     particle is invisible to bloom; you need ~5+ exactly
+                    //     overlapping to even approach the threshold.
+                    //   • size 0.06–0.14 — sub-pixel at most zooms.
+                    //
+                    // Result: a subtle Saturn-dust band that reads as a ring
+                    // but never blooms.
+                    const ringCount = isMobile
+                        ? Math.min(250, Math.floor((r.count || 3000) * 0.15))
+                        : Math.min(600, Math.floor((r.count || 3000) * 0.18));
                     await starPs.addEmitter(new Emitter({
                         position: [body.worldPos[0], body.worldPos[1], body.worldPos[2]],
                         shape: shapes.ring({ radius: meanR, thickness: thick, height: 0.05 }),
                         rate: 0,
-                        bursts: [{ time: 0, count: isMobile ? Math.floor((r.count || 3000) * 0.4) : (r.count || 3000) }],
+                        bursts: [{ time: 0, count: ringCount }],
                         initial: {
                             lifetime: { min: 1e9, max: 1e9 },
                             speed:    { min: 0, max: 0 },
-                            size:     { min: 0.10, max: 0.22 },
-                            color:    [body.accent[0] * 0.35, body.accent[1] * 0.35, body.accent[2] * 0.35, 0.6],
+                            size:     { min: 0.06, max: 0.14 },
+                            color:    [body.accent[0] * 0.12, body.accent[1] * 0.12, body.accent[2] * 0.12, 0.35],
                         },
                         modules: [orbitMod],
                     }));

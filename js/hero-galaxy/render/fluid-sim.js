@@ -15,6 +15,29 @@ const GRID_W = 128;
 const GRID_H = 64;
 const WORKGROUP = 8;
 
+// f32 → IEEE 754 binary16 encoding. Returns a Uint16 of the bit pattern.
+// Used to pre-pack the initial velocity field into the format the GPU
+// expects for an rgba16float texture upload.
+const _f32buf = new Float32Array(1);
+const _u32buf = new Uint32Array(_f32buf.buffer);
+function f32ToF16(val) {
+    _f32buf[0] = val;
+    const x = _u32buf[0];
+    const sign = (x >> 16) & 0x8000;
+    const expBits = (x >> 23) & 0xff;
+    const mantissa = x & 0x7fffff;
+    if (expBits === 0xff) return mantissa ? (sign | 0x7fff) : (sign | 0x7c00);
+    let exp = expBits - 127 + 15;
+    if (exp >= 31) return sign | 0x7c00;
+    if (exp <= 0) {
+        if (exp < -10) return sign;
+        const m = mantissa | 0x800000;
+        const shift = 14 - exp;
+        return sign | (m >>> shift);
+    }
+    return sign | (exp << 10) | (mantissa >> 13);
+}
+
 export async function createFluidSim(device) {
     const url = new URL('../shaders/fluid-sim.wgsl', import.meta.url);
     const res = await fetch(url);
@@ -22,13 +45,18 @@ export async function createFluidSim(device) {
     const code = await res.text();
     const module = device.createShaderModule({ label: 'fluid-sim', code });
 
+    // rgba16float is filterable AND a permitted storage texture format, so
+    // both the compute back-trace and the mesh shader can use linear
+    // bilinear interpolation on the velocity field without any per-sample
+    // bit-twiddling. Only .xy is read — .zw stays zero (reserved for a
+    // future divergence/pressure channel).
     const computeBGL = device.createBindGroupLayout({
         label: 'fluid-sim compute BGL',
         entries: [
-            { binding: 0, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'unfilterable-float' } },
-            { binding: 1, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rg32float' } },
+            { binding: 0, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
+            { binding: 1, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } },
             { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
-            { binding: 3, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'non-filtering' } },
+            { binding: 3, visibility: GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
         ],
     });
 
@@ -38,9 +66,10 @@ export async function createFluidSim(device) {
         compute: { module, entryPoint: 'cs_main' },
     });
 
-    // The compute sampler must be non-filtering on rg32float. The mesh
-    // shader's sampler is created separately (linear, for nice band edges).
-    const computeSampler = device.createSampler({});
+    // Both samplers are filtering linear — the compute side traces the
+    // velocity field backwards continuously, the mesh side reads it with
+    // smooth bilinear edges. Same sampler can serve both roles.
+    const computeSampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     const meshSampler    = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
 
     return { pipeline, computeBGL, computeSampler, meshSampler };
@@ -53,33 +82,34 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
     const usage = GPUTextureUsage.STORAGE_BINDING
                 | GPUTextureUsage.TEXTURE_BINDING
                 | GPUTextureUsage.COPY_DST;
-    const texA = device.createTexture({ label: `fluid-A`, size: [GRID_W, GRID_H], format: 'rg32float', usage });
-    const texB = device.createTexture({ label: `fluid-B`, size: [GRID_W, GRID_H], format: 'rg32float', usage });
+    const texA = device.createTexture({ label: `fluid-A`, size: [GRID_W, GRID_H], format: 'rgba16float', usage });
+    const texB = device.createTexture({ label: `fluid-B`, size: [GRID_W, GRID_H], format: 'rgba16float', usage });
     const viewA = texA.createView();
     const viewB = texB.createView();
 
-    // Seed: banded zonal jets + light noise. Determinism comes from a
-    // simple per-planet seedOffset so each gas giant gets its own pattern.
-    const init = new Float32Array(GRID_W * GRID_H * 2);
+    // Seed: banded zonal jets + light noise. 4 channels per texel; .xy are
+    // velocity, .zw stay zero (reserved). Uses Uint16Array of float16-encoded
+    // values so the queue.writeTexture payload matches the rgba16float format.
+    const init16 = new Uint16Array(GRID_W * GRID_H * 4);
     for (let y = 0; y < GRID_H; y++) {
         const lat = (y + 0.5) / GRID_H * 2.0 - 1.0;
         const band = Math.sin(lat * 22.0) * 0.6;
         for (let x = 0; x < GRID_W; x++) {
-            const u = (x + 0.5) / GRID_W;
-            // Cheap deterministic hash for per-cell noise.
             const h = Math.sin((x * 12.9898 + y * 78.233 + seedOffset * 3.7) * 43758.5453);
             const noise_x = (h - Math.floor(h)) - 0.5;
             const h2 = Math.sin((x * 39.346 + y * 11.135 + seedOffset * 5.1) * 16807.0);
             const noise_y = (h2 - Math.floor(h2)) - 0.5;
-            const i = (y * GRID_W + x) * 2;
-            init[i + 0] = band + noise_x * 0.08;
-            init[i + 1] = noise_y * 0.04;
+            const i = (y * GRID_W + x) * 4;
+            init16[i + 0] = f32ToF16(band + noise_x * 0.08);
+            init16[i + 1] = f32ToF16(noise_y * 0.04);
+            init16[i + 2] = 0;   // reserved channel
+            init16[i + 3] = 0;   // reserved channel
         }
     }
     device.queue.writeTexture(
         { texture: texA },
-        init,
-        { bytesPerRow: GRID_W * 2 * 4, rowsPerImage: GRID_H },
+        init16,
+        { bytesPerRow: GRID_W * 4 * 2, rowsPerImage: GRID_H },
         [GRID_W, GRID_H, 1],
     );
 

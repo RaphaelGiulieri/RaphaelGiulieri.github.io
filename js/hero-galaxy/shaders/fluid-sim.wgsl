@@ -23,7 +23,7 @@ struct SimParams {
 };
 
 @group(0) @binding(0) var src_vel  : texture_2d<f32>;
-@group(0) @binding(1) var dst_vel  : texture_storage_2d<rg32float, write>;
+@group(0) @binding(1) var dst_vel  : texture_storage_2d<rgba16float, write>;
 @group(0) @binding(2) var<uniform> params : SimParams;
 @group(0) @binding(3) var smp      : sampler;
 
@@ -59,11 +59,12 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // Banded zonal jets — restore toward an alternating east/west wind
     // pattern at evenly-spaced latitudes. This is the "Coriolis + thermal
     // gradient" forcing that drives Jupiter's bands in real life, expressed
-    // here as a simple per-latitude target field.
+    // here as a simple per-latitude target field. (`target` is a reserved
+    // WGSL keyword so we call it `band_target` here.)
     let lat = uv.y * 2.0 - 1.0;                       // -1 (south pole) … 1 (north pole)
     let band_idx = sin(lat * 22.0);                   // alternating jet directions
-    let target = vec2<f32>(band_idx * 0.6, 0.0);
-    let v_with_band = mix(v_advected, target, params.band_force * params.dt);
+    let band_target = vec2<f32>(band_idx * 0.6, 0.0);
+    let v_with_band = mix(v_advected, band_target, params.band_force * params.dt);
 
     // Light damping — bleeds off the turbulent component over time without
     // destroying the steady banded pattern.

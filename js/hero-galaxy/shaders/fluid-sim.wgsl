@@ -36,6 +36,14 @@ fn sample_v(uv: vec2<f32>) -> vec2<f32> {
     return textureSampleLevel(src_vel, smp, wrap_uv(uv), 0.0).xy;
 }
 
+// .xy of the texture holds velocity. .z holds a passive dye field that's
+// carried by the flow — initialised with a marbled noise pattern that has
+// lon variation, so when the sim runs the dye drifts visibly east/west
+// even when the velocity field is otherwise symmetric in lon. .w reserved.
+fn sample_full(uv: vec2<f32>) -> vec4<f32> {
+    return textureSampleLevel(src_vel, smp, wrap_uv(uv), 0.0);
+}
+
 @compute @workgroup_size(8, 8)
 fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let gw = u32(params.grid_w);
@@ -46,29 +54,35 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let uv = (vec2<f32>(f32(gid.x), f32(gid.y)) + 0.5)
            / vec2<f32>(params.grid_w, params.grid_h);
 
-    // Read current velocity at this cell.
-    let v_here = sample_v(uv);
+    // Read full texel (vel + dye).
+    let here = sample_full(uv);
+    let v_here = here.xy;
 
     // Backwards-trace semi-Lagrangian advection — sample velocity at the
     // upstream cell so the field gets carried by itself. Scale by advect_mul
     // so the user can dial sim speed independent of frame dt.
     let step = v_here * params.dt * params.advect_mul;
     let prev_uv = uv - step;
-    let v_advected = sample_v(prev_uv);
+    let upstream = sample_full(prev_uv);
+    let v_advected = upstream.xy;
+    let dye_advected = upstream.z;
 
     // Banded zonal jets — restore toward an alternating east/west wind
-    // pattern at evenly-spaced latitudes. This is the "Coriolis + thermal
-    // gradient" forcing that drives Jupiter's bands in real life, expressed
-    // here as a simple per-latitude target field. (`target` is a reserved
-    // WGSL keyword so we call it `band_target` here.)
-    let lat = uv.y * 2.0 - 1.0;                       // -1 (south pole) … 1 (north pole)
-    let band_idx = sin(lat * 22.0);                   // alternating jet directions
+    // pattern at evenly-spaced latitudes. (`target` is a reserved WGSL
+    // keyword so we call it `band_target` here.)
+    let lat = uv.y * 2.0 - 1.0;
+    let band_idx = sin(lat * 22.0);
     let band_target = vec2<f32>(band_idx * 0.6, 0.0);
     let v_with_band = mix(v_advected, band_target, params.band_force * params.dt);
 
-    // Light damping — bleeds off the turbulent component over time without
-    // destroying the steady banded pattern.
+    // Light damping — bleeds off the turbulent component without destroying
+    // the steady banded pattern.
     let v_out = v_with_band * (1.0 - params.damping * params.dt);
 
-    textureStore(dst_vel, vec2<i32>(gid.xy), vec4<f32>(v_out, 0.0, 1.0));
+    // Dye is purely advected — no damping, no restoration. Whatever pattern
+    // the seed put down stays, just shifted by the flow. That makes motion
+    // visually obvious even when the velocity field looks uniform.
+    let dye_out = dye_advected;
+
+    textureStore(dst_vel, vec2<i32>(gid.xy), vec4<f32>(v_out, dye_out, 0.0));
 }

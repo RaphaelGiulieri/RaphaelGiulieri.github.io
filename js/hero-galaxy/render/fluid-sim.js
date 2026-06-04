@@ -87,9 +87,10 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
     const viewA = texA.createView();
     const viewB = texB.createView();
 
-    // Seed: banded zonal jets + light noise. 4 channels per texel; .xy are
-    // velocity, .zw stay zero (reserved). Uses Uint16Array of float16-encoded
-    // values so the queue.writeTexture payload matches the rgba16float format.
+    // Seed: banded zonal jets in .xy + a marbled lon-varying dye field in
+    // .z. The dye gives the surface shader something to visualise that
+    // makes flow obvious — when sim is on, the dye drifts east/west with
+    // the jet streams; when sim is off, the dye stays put.
     const init16 = new Uint16Array(GRID_W * GRID_H * 4);
     for (let y = 0; y < GRID_H; y++) {
         const lat = (y + 0.5) / GRID_H * 2.0 - 1.0;
@@ -99,11 +100,20 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
             const noise_x = (h - Math.floor(h)) - 0.5;
             const h2 = Math.sin((x * 39.346 + y * 11.135 + seedOffset * 5.1) * 16807.0);
             const noise_y = (h2 - Math.floor(h2)) - 0.5;
+            // Dye: cellular marbling. Multiple sine harmonics across lon
+            // produce a 2D-noise-like pattern; per-planet seed shifts the
+            // phase so different gas giants get distinct dye textures.
+            const lon = x / GRID_W * Math.PI * 2;
+            const dye =
+                0.5 +
+                0.30 * Math.sin(lon * 4 + lat * 6 + seedOffset * 1.7) +
+                0.20 * Math.sin(lon * 11 - lat * 3 + seedOffset * 2.1) +
+                0.15 * Math.sin(lon * 19 + lat * 9 + seedOffset * 0.7);
             const i = (y * GRID_W + x) * 4;
             init16[i + 0] = f32ToF16(band + noise_x * 0.08);
             init16[i + 1] = f32ToF16(noise_y * 0.04);
-            init16[i + 2] = 0;   // reserved channel
-            init16[i + 3] = 0;   // reserved channel
+            init16[i + 2] = f32ToF16(Math.max(0, Math.min(1, dye)));
+            init16[i + 3] = 0;
         }
     }
     device.queue.writeTexture(

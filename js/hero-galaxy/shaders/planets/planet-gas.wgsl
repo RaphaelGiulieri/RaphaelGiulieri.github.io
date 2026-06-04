@@ -30,6 +30,11 @@ fn sample_vel(uv: vec2<f32>) -> vec2<f32> {
     return textureSampleLevel(vel_field, vel_smp, wrap_uv, 0.0).xy;
 }
 
+fn sample_dye(uv: vec2<f32>) -> f32 {
+    let wrap_uv = vec2<f32>(fract(uv.x + 1.0), clamp(uv.y, 0.0, 1.0));
+    return textureSampleLevel(vel_field, vel_smp, wrap_uv, 0.0).z;
+}
+
 fn surface(s: Surface) -> vec4<f32> {
     let p = s.local_pos;
     let lat_y = p.y;
@@ -42,37 +47,38 @@ fn surface(s: Surface) -> vec4<f32> {
     let uv_lat = lat_y * 0.5 + 0.5;                // [0, 1] pole to pole
     let uv = vec2<f32>(uv_lon, uv_lat);
 
-    // Sample the velocity field at this fragment + a slightly drift-shifted
-    // upstream position. The difference forms a flow-line texture: bright
-    // where the flow is consistent, broken where it shears.
+    // Sample the velocity field + the passive dye field at this fragment.
+    // The dye is what makes flow visible — initialised with a marbled
+    // pattern in fluid-sim.js, advected by the velocity in fluid-sim.wgsl.
     let v_here   = sample_vel(uv);
+    let dye      = sample_dye(uv);
     let speed    = length(v_here);
     let dir      = v_here / max(speed, 0.0001);
 
-    // Drag a fine fbm by the velocity field — gives "rolling cloud" detail
-    // that follows the flow rather than sitting static on the surface.
-    let drift_uv = uv - v_here * 0.05;
-    let drift_p  = vec3<f32>(
-        cos(drift_uv.x * 6.2831) * sqrt(1.0 - (drift_uv.y * 2.0 - 1.0) * (drift_uv.y * 2.0 - 1.0)),
-        drift_uv.y * 2.0 - 1.0,
-        sin(drift_uv.x * 6.2831) * sqrt(1.0 - (drift_uv.y * 2.0 - 1.0) * (drift_uv.y * 2.0 - 1.0)));
-    let detail   = fbm3(drift_p * 5.0 + vec3<f32>(s.time * 0.04, 0.0, 0.0), 4);
-
-    // Band intensity: where the wind is fast we brighten; where slow, dark.
-    // Mix accent dark→light along a smoothstep of speed so wind speed
-    // correlates with visible "brightness of the band".
+    // Band intensity from wind speed: faster wind → brighter band.
     let band_t = smoothstep(0.0, 0.7, speed);
     let dark_band  = s.accent * 0.30;
     let light_band = s.accent * 1.55;
     let band = mix(dark_band, light_band, band_t);
 
+    // Dye-driven marbling — dye is a [0,1] field that LIVES on the texture
+    // and advects with the flow. Mapping it through a smoothstep gives the
+    // dark eddies / bright cells classic Jovian look, and because the dye
+    // moves with the field, any motion the sim produces is visible here.
+    let dye_marble = smoothstep(0.35, 0.75, dye);
+    let dye_layer = mix(s.accent * 0.20, s.accent * 1.40, dye_marble);
+    let base = mix(band, dye_layer, 0.55);   // dye dominates so motion is obvious
+
     // Direction-tint: eastward (vx > 0) leans warmer, westward leans cooler.
-    // For colour-tinted suns this reads as natural shading; for white suns
-    // it provides subtle directional cue.
     let warm = s.accent * vec3<f32>(1.15, 0.95, 0.78);
     let cool = s.accent * vec3<f32>(0.78, 0.92, 1.15);
     let dir_tint = mix(cool, warm, dir.x * 0.5 + 0.5);
-    let base = mix(band, dir_tint, 0.25);
+    let base_with_dir = mix(base, dir_tint, 0.18);
+
+    // Object-space fbm detail — a high-frequency overlay that catches the
+    // light differently than the dye. Time-shifted, not advected, so it
+    // adds a "shimmering convection" feel on top of the dye flow.
+    let detail = fbm3(p * 8.0 + vec3<f32>(s.time * 0.05, 0.0, 0.0), 3);
 
     // Storm spot — kept as a 3D-space gaussian around a drifting axis so it
     // composites consistently regardless of the sim state.
@@ -84,7 +90,7 @@ fn surface(s: Surface) -> vec4<f32> {
     let spot_swirl  = sin(storm_axial * 38.0 + storm_lat * 32.0 + s.time * 0.55) * 0.5 + 0.5;
     let storm_hot   = mix(vec3<f32>(0.0), s.accent * 1.9, spot * (0.6 + spot_swirl * 0.4));
 
-    let base_with_detail = base + s.accent * (detail - 0.5) * 0.18;
+    let base_with_detail = base_with_dir + s.accent * (detail - 0.5) * 0.18;
 
     let rim = fresnel(s.view_dir, s.world_normal, 2.4);
     return vec4<f32>(

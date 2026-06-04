@@ -200,12 +200,18 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sSpread, 'galaxy spread', world, 'galaxySpread', 0.3, 4, 0.01,
             'Multiplier on every star\'s distance from origin.',
             { factory: fw.galaxySpread });
-        row(sSpread, 'planet orbits', world, 'planetOrbitSpread', 0.3, 4, 0.01,
-            'Multiplier on every planet\'s orbital radius.',
-            { factory: fw.planetOrbitSpread });
-        row(sSpread, 'moon orbits', world, 'moonOrbitSpread', 0.3, 4, 0.01,
-            'Multiplier on every moon\'s orbital radius.',
-            { factory: fw.moonOrbitSpread });
+        row(sSpread, 'planet min dist', world, 'planetOrbitMin', 0.5, 60, 0.1,
+            'Orbit radius of the innermost planet (across every system). Other planets distribute proportionally between min and max based on their original JSON ratios.',
+            { factory: fw.planetOrbitMin });
+        row(sSpread, 'planet max dist', world, 'planetOrbitMax', 0.5, 80, 0.1,
+            'Orbit radius of the outermost planet (across every system).',
+            { factory: fw.planetOrbitMax });
+        row(sSpread, 'moon min dist', world, 'moonOrbitMin', 0.1, 15, 0.05,
+            'Orbit radius of the innermost moon (across every planet). Other moons distribute proportionally.',
+            { factory: fw.moonOrbitMin });
+        row(sSpread, 'moon max dist', world, 'moonOrbitMax', 0.1, 20, 0.05,
+            'Orbit radius of the outermost moon (across every planet).',
+            { factory: fw.moonOrbitMax });
         row(sSpread, 'star size', world, 'starSize', 0.3, 4, 0.01,
             'Multiplier on every star\'s radius.',
             { factory: fw.starSize });

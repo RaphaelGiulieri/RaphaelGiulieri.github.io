@@ -90,12 +90,33 @@ export async function mountScene({ section }) {
     const ambient = {
         planetSpinRate: 0.2,   // rad/sec planet self-rotation factor
     };
+
+    // Compute global JSON orbit-radius bounds. The dev panel's planetOrbitMin /
+    // planetOrbitMax (and the moon equivalents) re-map each body's orbit radius
+    // by lerping between those bounds, keyed off the body's original normalized
+    // position. The innermost planet across all systems hits the user-set min;
+    // the outermost hits the max; all others distribute proportionally. Same
+    // logic for moons against the global moon-radius range.
+    const allPlanetR = galaxy.systems.flatMap(s => s.planets.map(p => p.orbit?.radius ?? 0));
+    const allMoonR   = galaxy.systems.flatMap(s => s.planets.flatMap(p => (p.moons || []).map(m => m.orbit?.radius ?? 0)));
+    const _planetOrigMin = allPlanetR.length ? Math.min(...allPlanetR) : 1;
+    const _planetOrigMax = allPlanetR.length ? Math.max(...allPlanetR) : 1;
+    const _moonOrigMin   = allMoonR.length   ? Math.min(...allMoonR)   : 1;
+    const _moonOrigMax   = allMoonR.length   ? Math.max(...allMoonR)   : 1;
+    const _planetSpan = Math.max(1e-6, _planetOrigMax - _planetOrigMin);
+    const _moonSpan   = Math.max(1e-6, _moonOrigMax   - _moonOrigMin);
+
     // Body spread + camera distances — multipliers on top of the JSON values
     // so the dev panel can tune the whole scene's scale without re-baking data.
     const world = {
         galaxySpread:      1.0,   // multiplier on star positions from origin
-        planetOrbitSpread: 1.0,   // multiplier on planet orbit radii
-        moonOrbitSpread:   1.0,   // multiplier on moon orbit radii
+        // Per-orbit ranges. Innermost body across all systems sits at *Min,
+        // outermost at *Max; everything in between is lerped proportionally.
+        // Factory defaults reproduce the original JSON layout.
+        planetOrbitMin:    _planetOrigMin,
+        planetOrbitMax:    _planetOrigMax,
+        moonOrbitMin:      _moonOrigMin,
+        moonOrbitMax:      _moonOrigMax,
         starSize:          1.0,
         planetSize:        1.0,
         moonSize:          1.0,
@@ -276,6 +297,7 @@ export async function mountScene({ section }) {
             });
             planetBody._origScale  = planetBody.scale;
             planetBody._origOrbitR = p.orbit?.radius ?? 0;
+            planetBody._origOrbitFrac = (planetBody._origOrbitR - _planetOrigMin) / _planetSpan;
             planets.push({ body: planetBody, star });
             for (const m of p.moons || []) {
                 const moonBody = createBody(device, bodyBGL, {
@@ -283,6 +305,7 @@ export async function mountScene({ section }) {
                 });
                 moonBody._origScale  = moonBody.scale;
                 moonBody._origOrbitR = m.orbit?.radius ?? 0;
+                moonBody._origOrbitFrac = (moonBody._origOrbitR - _moonOrigMin) / _moonSpan;
                 moons.push({ body: moonBody, planet: planetBody });
             }
         }
@@ -526,10 +549,10 @@ export async function mountScene({ section }) {
             star.worldPos[2] = star._origPos[2] * world.galaxySpread;
             star.scale = star._origScale * world.starSize;
         }
-        // Planets: orbit around their star with the planet-orbit-spread multiplier.
+        // Planets: orbit around their star at lerp(min, max, normalized_orbit_frac).
         for (const { body, star } of planets) {
             const o = body.orbit; if (!o) continue;
-            const r = body._origOrbitR * world.planetOrbitSpread;
+            const r = world.planetOrbitMin + (world.planetOrbitMax - world.planetOrbitMin) * body._origOrbitFrac;
             const a = (t * (2 * Math.PI / o.period)) + (o.phase || 0);
             const tilt = (o.tilt || 0) * Math.PI / 180;
             body.worldPos[0] = star.worldPos[0] + Math.cos(a) * r;
@@ -537,10 +560,10 @@ export async function mountScene({ section }) {
             body.worldPos[2] = star.worldPos[2] + Math.sin(a) * r * Math.cos(tilt);
             body.scale = body._origScale * world.planetSize;
         }
-        // Moons: orbit around their planet with the moon-orbit-spread multiplier.
+        // Moons: orbit around their planet at lerp(min, max, normalized_orbit_frac).
         for (const { body, planet } of moons) {
             const o = body.orbit; if (!o) continue;
-            const r = body._origOrbitR * world.moonOrbitSpread;
+            const r = world.moonOrbitMin + (world.moonOrbitMax - world.moonOrbitMin) * body._origOrbitFrac;
             const a = (t * (2 * Math.PI / o.period)) + (o.phase || 0);
             const tilt = (o.tilt || 0) * Math.PI / 180;
             body.worldPos[0] = planet.worldPos[0] + Math.cos(a) * r;

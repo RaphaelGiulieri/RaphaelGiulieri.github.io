@@ -344,11 +344,8 @@ export async function mountScene({ section }) {
 
     function visibleStars()   { return stars; }
     function visiblePlanets() {
-        // Render planets at EVERY level — at galaxy view they read as tiny
-        // companions to each sun, drawing the eye and previewing what each
-        // system contains. Only at planet view do we restrict to the focal
-        // system's planets to keep the depth-of-field clean.
-        if (state.level === 'planet') return planets.filter(p => p.body.meta.systemId === state.focusedSystemId);
+        // Render every planet at every level — other-system planets stay
+        // visible at planet view so the user can hop to them directly.
         return planets;
     }
     function visibleMoons() {

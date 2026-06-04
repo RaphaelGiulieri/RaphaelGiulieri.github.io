@@ -1,9 +1,21 @@
 // Dev tuning panel for the hero galaxy. Self-contained: injects its own CSS
-// and DOM, and mutates the shared state objects (postfx, ambient, …) live each
-// frame. To remove for ship: flip HERO_GALAXY_DEV_PANEL to false in
-// js/hero-galaxy/index.js (or delete this file + its call site).
+// and DOM, and mutates the shared state objects live each frame. To remove
+// for ship: flip HERO_GALAXY_DEV_PANEL to false (or delete this file + the
+// import + the setupDevPanel call site in scene.js).
+//
+// "Save as default" persists the current values to localStorage. On the next
+// load, scene.js merges those into the live state objects BEFORE the panel is
+// built, so the panel opens already at the saved values.
+// "Reset to default" copies the factory snapshot back into the live state
+// objects and clears localStorage.
+//
+// When the design is final, dump `localStorage['hero-galaxy-dev-defaults']`
+// and bake those numbers into scene.js's `factoryDefaults` block, then flip
+// HERO_GALAXY_DEV_PANEL off.
 
-export function setupDevPanel({ postfx, ambient, world }) {
+const LS_KEY = 'hero-galaxy-dev-defaults';
+
+export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
     if (!document.getElementById('hero-galaxy-dev-style')) {
         const styleEl = document.createElement('style');
         styleEl.id = 'hero-galaxy-dev-style';
@@ -63,7 +75,35 @@ export function setupDevPanel({ postfx, ambient, world }) {
             .hg-dev-panel input[type="range"] {
                 width: 100%; margin: 0; accent-color: var(--accent, #ff4b1f);
             }
-            .hg-dev-panel.is-collapsed .hg-section { display: none; }
+            .hg-dev-panel .hg-actions {
+                position: sticky; bottom: 0; z-index: 1;
+                display: flex; gap: 6px;
+                padding: 10px 12px;
+                border-top: 1px solid rgba(255, 75, 31, 0.4);
+                background: rgba(12, 10, 7, 0.96);
+                backdrop-filter: blur(6px);
+            }
+            .hg-dev-panel .hg-actions button {
+                flex: 1;
+                background: none; border: 1px solid var(--accent, #ff4b1f);
+                color: var(--accent, #ff4b1f); font: inherit;
+                font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+                padding: 6px 8px; cursor: pointer;
+            }
+            .hg-dev-panel .hg-actions button:hover {
+                background: var(--accent, #ff4b1f); color: var(--bg, #0c0a07);
+            }
+            .hg-dev-panel .hg-toast {
+                position: absolute; bottom: 56px; left: 12px; right: 12px;
+                background: var(--accent, #ff4b1f); color: var(--bg, #0c0a07);
+                font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+                text-align: center; padding: 6px;
+                opacity: 0; transition: opacity 200ms;
+                pointer-events: none;
+            }
+            .hg-dev-panel .hg-toast.is-on { opacity: 1; }
+            .hg-dev-panel.is-collapsed .hg-section,
+            .hg-dev-panel.is-collapsed .hg-actions { display: none; }
         `;
         document.head.appendChild(styleEl);
     }
@@ -72,23 +112,44 @@ export function setupDevPanel({ postfx, ambient, world }) {
     panel.className = 'hg-dev-panel';
     panel.innerHTML = `<header><span>dev · hero galaxy</span><button type="button" data-act="toggle">−</button></header>`;
 
-    function row(parent, label, value, min, max, step, desc, onChange) {
+    // Track every row so reset can iterate them. Each row holds a closure that
+    // copies the corresponding `factoryDefaults` value back into the live state
+    // and refreshes the slider thumb + displayed text.
+    const rowResets = [];
+
+    function row(parent, label, ref, key, min, max, step, desc, opts = {}) {
+        const toUI   = opts.toUI   || ((v) => v);
+        const fromUI = opts.fromUI || ((v) => v);
+        const factoryValue = opts.factory;
         const decimals = step < 0.001 ? 4 : step < 0.1 ? 3 : step < 1 ? 1 : 0;
+
         const el = document.createElement('div');
         el.className = 'hg-row';
         el.title = desc;
         el.innerHTML = `
-            <label><span>${label}</span><span class="val">${(+value).toFixed(decimals)}</span></label>
-            <input type="range" min="${min}" max="${max}" step="${step}" value="${value}">
+            <label><span>${label}</span><span class="val"></span></label>
+            <input type="range" min="${min}" max="${max}" step="${step}">
         `;
         const input = el.querySelector('input');
         const val = el.querySelector('.val');
+        function apply(uiValue) {
+            input.value = uiValue;
+            val.textContent = (+uiValue).toFixed(decimals);
+        }
+        apply(toUI(ref[key]));
         input.addEventListener('input', () => {
             const v = +input.value;
             val.textContent = v.toFixed(decimals);
-            onChange(v);
+            ref[key] = fromUI(v);
         });
         parent.appendChild(el);
+
+        if (factoryValue !== undefined) {
+            rowResets.push(() => {
+                ref[key] = factoryValue;
+                apply(toUI(factoryValue));
+            });
+        }
     }
 
     function section(title) {
@@ -99,94 +160,135 @@ export function setupDevPanel({ postfx, ambient, world }) {
         return s;
     }
 
+    const fp = factoryDefaults?.postfx  || {};
+    const fa = factoryDefaults?.ambient || {};
+    const fw = factoryDefaults?.world   || {};
+
     // ── Starfield bloom ───────────────────────────────────────────────────
     const sBloom = section('Star bloom');
-    row(sBloom, 'enable',     postfx.enableBloom ? 1 : 0, 0, 1, 1,
+    row(sBloom, 'enable', postfx, 'enableBloom', 0, 1, 1,
         'Master switch for the starfield bloom pass.',
-        (v) => { postfx.enableBloom = v >= 0.5; });
-    row(sBloom, 'threshold',  postfx.bloomThreshold, 0, 1.5, 0.01,
-        'Brightness cutoff for the bright-pass. Lower → more pixels bloom (broader glow); higher → only the brightest stars halo.',
-        (v) => { postfx.bloomThreshold = v; });
-    row(sBloom, 'soft knee',  postfx.bloomSoftKnee, 0, 1, 0.01,
-        'Softness of the threshold rolloff. 0 = hard cutoff (bands), 1 = very smooth.',
-        (v) => { postfx.bloomSoftKnee = v; });
-    row(sBloom, 'intensity',  postfx.bloomIntensity, 0, 3, 0.01,
-        'Multiplier on the bright-pass composite. 0 = bloom invisible; >1 = blown-out.',
-        (v) => { postfx.bloomIntensity = v; });
-    row(sBloom, 'blur passes', postfx.blurPasses, 1, 6, 1,
-        'Number of separable blur passes. More passes = wider, softer halo at a small frame-time cost.',
-        (v) => { postfx.blurPasses = v | 0; });
-    row(sBloom, 'exposure',   postfx.exposure, 0.2, 3, 0.01,
+        { toUI: (v) => v ? 1 : 0, fromUI: (v) => v >= 0.5, factory: fp.enableBloom });
+    row(sBloom, 'threshold', postfx, 'bloomThreshold', 0, 1.5, 0.01,
+        'Brightness cutoff for the bright-pass.',
+        { factory: fp.bloomThreshold });
+    row(sBloom, 'soft knee', postfx, 'bloomSoftKnee', 0, 1, 0.01,
+        'Softness of the threshold rolloff.',
+        { factory: fp.bloomSoftKnee });
+    row(sBloom, 'intensity', postfx, 'bloomIntensity', 0, 3, 0.01,
+        'Multiplier on the bright-pass composite.',
+        { factory: fp.bloomIntensity });
+    row(sBloom, 'blur passes', postfx, 'blurPasses', 1, 6, 1,
+        'Number of separable blur passes.',
+        { fromUI: (v) => v | 0, factory: fp.blurPasses });
+    row(sBloom, 'exposure', postfx, 'exposure', 0.2, 3, 0.01,
         'Final composite exposure multiplier.',
-        (v) => { postfx.exposure = v; });
-    row(sBloom, 'vignette',   postfx.vignette, 0, 1, 0.01,
+        { factory: fp.exposure });
+    row(sBloom, 'vignette', postfx, 'vignette', 0, 1, 0.01,
         'Darkening at the frame edges.',
-        (v) => { postfx.vignette = v; });
+        { factory: fp.vignette });
 
     // ── Ambient motion ────────────────────────────────────────────────────
     const sAmbient = section('Ambient');
-    row(sAmbient, 'galaxy spin', ambient.galaxySpinRate, 0, 2, 0.01,
-        'Galaxy-view auto-orbit rate (deg/sec). 0.5 = ~12 minutes per revolution.',
-        (v) => { ambient.galaxySpinRate = v; });
-    row(sAmbient, 'planet spin',  ambient.planetSpinRate, 0, 2, 0.01,
-        'Per-planet self-rotation rate (rad/sec) at t.',
-        (v) => { ambient.planetSpinRate = v; });
-    row(sAmbient, 'idle delay s', ambient.idleSeconds, 0, 30, 0.5,
-        'How long the visitor must be idle before the galaxy resumes its auto-orbit.',
-        (v) => { ambient.idleSeconds = v; });
+    row(sAmbient, 'galaxy spin', ambient, 'galaxySpinRate', 0, 2, 0.01,
+        'Galaxy-view auto-orbit rate (deg/sec).',
+        { factory: fa.galaxySpinRate });
+    row(sAmbient, 'planet spin', ambient, 'planetSpinRate', 0, 2, 0.01,
+        'Per-planet self-rotation rate (rad/sec).',
+        { factory: fa.planetSpinRate });
+    row(sAmbient, 'idle delay s', ambient, 'idleSeconds', 0, 30, 0.5,
+        'Seconds idle before auto-orbit resumes.',
+        { factory: fa.idleSeconds });
 
-    // ── Body spread ───────────────────────────────────────────────────────
     if (world) {
+        // ── Body spread ──────────────────────────────────────────────────
         const sSpread = section('Spread');
-        row(sSpread, 'galaxy spread',  world.galaxySpread,      0.3, 4, 0.01,
-            'Multiplier on every star\'s distance from origin. >1 spreads systems apart; <1 packs them together.',
-            (v) => { world.galaxySpread = v; });
-        row(sSpread, 'planet orbits',  world.planetOrbitSpread, 0.3, 4, 0.01,
-            'Multiplier on every planet\'s orbital radius around its star.',
-            (v) => { world.planetOrbitSpread = v; });
-        row(sSpread, 'moon orbits',    world.moonOrbitSpread,   0.3, 4, 0.01,
-            'Multiplier on every moon\'s orbital radius around its planet.',
-            (v) => { world.moonOrbitSpread = v; });
-        row(sSpread, 'star size',      world.starSize,          0.3, 4, 0.01,
+        row(sSpread, 'galaxy spread', world, 'galaxySpread', 0.3, 4, 0.01,
+            'Multiplier on every star\'s distance from origin.',
+            { factory: fw.galaxySpread });
+        row(sSpread, 'planet orbits', world, 'planetOrbitSpread', 0.3, 4, 0.01,
+            'Multiplier on every planet\'s orbital radius.',
+            { factory: fw.planetOrbitSpread });
+        row(sSpread, 'moon orbits', world, 'moonOrbitSpread', 0.3, 4, 0.01,
+            'Multiplier on every moon\'s orbital radius.',
+            { factory: fw.moonOrbitSpread });
+        row(sSpread, 'star size', world, 'starSize', 0.3, 4, 0.01,
             'Multiplier on every star\'s radius.',
-            (v) => { world.starSize = v; });
-        row(sSpread, 'planet size',    world.planetSize,        0.3, 4, 0.01,
+            { factory: fw.starSize });
+        row(sSpread, 'planet size', world, 'planetSize', 0.3, 4, 0.01,
             'Multiplier on every planet\'s radius.',
-            (v) => { world.planetSize = v; });
-        row(sSpread, 'moon size',      world.moonSize,          0.3, 4, 0.01,
+            { factory: fw.planetSize });
+        row(sSpread, 'moon size', world, 'moonSize', 0.3, 4, 0.01,
             'Multiplier on every moon\'s radius.',
-            (v) => { world.moonSize = v; });
-        row(sSpread, 'halo scale',     world.haloScale,         1.0, 6, 0.05,
-            'Size of the alpha-blended halo sphere around each star, relative to the star\'s body.',
-            (v) => { world.haloScale = v; });
+            { factory: fw.moonSize });
+        row(sSpread, 'halo scale', world, 'haloScale', 1.0, 6, 0.05,
+            'Size of the alpha-blended halo sphere relative to its star.',
+            { factory: fw.haloScale });
 
-        // ── Labels ────────────────────────────────────────────────────────
+        // ── Labels ───────────────────────────────────────────────────────
         const sLabels = section('Labels');
-        row(sLabels, 'gap (px)',       world.labelGapPx,        0, 80, 1,
-            'Pixels between the body\'s projected silhouette and the bottom of the label text.',
-            (v) => { world.labelGapPx = v; });
-        row(sLabels, 'star silhouette',   world.labelMultStar,   0.2, 4, 0.05,
-            'Multiplier on the star\'s body radius when projecting the silhouette for label placement. Higher = label sits further out (clears the halo); lower = label sits tighter.',
-            (v) => { world.labelMultStar = v; });
-        row(sLabels, 'planet silhouette', world.labelMultPlanet, 0.2, 4, 0.05,
-            'Same as the star multiplier but for planets.',
-            (v) => { world.labelMultPlanet = v; });
-        row(sLabels, 'moon silhouette',   world.labelMultMoon,   0.2, 4, 0.05,
-            'Same as the star multiplier but for moons.',
-            (v) => { world.labelMultMoon = v; });
+        row(sLabels, 'gap (px)', world, 'labelGapPx', 0, 80, 1,
+            'Pixels between the body silhouette and the bottom of the label text.',
+            { factory: fw.labelGapPx });
+        row(sLabels, 'star silhouette', world, 'labelMultStar', 0.2, 4, 0.05,
+            'Body-radius multiplier when projecting the silhouette for star labels.',
+            { factory: fw.labelMultStar });
+        row(sLabels, 'planet silhouette', world, 'labelMultPlanet', 0.2, 4, 0.05,
+            'Body-radius multiplier for planet labels.',
+            { factory: fw.labelMultPlanet });
+        row(sLabels, 'moon silhouette', world, 'labelMultMoon', 0.2, 4, 0.05,
+            'Body-radius multiplier for moon labels.',
+            { factory: fw.labelMultMoon });
 
-        // ── Camera ───────────────────────────────────────────────────────
+        // ── Camera distances ─────────────────────────────────────────────
         const sCam = section('Camera distances');
-        row(sCam, 'galaxy dist', world.camDistGalaxy, 40, 400, 1,
-            'Camera target distance when at the galaxy zoom level. Click \'Galaxy\' in the breadcrumb after changing to re-apply.',
-            (v) => { world.camDistGalaxy = v; });
-        row(sCam, 'system dist', world.camDistSystem, 8, 120, 0.5,
-            'Camera target distance at system zoom level. Re-enter a system to re-apply.',
-            (v) => { world.camDistSystem = v; });
-        row(sCam, 'planet dist', world.camDistPlanet, 1.5, 30, 0.1,
-            'Camera target distance at planet zoom level. Re-enter a planet to re-apply.',
-            (v) => { world.camDistPlanet = v; });
+        row(sCam, 'galaxy dist', world, 'camDistGalaxy', 40, 400, 1,
+            'Camera distance at galaxy zoom level. Click \'Galaxy\' in the breadcrumb to re-apply.',
+            { factory: fw.camDistGalaxy });
+        row(sCam, 'system dist', world, 'camDistSystem', 8, 120, 0.5,
+            'Camera distance at system zoom level. Re-enter a system to re-apply.',
+            { factory: fw.camDistSystem });
+        row(sCam, 'planet dist', world, 'camDistPlanet', 1.5, 30, 0.1,
+            'Camera distance at planet zoom level. Re-enter a planet to re-apply.',
+            { factory: fw.camDistPlanet });
     }
+
+    // ── Footer actions: Reset to default + Save as default ────────────────
+    const actions = document.createElement('div');
+    actions.className = 'hg-actions';
+    actions.innerHTML = `
+        <button type="button" data-act="reset" title="Restore every slider to the code-side factory default + clear the localStorage snapshot.">reset</button>
+        <button type="button" data-act="save"  title="Persist the current slider values to localStorage. On next load they replace the factory defaults until cleared.">save as default</button>
+    `;
+    const toast = document.createElement('div');
+    toast.className = 'hg-toast';
+    panel.appendChild(actions);
+    panel.appendChild(toast);
+
+    function flash(msg) {
+        toast.textContent = msg;
+        toast.classList.add('is-on');
+        setTimeout(() => toast.classList.remove('is-on'), 1400);
+    }
+
+    actions.querySelector('[data-act="reset"]').addEventListener('click', () => {
+        for (const fn of rowResets) fn();
+        try { localStorage.removeItem(LS_KEY); } catch {}
+        flash('reset to factory defaults');
+    });
+    actions.querySelector('[data-act="save"]').addEventListener('click', () => {
+        const snapshot = {
+            postfx:  { ...postfx },
+            ambient: { ...ambient },
+            world:   world ? { ...world } : undefined,
+        };
+        try {
+            localStorage.setItem(LS_KEY, JSON.stringify(snapshot));
+            flash('saved · reload to confirm');
+        } catch (e) {
+            flash('save failed: ' + e.message);
+        }
+    });
 
     panel.querySelector('[data-act="toggle"]').addEventListener('click', () => {
         const collapsed = panel.classList.toggle('is-collapsed');
@@ -194,4 +296,20 @@ export function setupDevPanel({ postfx, ambient, world }) {
     });
 
     document.body.appendChild(panel);
+}
+
+// Helper for scene.js — read the saved snapshot (if any) and merge into the
+// passed-in objects. Called BEFORE setupDevPanel so the panel shows the
+// user's saved values from the moment it opens.
+export function applySavedDefaults({ postfx, ambient, world }) {
+    try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (saved.postfx)  Object.assign(postfx,  saved.postfx);
+        if (saved.ambient) Object.assign(ambient, saved.ambient);
+        if (world && saved.world) Object.assign(world, saved.world);
+    } catch (e) {
+        console.warn('[hero-galaxy] saved defaults parse failed:', e);
+    }
 }

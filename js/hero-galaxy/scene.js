@@ -15,7 +15,7 @@ import { screenToRay, hitTestBodies } from './render/raycast.js';
 import { createBreadcrumb } from './breadcrumb.js';
 import { mountStarfield } from './render/starfield.js';
 import { mat4Multiply } from '../particles/core/math.js';
-import { setupDevPanel } from './dev-panel.js';
+import { setupDevPanel, applySavedDefaults } from './dev-panel.js';
 
 const HERO_GALAXY_DEV_PANEL = true;   // flip to false in production
 
@@ -114,6 +114,17 @@ export async function mountScene({ section }) {
         labelMultPlanet:   1.0,
         labelMultMoon:     1.0,
     };
+
+    // Snapshot the code-side defaults BEFORE applying any localStorage
+    // overrides — the dev panel uses this for "reset to factory".
+    const factoryDefaults = {
+        postfx:  { ...postfx },
+        ambient: { ...ambient },
+        world:   { ...world },
+    };
+    // Layer any saved overrides on top of the live state. If the user clicked
+    // "save as default" in a prior session, those values now take effect.
+    if (HERO_GALAXY_DEV_PANEL) applySavedDefaults({ postfx, ambient, world });
 
     const ico = makeIcosphere(5);
     const vbuf = device.createBuffer({ size: ico.vertexData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
@@ -755,7 +766,7 @@ export async function mountScene({ section }) {
         requestAnimationFrame(frame);
     }
     breadcrumb.render(state);
-    if (HERO_GALAXY_DEV_PANEL) setupDevPanel({ postfx, ambient, world });
+    if (HERO_GALAXY_DEV_PANEL) setupDevPanel({ postfx, ambient, world, factoryDefaults });
     requestAnimationFrame(frame);
 
     // Expose programmatic navigation for verification + Phase 7 click handlers

@@ -9,7 +9,7 @@ import { wireControls } from './render/controls.js';
 import { makeIcosphere } from './render/sphere-mesh.js';
 import { getMeshPipeline, getBloomPipeline } from './render/pipeline.js';
 import { loadGalaxyData } from './data-loader.js';
-import { createBody, writeBodyUbo, bodyDescFromStar, bodyDescFromPlanet, bodyDescFromMoon } from './bodies.js';
+import { createBody, writeBodyUbo, bodyDescFromStar, bodyDescFromPlanet, bodyDescFromMoon, PLANET_TIER_SHADERS } from './bodies.js';
 import { mat4Identity } from '../particles/core/math.js';
 import { screenToRay, hitTestBodies } from './render/raycast.js';
 import { createBreadcrumb } from './breadcrumb.js';
@@ -251,16 +251,14 @@ export async function mountScene({ section }) {
         planetPipelineCache.set(shaderPath, built);
         return built;
     }
-    // Warm pipelines for EVERY planet up-front, in parallel, so they render
-    // immediately at galaxy view rather than only after a system has been
-    // visited. Most fall back to default-planet.wgsl; the 4 distinctive
-    // shaders compile genuinely. Cost is one-time at boot (<150ms typical).
+    // Warm the three tier pipelines (rocky / earth / gas) up-front so every
+    // planet renders from frame 1. Previously this used the JSON
+    // `p.shader` paths which we now ignore — meaning the cache never
+    // contained the actual paths each planet body requests, so the render
+    // loop's `continue` on cache-miss made every planet vanish.
     {
-        const allShaderPaths = new Set();
-        for (const sys of galaxy.systems) {
-            for (const p of sys.planets) allShaderPaths.add(p.shader || 'default-planet.wgsl');
-        }
-        await Promise.all(Array.from(allShaderPaths).map(planetPipelineFor));
+        const tierPaths = Object.values(PLANET_TIER_SHADERS);
+        await Promise.all(tierPaths.map(planetPipelineFor));
     }
 
     // Build star, planet, and moon bodies (each system's centre IS a star,
@@ -468,13 +466,9 @@ export async function mountScene({ section }) {
         };
         let endTarget = [0, 0, 0], endDist = world.camDistGalaxy;
         if (goal.level === 'system' || goal.level === 'planet') {
-            const sysId = goal.focusedSystemId || state.focusedSystemId;
-            const sys = galaxy.systems.find(s => s.id === sysId);
-            if (sys) {
-                for (const p of sys.planets) {
-                    planetPipelineFor(p.shader || 'default-planet.wgsl');
-                }
-            }
+            // Tier pipelines were already warmed at boot; this block is now
+            // a no-op kept for shape so any future per-system shader needs
+            // can hook in here without rethreading the transition flow.
         }
         if (goal.level === 'system') {
             const star = stars.find(s => s.id === goal.focusedSystemId);
@@ -1008,9 +1002,18 @@ export async function mountScene({ section }) {
         // glow stacks additively over halos + meshes. Uses its own camera +
         // body bind groups (the bloom pipeline has a separate bodyBGL) and
         // 4 vertices in a triangle-strip (no vertex buffer).
+        //
+        // At galaxy view every sun is bloomed (they're the main visual). At
+        // any deeper zoom only the focused sun is bloomed so distant suns
+        // can't stage rogue glow blobs in the corner of the viewport (their
+        // labels drop on NDC bounds but the bloom quad extends inward and
+        // would still rasterise).
         pass.setPipeline(sunBloomPipeline);
         pass.setBindGroup(0, bloomCameraBG);
-        for (const s of visibleStars()) {
+        const bloomTargets = state.level === 'galaxy'
+            ? visibleStars()
+            : visibleStars().filter(s => s.id === state.focusedSystemId);
+        for (const s of bloomTargets) {
             pass.setBindGroup(1, s.bloomBG);
             pass.draw(4);
         }

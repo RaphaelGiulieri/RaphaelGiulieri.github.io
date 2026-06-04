@@ -502,17 +502,21 @@ export async function mountScene({ section }) {
         };
         const ray = screenToRay(camera, ndc.x, ndc.y);
         if (!ray) return;
-        const targets = currentSelectionTargets();
-        const hit = hitTestBodies(ray, targets);
-        // A click on the body the camera is already focused on means "back
-        // out one level", not "re-enter the same body". Without this, at
-        // system view the centre-of-screen sun catches every click and
-        // `handleEmptyClick` (the back-step) never runs.
+        // Exclude the currently-focused body from the hit-test entirely.
+        // It sits at the camera target so any ray from the eye toward roughly
+        // the centre of the screen grazes its sphere first — and at system
+        // view the sun is large enough that the ray would always grab it
+        // before any planet behind/beside it. By removing it from the set,
+        // (a) clicking on it still produces "no hit" → handleEmptyClick →
+        // back-step one level, and (b) clicking on another planet hits the
+        // planet cleanly even when the sun is geometrically in the way.
         const focusedId = state.level === 'system' ? state.focusedSystemId
                         : state.level === 'planet' ? state.focusedPlanetId
                         : null;
-        if (hit && hit.body.id !== focusedId) handleBodyClick(hit.body);
-        else                                  handleEmptyClick();
+        const targets = currentSelectionTargets().filter(b => b.id !== focusedId);
+        const hit = hitTestBodies(ray, targets);
+        if (hit) handleBodyClick(hit.body);
+        else     handleEmptyClick();
     });
 
     window.addEventListener('keydown', (e) => {

@@ -388,7 +388,7 @@ export async function mountScene({ section }) {
             yaw: camera.yaw, pitch: camera.pitch, distance: camera.distance,
             target: [camera.target[0], camera.target[1], camera.target[2]],
         };
-        let endTarget = [0, 0, 0], endDist = 140;
+        let endTarget = [0, 0, 0], endDist = world.camDistGalaxy;
         if (goal.level === 'system' || goal.level === 'planet') {
             const sysId = goal.focusedSystemId || state.focusedSystemId;
             const sys = galaxy.systems.find(s => s.id === sysId);
@@ -400,13 +400,13 @@ export async function mountScene({ section }) {
         }
         if (goal.level === 'system') {
             const star = stars.find(s => s.id === goal.focusedSystemId);
-            if (star) { endTarget = [star.worldPos[0], star.worldPos[1], star.worldPos[2]]; endDist = 32; }
+            if (star) { endTarget = [star.worldPos[0], star.worldPos[1], star.worldPos[2]]; endDist = world.camDistSystem; }
         } else if (goal.level === 'planet') {
             const planetEntry = planets.find(p => p.body.id === goal.focusedPlanetId);
             if (planetEntry) {
                 const body = planetEntry.body;
                 endTarget = [body.worldPos[0], body.worldPos[1], body.worldPos[2]];
-                endDist = 6;
+                endDist = world.camDistPlanet;
             }
         }
         const fromLevel = state.level, toLevel = goal.level;
@@ -471,7 +471,18 @@ export async function mountScene({ section }) {
     });
     canvas.addEventListener('pointerleave', () => { cursorNdc = null; });
 
+    // Track pointerdown position so the click handler can tell a true click
+    // from a drag-to-rotate. Without this, releasing a drag fires `click` on
+    // empty space, which zooms the camera one level out — extremely annoying
+    // when the user is just orbiting at system/planet view.
+    let downX = 0, downY = 0;
+    canvas.addEventListener('pointerdown', (e) => {
+        downX = e.clientX; downY = e.clientY;
+    });
+
     canvas.addEventListener('click', (e) => {
+        // Drag threshold: ≥6 px of movement between down and up = drag, ignore.
+        if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return;
         const r = canvas.getBoundingClientRect();
         const ndc = {
             x: ((e.clientX - r.left) / r.width)  * 2 - 1,

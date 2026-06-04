@@ -419,6 +419,22 @@ export async function mountScene({ section }) {
                         axis, speed: 0.4, radius: meanR, springK: 8,
                     });
                     ringOrbits.push({ planetBody: body, orbitMod });
+                    // Ring particles share the starfield canvas's bloom postfx,
+                    // so any pixel above the bloom threshold gets blurred into
+                    // a glowing blob. At v1 sizes (0.6–1.4) + full accent
+                    // brightness, a tilted ring melted into a bright bloomed
+                    // torus that read as a "rogue moon" — the long-running
+                    // bug we couldn't pin down across multiple sessions.
+                    //
+                    // Fixed by dropping the particles WELL below the bloom
+                    // threshold:
+                    //   • size 0.10–0.22 — sub-pixel-ish, no individual particle
+                    //     dominates the bloom kernel.
+                    //   • color = accent × 0.35 with α=0.6 — luminance stays
+                    //     under the threshold (0.55) for typical accents.
+                    // Result: a fine Saturn-dust ring instead of a glowing
+                    // bloomed disc. Still visible at any zoom level, just no
+                    // longer mistakable for a separate body.
                     await starPs.addEmitter(new Emitter({
                         position: [body.worldPos[0], body.worldPos[1], body.worldPos[2]],
                         shape: shapes.ring({ radius: meanR, thickness: thick, height: 0.05 }),
@@ -427,8 +443,8 @@ export async function mountScene({ section }) {
                         initial: {
                             lifetime: { min: 1e9, max: 1e9 },
                             speed:    { min: 0, max: 0 },
-                            size:     { min: 0.6, max: 1.4 },
-                            color:    [body.accent[0], body.accent[1], body.accent[2], 1],
+                            size:     { min: 0.10, max: 0.22 },
+                            color:    [body.accent[0] * 0.35, body.accent[1] * 0.35, body.accent[2] * 0.35, 0.6],
                         },
                         modules: [orbitMod],
                     }));
@@ -471,13 +487,17 @@ export async function mountScene({ section }) {
     const _proj4  = new Float32Array(4);
 
     function visibleStars() {
-        // At planet / moon view the sun adds nothing — visitor is focused
-        // on a specific body. Hiding it kills the "rogue glowing sphere
-        // 30–60 units behind everything" effect that was previously
-        // unavoidable: even with bloom suppressed, the sun mesh + its
-        // alpha-blended halo would still render at the far side of the
-        // planet's orbit, depth-testing behind every foreground body.
+        // Strict tier-based visibility for stars at every zoom level:
+        //   galaxy → all 3 (they're the structure)
+        //   system → ONLY the focused sun (other systems' suns at distant
+        //            galaxy positions would otherwise render as bright
+        //            unlabeled blobs behind the focused system — the
+        //            "rogue" reported across multiple sessions)
+        //   planet → none (visitor is on a planet, sun is irrelevant
+        //            visually and was painting a 30–60u-behind glow blob)
+        //   moon   → none (same reason)
         if (state.level === 'planet' || state.level === 'moon') return [];
+        if (state.level === 'system') return stars.filter(s => s.id === state.focusedSystemId);
         return stars;
     }
     function visiblePlanets() {

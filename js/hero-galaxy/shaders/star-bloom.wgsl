@@ -64,8 +64,16 @@ fn vs_main(@builtin(vertex_index) vid : u32) -> VertexOut {
     // dividing by eye→sun distance gives NDC per world unit at this depth.
     let radius_world = body.params.y * body.params.z;
     let dist = max(0.001, length(camera.eye.xyz - sun_world));
-    let ndc_y = radius_world * camera.proj[1][1] / dist;
-    let ndc_x = radius_world * camera.proj[0][0] / dist;
+    let raw_ndc_y = radius_world * camera.proj[1][1] / dist;
+    let raw_ndc_x = radius_world * camera.proj[0][0] / dist;
+    // Clamp the on-screen bloom to a max NDC half-height so getting close to
+    // a sun (camera distance shrinks) doesn't blow the bloom up past the
+    // viewport edges — keeps the "spilled light" look without swallowing the
+    // whole frame and obscuring foreground bodies.
+    let max_ndc = 0.55;
+    let scale = min(1.0, max_ndc / max(raw_ndc_y, 0.0001));
+    let ndc_y = raw_ndc_y * scale;
+    let ndc_x = raw_ndc_x * scale;
 
     // Multiply NDC offset by sun_clip.w so it survives the perspective divide
     // intact — i.e., the quad maintains its requested NDC size on screen

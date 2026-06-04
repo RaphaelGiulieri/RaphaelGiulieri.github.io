@@ -11,7 +11,8 @@ import { getMeshPipeline, getBloomPipeline } from './render/pipeline.js';
 import { loadGalaxyData } from './data-loader.js';
 import { createBody, writeBodyUbo, bodyDescFromStar, bodyDescFromPlanet, bodyDescFromMoon, PLANET_TIER_SHADERS } from './bodies.js';
 import { mat4Identity } from '../particles/core/math.js';
-import { screenToRay, hitTestBodies } from './render/raycast.js';
+// raycast helpers are no longer needed; screen-space picker lives in
+// scene.js (pickBodyAtPx) and serves both click + hover detection.
 import { createBreadcrumb } from './breadcrumb.js';
 import { mountStarfield } from './render/starfield.js';
 import { mat4Multiply } from '../particles/core/math.js';
@@ -161,6 +162,11 @@ export async function mountScene({ section }) {
         sunBloomRadiusMul: 5.5,
         sunBloomIntensity: 1.4,
         sunBloomFalloff:   2.4,
+        // Live 2D Navier-Stokes simulation for gas giants (off by default —
+        // sim path lands next; today this toggle just gates the future
+        // compute pass). When on AND we're focused on a system containing
+        // gas giants, the sim ticks once per frame; idle systems are paused.
+        gasGiantSim:       false,
         // Label positioning — see CSS --gap and the per-kind silhouette
         // multipliers used in the per-frame projection.
         labelGapPx:        6,
@@ -556,17 +562,52 @@ export async function mountScene({ section }) {
     }
 
     // ── Hit testing + click navigation ─────────────────────────────────────
-    let cursorNdc = null;
+    // cursorPx tracks the live pointer position in canvas-relative pixels so
+    // both the per-frame hover detection and the click handler can use the
+    // same screen-space picker.
+    let cursorPx = null;
     let hovered = null;
 
     canvas.addEventListener('pointermove', (e) => {
         const r = canvas.getBoundingClientRect();
-        cursorNdc = {
-            x: ((e.clientX - r.left) / r.width)  * 2 - 1,
-            y: -((e.clientY - r.top)  / r.height) * 2 + 1,
-        };
+        cursorPx = { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width, h: r.height };
     });
-    canvas.addEventListener('pointerleave', () => { cursorNdc = null; });
+    canvas.addEventListener('pointerleave', () => { cursorPx = null; });
+
+    // Screen-space body picker — projects every candidate body to pixel
+    // space using the current view-projection, picks whichever body's
+    // visible disc the click lands inside. A 14 px minimum radius keeps
+    // tiny moons grabbable. Returns the best body or null.
+    function pickBodyAtPx(px, py, w, h, candidates) {
+        if (!candidates.length) return null;
+        mat4Multiply(camera.proj, camera.view, _vp);
+        const MIN_PX = 14;
+        let best = null, bestEyeDist = Infinity, bestScore = Infinity;
+        for (const b of candidates) {
+            const wp = b.worldPos;
+            const cx = _vp[0]*wp[0] + _vp[4]*wp[1] + _vp[8] *wp[2] + _vp[12];
+            const cy = _vp[1]*wp[0] + _vp[5]*wp[1] + _vp[9] *wp[2] + _vp[13];
+            const cw = _vp[3]*wp[0] + _vp[7]*wp[1] + _vp[11]*wp[2] + _vp[15];
+            if (cw <= 0.001) continue;
+            const ndcX = cx / cw, ndcY = cy / cw;
+            if (ndcX < -1 || ndcX > 1 || ndcY < -1 || ndcY > 1) continue;
+            const bx = (ndcX * 0.5 + 0.5) * w;
+            const by = (-ndcY * 0.5 + 0.5) * h;
+            const dx = wp[0] - camera.eye[0];
+            const dy = wp[1] - camera.eye[1];
+            const dz = wp[2] - camera.eye[2];
+            const eyeDist = Math.max(0.01, Math.hypot(dx, dy, dz));
+            const worldR = b.radiusWorld * b.scale;
+            const screenR = Math.max(MIN_PX, worldR * (h * 0.5) / (eyeDist * Math.tan(camera.fov * 0.5)));
+            const d = Math.hypot(px - bx, py - by);
+            if (d > screenR) continue;
+            const score = d / screenR;
+            if (score < bestScore - 0.05 || (score < bestScore + 0.05 && eyeDist < bestEyeDist)) {
+                bestScore = score; bestEyeDist = eyeDist; best = b;
+            }
+        }
+        return best;
+    }
 
     // Track pointerdown position so the click handler can tell a true click
     // from a drag-to-rotate. Without this, releasing a drag fires `click` on
@@ -585,53 +626,14 @@ export async function mountScene({ section }) {
         const clickY = e.clientY - r.top;
         const w = r.width, h = r.height;
 
-        // Exclude the currently-focused body from the hit-test entirely so
-        // clicking on it (or empty space) falls through to handleEmptyClick.
+        // Exclude the currently-focused body from the hit-test so clicking
+        // it (or empty space) falls through to handleEmptyClick = back-step.
         const focusedId = state.level === 'system' ? state.focusedSystemId
                         : state.level === 'planet' ? state.focusedPlanetId
                         : state.level === 'moon'   ? state.focusedMoonId
                         : null;
         const targets = currentSelectionTargets().filter(b => b.id !== focusedId);
-
-        // ── Screen-space hit test ──────────────────────────────────────────
-        // 3D ray-vs-sphere picking failed badly at system / planet view: the
-        // sun sits at the camera target and intercepts virtually every ray
-        // before it reaches other-system planets / moons / etc. Instead,
-        // project each body to screen pixels and pick whichever body's
-        // visible disc the click landed inside. Tiny bodies (moons) get a
-        // minimum click radius so they stay grabbable.
-        mat4Multiply(camera.proj, camera.view, _vp);
-        const fovScale = (h * 0.5) / Math.tan(camera.fov * 0.5);
-        const MIN_PX = 14;   // minimum click target radius for tiny bodies
-
-        let best = null, bestEyeDist = Infinity, bestScore = Infinity;
-        for (const b of targets) {
-            const wp = b.worldPos;
-            const cx = _vp[0]*wp[0] + _vp[4]*wp[1] + _vp[8] *wp[2] + _vp[12];
-            const cy = _vp[1]*wp[0] + _vp[5]*wp[1] + _vp[9] *wp[2] + _vp[13];
-            const cw = _vp[3]*wp[0] + _vp[7]*wp[1] + _vp[11]*wp[2] + _vp[15];
-            if (cw <= 0.001) continue;  // behind camera
-            const ndcX = cx / cw, ndcY = cy / cw;
-            if (ndcX < -1 || ndcX > 1 || ndcY < -1 || ndcY > 1) continue;  // off-screen
-
-            const bx = (ndcX * 0.5 + 0.5) * w;
-            const by = (-ndcY * 0.5 + 0.5) * h;
-            const dx = wp[0] - camera.eye[0];
-            const dy = wp[1] - camera.eye[1];
-            const dz = wp[2] - camera.eye[2];
-            const eyeDist = Math.max(0.01, Math.hypot(dx, dy, dz));
-            const worldR = b.radiusWorld * b.scale;
-            const screenR = Math.max(MIN_PX, worldR * fovScale / eyeDist);
-            const d = Math.hypot(clickX - bx, clickY - by);
-            if (d > screenR) continue;
-            // Two-level priority: prefer the body whose visible disc most
-            // clearly covers the click (smallest normalized offset); break
-            // ties by depth (closer-to-camera wins for overlapping discs).
-            const score = d / screenR;
-            if (score < bestScore - 0.05 || (score < bestScore + 0.05 && eyeDist < bestEyeDist)) {
-                bestScore = score; bestEyeDist = eyeDist; best = b;
-            }
-        }
+        const best = pickBodyAtPx(clickX, clickY, w, h, targets);
         if (best) handleBodyClick(best);
         else      handleEmptyClick();
     });
@@ -646,15 +648,11 @@ export async function mountScene({ section }) {
     });
 
     function currentSelectionTargets() {
-        if (state.level === 'galaxy') return stars;
-        // At system / planet view, every star and every planet stays
-        // clickable so the user can hop directly between bodies — clicking
-        // another planet at planet view re-focuses on that planet (instead of
-        // back-stepping to the system), clicking another sun re-focuses on
-        // that sun's system, etc. Moons are included only when they're the
-        // contextual selection (system view: moons of the focused system;
-        // planet view: moons of the focused planet) so their project-modal
-        // click target stays predictable.
+        // Every star and every planet is selectable at EVERY zoom level —
+        // including galaxy view, so a visitor can click straight from the
+        // top-down view into any individual planet. Moons follow the
+        // contextual filter (visibleMoons resolves which moons are
+        // rendered) so the project / zoom click target stays predictable.
         const out = [...stars, ...planets.map(p => p.body)];
         for (const m of visibleMoons()) out.push(m.body);
         return out;
@@ -776,12 +774,12 @@ export async function mountScene({ section }) {
             orbitMod.params.cz = planetBody.worldPos[2];
         }
 
-        // Hover detection + hover_t tween
+        // Hover detection + hover_t tween. Same screen-space picker as click
+        // for consistency. The focused body is NOT excluded so hovering the
+        // current target still gives visual feedback.
         let newHovered = null;
-        if (cursorNdc) {
-            const ray = screenToRay(camera, cursorNdc.x, cursorNdc.y);
-            const hit = hitTestBodies(ray, currentSelectionTargets());
-            if (hit) newHovered = hit.body;
+        if (cursorPx) {
+            newHovered = pickBodyAtPx(cursorPx.x, cursorPx.y, cursorPx.w, cursorPx.h, currentSelectionTargets());
         }
         hovered = newHovered;
         const allBodies = stars.concat(planets.map(p => p.body), moons.map(m => m.body));

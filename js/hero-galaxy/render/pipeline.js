@@ -114,7 +114,16 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     // (ndl = 0) keeps the planet's own accent identity.
     let tint_strength = body.light_color.w;
     let sun_tint = mix(vec3<f32>(1.0, 1.0, 1.0), body.light_color.rgb, ndl * tint_strength);
-    return vec4<f32>(col.rgb * sun_tint * lit, col.a);
+    // Universal hover highlight — a bright additive rim that's visible
+    // regardless of how saturated the underlying surface() output is. Each
+    // shader can still bake its own subtle hover effect on top via s.hover_t;
+    // this guarantees a baseline that reads on dark and bright planets alike.
+    let hover = body.params.w;
+    let view_facing = max(0.0, dot(s.world_normal, s.view_dir));
+    let hover_rim = pow(1.0 - view_facing, 2.0) * hover;
+    let highlight = vec3<f32>(1.0, 1.0, 1.0) * hover_rim * 0.9
+                  + s.accent * hover * 0.35;
+    return vec4<f32>(col.rgb * sun_tint * lit + highlight, col.a);
 }
 `;
 

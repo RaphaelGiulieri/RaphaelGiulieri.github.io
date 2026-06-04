@@ -280,6 +280,12 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sSunBloom, 'falloff', world, 'sunBloomFalloff', 0.5, 8, 0.05,
             'Gaussian sharpness exponent. Low = soft, wide glow (washes the screen). High = tight, point-like glow.',
             { factory: fw.sunBloomFalloff });
+
+        // ── Gas giants ───────────────────────────────────────────────────
+        const sGas = section('Gas giants');
+        row(sGas, 'navier sim', world, 'gasGiantSim', 0, 1, 1,
+            'Toggle the live 2D Navier-Stokes fluid simulation for gas giants. OFF = cheap procedural shader (current default). ON = sim ticks once per frame for gas planets in the focused system only; idle systems are paused. Sim path lands next.',
+            { toUI: (v) => v ? 1 : 0, fromUI: (v) => v >= 0.5, factory: fw.gasGiantSim });
     }
 
     // ── Footer actions: Reset / Save / Factory ────────────────────────────

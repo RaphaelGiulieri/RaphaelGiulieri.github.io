@@ -33,10 +33,10 @@ export async function mountConsole({ section, galaxyData, onOpenDossier }) {
         styleEl.textContent = `
             .hg-console {
                 position: absolute;
-                left: 24px; bottom: 24px;
+                left: 24px; bottom: 96px;
                 z-index: 30;
                 width: 320px;
-                max-height: calc(100% - 200px);
+                max-height: calc(100% - 260px);
                 overflow-y: auto;
                 padding: 16px 18px 14px;
                 background: rgba(12, 10, 7, 0.86);

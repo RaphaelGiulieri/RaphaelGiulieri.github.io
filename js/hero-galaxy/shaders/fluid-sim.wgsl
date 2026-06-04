@@ -12,20 +12,62 @@
 // Jacobi pressure pass + a gradient-subtract pass, all separately scheduled.
 
 struct SimParams {
-    dt          : f32,
-    time        : f32,
-    grid_w      : f32,
-    grid_h      : f32,
-    damping     : f32,
-    band_force  : f32,
-    advect_mul  : f32,
-    _pad        : f32,
+    dt              : f32,
+    time            : f32,
+    grid_w          : f32,
+    grid_h          : f32,
+    damping         : f32,
+    band_force      : f32,
+    advect_mul      : f32,
+    dye_restore     : f32,    // rate at which dye is pulled back toward seed pattern
+    vortex_rate     : f32,    // per-frame probability of vortex injection at a cell
+    vortex_strength : f32,    // magnitude of injected vortex velocity
+    seed_phase      : f32,    // per-planet phase offset matching the JS seed
+    _pad            : f32,
 };
 
 @group(0) @binding(0) var src_vel  : texture_2d<f32>;
 @group(0) @binding(1) var dst_vel  : texture_storage_2d<rgba16float, write>;
 @group(0) @binding(2) var<uniform> params : SimParams;
 @group(0) @binding(3) var smp      : sampler;
+
+// ── Procedural seed dye, recomputed each frame so we can continuously
+// reinject contrast into the dye field as it advects + blends. Mirrors the
+// JS seed in fluid-sim.js exactly so the on-frame and pre-loaded fields
+// match.
+fn fs_hash3(p: vec3<f32>) -> f32 {
+    let s = sin(p.x * 12.9898 + p.y * 78.233 + p.z * 37.719) * 43758.5453;
+    return s - floor(s);
+}
+fn fs_noise(p: vec3<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let c000 = fs_hash3(i + vec3<f32>(0.0, 0.0, 0.0));
+    let c100 = fs_hash3(i + vec3<f32>(1.0, 0.0, 0.0));
+    let c010 = fs_hash3(i + vec3<f32>(0.0, 1.0, 0.0));
+    let c110 = fs_hash3(i + vec3<f32>(1.0, 1.0, 0.0));
+    let c001 = fs_hash3(i + vec3<f32>(0.0, 0.0, 1.0));
+    let c101 = fs_hash3(i + vec3<f32>(1.0, 0.0, 1.0));
+    let c011 = fs_hash3(i + vec3<f32>(0.0, 1.0, 1.0));
+    let c111 = fs_hash3(i + vec3<f32>(1.0, 1.0, 1.0));
+    let x00 = mix(c000, c100, u.x);
+    let x10 = mix(c010, c110, u.x);
+    let x01 = mix(c001, c101, u.x);
+    let x11 = mix(c011, c111, u.x);
+    return mix(mix(x00, x10, u.y), mix(x01, x11, u.y), u.z);
+}
+fn fs_fbm(p: vec3<f32>, octaves: i32) -> f32 {
+    var v = 0.0;
+    var a = 0.5;
+    var f = 1.0;
+    for (var i = 0; i < octaves; i = i + 1) {
+        v = v + a * fs_noise(p * f);
+        f = f * 2.03;
+        a = a * 0.55;
+    }
+    return v;
+}
 
 fn wrap_uv(uv: vec2<f32>) -> vec2<f32> {
     // Periodic in x (longitude), clamped in y (latitude).
@@ -82,10 +124,32 @@ fn cs_main(@builtin(global_invocation_id) gid: vec3<u32>) {
     // the steady banded pattern.
     let v_out = v_with_band * (1.0 - params.damping * params.dt);
 
-    // Dye is purely advected — no damping, no restoration. Whatever pattern
-    // the seed put down stays, just shifted by the flow. That makes motion
-    // visually obvious even when the velocity field looks uniform.
-    let dye_out = dye_advected;
+    // Dye restoration — continuously pull each cell back toward a fresh
+    // procedural fbm seed at a tunable rate. Without this the dye mixes to
+    // grey within ~30s (a property of pure semi-Lagrangian advection on a
+    // periodic grid). Sampling the same noise function the JS seed used
+    // means the equilibrium pattern matches the on-load look.
+    let sphere_x = cos(uv.x * 6.2831) * sqrt(max(0.0, 1.0 - lat * lat));
+    let sphere_y = lat;
+    let sphere_z = sin(uv.x * 6.2831) * sqrt(max(0.0, 1.0 - lat * lat));
+    let seed_dye = fs_fbm(vec3<f32>(sphere_x * 2.4 + params.seed_phase,
+                                    sphere_y * 2.4,
+                                    sphere_z * 2.4 - params.seed_phase), 5);
+    let dye_out = mix(dye_advected, seed_dye, clamp(params.dye_restore * params.dt, 0.0, 1.0));
 
-    textureStore(dst_vel, vec2<i32>(gid.xy), vec4<f32>(v_out, dye_out, 0.0));
+    // Vortex injection — random rotational impulses sprinkled across the
+    // grid every frame so the velocity field never collapses to laminar
+    // banded steady-state. Rate × dt × cell_count converts to "expected
+    // vortex births per frame", scaled small enough that even maxed out it
+    // stays visually plausible.
+    let frame_seed = fract(sin(params.time * 12.9898 + params.seed_phase) * 43758.5453);
+    let cell_seed = fract(sin(f32(gid.x) * 12.345 + f32(gid.y) * 78.901 + frame_seed * 37.719) * 43758.5453);
+    var v_with_vortex = v_out;
+    if (cell_seed < params.vortex_rate * params.dt) {
+        let angle = cell_seed * 6.2831;
+        v_with_vortex = v_with_vortex
+            + vec2<f32>(cos(angle), sin(angle)) * params.vortex_strength;
+    }
+
+    textureStore(dst_vel, vec2<i32>(gid.xy), vec4<f32>(v_with_vortex, dye_out, 0.0));
 }

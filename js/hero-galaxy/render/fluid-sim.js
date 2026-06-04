@@ -174,7 +174,7 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
 
     const paramBuf = device.createBuffer({
         label: 'fluid-sim params',
-        size: 32,   // 8 f32 fields
+        size: 48,   // 12 f32 fields (padded to 16-byte alignment internally)
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -202,8 +202,11 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
         texA, texB, viewA, viewB,
         paramBuf,
         computeBG_AB, computeBG_BA,
-        // currentSampledView: which texture holds the latest valid state. After
-        // the compute pass it flips. Initially texA holds the seed.
+        // seedPhase MUST match the `phase` variable used by the JS seed
+        // above, so the GPU's dye-restoration target matches the on-load
+        // texture exactly.
+        seedPhase: seedOffset * 17.31,
+        // currentSampledView: which texture holds the latest valid state.
         currentSampledView: viewA,
         currentSampledTex:  texA,
         // tick parity — false → next compute reads A writes B (output is B)
@@ -211,7 +214,7 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
     };
 }
 
-const _params = new Float32Array(8);
+const _params = new Float32Array(12);   // matches WGSL SimParams layout
 
 export function tickPlanetSim(pass, sim, state, dt, time, opts = {}) {
     const damping    = opts.damping    ?? 0.08;
@@ -245,19 +248,28 @@ export function tickPlanetSim(pass, sim, state, dt, time, opts = {}) {
 }
 
 // Helper for the caller — write the sim params into the buffer prior to
-// opening the compute pass.
+// opening the compute pass. `seedPhase` is the per-planet phase offset
+// stored on the sim state at allocation (so the GPU's seed-dye sample
+// matches the JS seed we wrote to the texture).
 export function writeSimParams(device, state, dt, time, opts = {}) {
-    const damping    = opts.damping    ?? 0.08;
-    const band_force = opts.band_force ?? 0.6;
-    const advect_mul = opts.advect_mul ?? 1.0;
-    _params[0] = Math.min(0.05, dt);
-    _params[1] = time;
-    _params[2] = GRID_W;
-    _params[3] = GRID_H;
-    _params[4] = damping;
-    _params[5] = band_force;
-    _params[6] = advect_mul;
-    _params[7] = 0;
+    const damping         = opts.damping         ?? 0.04;
+    const band_force      = opts.band_force      ?? 0.5;
+    const advect_mul      = opts.advect_mul      ?? 1.0;
+    const dye_restore     = opts.dye_restore     ?? 0.15;
+    const vortex_rate     = opts.vortex_rate     ?? 0.6;
+    const vortex_strength = opts.vortex_strength ?? 0.25;
+    _params[0]  = Math.min(0.05, dt);
+    _params[1]  = time;
+    _params[2]  = GRID_W;
+    _params[3]  = GRID_H;
+    _params[4]  = damping;
+    _params[5]  = band_force;
+    _params[6]  = advect_mul;
+    _params[7]  = dye_restore;
+    _params[8]  = vortex_rate;
+    _params[9]  = vortex_strength;
+    _params[10] = state.seedPhase;
+    _params[11] = 0;
     device.queue.writeBuffer(state.paramBuf, 0, _params);
 }
 

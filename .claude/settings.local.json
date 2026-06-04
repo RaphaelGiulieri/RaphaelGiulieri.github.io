@@ -14,7 +14,8 @@
       "Bash(python -c \"import tools.nodriver_mcp; print\\('Found tools.nodriver_mcp at:', tools.nodriver_mcp.__file__\\)\")",
       "Bash(rm -f \"C:/Users/Legion/.claude/nodriver-mcp-launcher.py\")",
       "Bash(node -e \"const r=require\\('c:/Users/Legion/Desktop/RaphaelGiulieri.github.io/data/research.json'\\); console.log\\('keys:', Object.keys\\(r\\)\\); const e=require\\('c:/Users/Legion/Desktop/RaphaelGiulieri.github.io/data/experiences.json'\\); console.log\\('exp keys:', Object.keys\\(e\\)\\);\")",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(git push *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Legion\\.claude"

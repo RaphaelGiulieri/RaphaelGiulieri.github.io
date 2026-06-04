@@ -167,10 +167,13 @@ export async function mountScene({ section }) {
         // systems' sims pause (their textures freeze). The gas shader
         // samples whichever ping-pong texture currently holds the latest
         // state. OFF = sim is frozen at its initial banded condition.
-        gasGiantSim:       false,
-        gasGiantDamping:   0.08,    // bleeds turbulence over time
-        gasGiantBandForce: 0.6,     // strength of the jet-stream restoring torque
-        gasGiantAdvectMul: 1.0,     // global speed multiplier on the advection step
+        gasGiantSim:           false,
+        gasGiantDamping:       0.04,   // bleeds turbulence over time
+        gasGiantBandForce:     0.5,    // jet-stream restoring torque
+        gasGiantAdvectMul:     1.0,    // advection step multiplier
+        gasGiantDyeRestore:    0.15,   // rate of pulling dye back toward its fbm seed pattern
+        gasGiantVortexRate:    0.6,    // expected fraction of cells injected with a vortex per second
+        gasGiantVortexStrength:0.25,   // magnitude of each injected vortex impulse
         // Label positioning — see CSS --gap and the per-kind silhouette
         // multipliers used in the per-frame projection.
         labelGapPx:        6,
@@ -816,12 +819,20 @@ export async function mountScene({ section }) {
             orbitMod.params.cz = planetBody.worldPos[2];
         }
 
-        // Hover detection + hover_t tween. Same screen-space picker as click
-        // for consistency. The focused body is NOT excluded so hovering the
-        // current target still gives visual feedback.
+        // Hover detection + hover_t tween. Excludes the focused body — its
+        // screen-space hitbox is huge (the visitor is right next to it), so
+        // including it would swallow every cursor position and block the
+        // visitor from hovering bodies that pass *behind* the focused one.
         let newHovered = null;
         if (cursorPx) {
-            newHovered = pickBodyAtPx(cursorPx.x, cursorPx.y, cursorPx.w, cursorPx.h, currentSelectionTargets());
+            const focusedIdH = state.level === 'system' ? state.focusedSystemId
+                             : state.level === 'planet' ? state.focusedPlanetId
+                             : state.level === 'moon'   ? state.focusedMoonId
+                             : null;
+            const hoverTargets = focusedIdH
+                ? currentSelectionTargets().filter(b => b.id !== focusedIdH)
+                : currentSelectionTargets();
+            newHovered = pickBodyAtPx(cursorPx.x, cursorPx.y, cursorPx.w, cursorPx.h, hoverTargets);
         }
         hovered = newHovered;
         const allBodies = stars.concat(planets.map(p => p.body), moons.map(m => m.body));
@@ -1005,9 +1016,12 @@ export async function mountScene({ section }) {
             if (activeGas.length) {
                 for (const { body } of activeGas) {
                     writeSimParams(device, body.fluidSim, dt, t, {
-                        damping: world.gasGiantDamping,
-                        band_force: world.gasGiantBandForce,
-                        advect_mul: world.gasGiantAdvectMul,
+                        damping:         world.gasGiantDamping,
+                        band_force:      world.gasGiantBandForce,
+                        advect_mul:      world.gasGiantAdvectMul,
+                        dye_restore:     world.gasGiantDyeRestore,
+                        vortex_rate:     world.gasGiantVortexRate,
+                        vortex_strength: world.gasGiantVortexStrength,
                     });
                 }
                 const cpass = enc.beginComputePass({ label: 'fluid-sim tick' });
@@ -1086,24 +1100,24 @@ export async function mountScene({ section }) {
             pass.setBindGroup(1, s.haloBG);
             pass.drawIndexed(ico.indexCount);
         }
-        // Star bloom — gaussian sprite billboard per sun, drawn last so the
-        // glow stacks additively over halos + meshes. Uses its own camera +
-        // body bind groups (the bloom pipeline has a separate bodyBGL) and
-        // 4 vertices in a triangle-strip (no vertex buffer).
-        //
-        // At galaxy view every sun is bloomed (they're the main visual). At
-        // any deeper zoom only the focused sun is bloomed so distant suns
-        // can't stage rogue glow blobs in the corner of the viewport (their
-        // labels drop on NDC bounds but the bloom quad extends inward and
-        // would still rasterise).
-        pass.setPipeline(sunBloomPipeline);
-        pass.setBindGroup(0, bloomCameraBG);
-        const bloomTargets = state.level === 'galaxy'
-            ? visibleStars()
-            : visibleStars().filter(s => s.id === state.focusedSystemId);
-        for (const s of bloomTargets) {
-            pass.setBindGroup(1, s.bloomBG);
-            pass.draw(4);
+        // Star bloom — bloom only when the sun itself is the visual subject:
+        //   galaxy view → every sun (they're the main signal)
+        //   system view → focused sun (centred on screen)
+        //   planet / moon view → NO bloom (the sun is off-screen behind the
+        //     camera or off to one side, and even with the NDC clamp its
+        //     bloom billboard reads as a giant featureless rogue blob next
+        //     to the focused body).
+        const bloomTargets =
+            state.level === 'galaxy' ? visibleStars() :
+            state.level === 'system' ? visibleStars().filter(s => s.id === state.focusedSystemId) :
+            [];
+        if (bloomTargets.length) {
+            pass.setPipeline(sunBloomPipeline);
+            pass.setBindGroup(0, bloomCameraBG);
+            for (const s of bloomTargets) {
+                pass.setBindGroup(1, s.bloomBG);
+                pass.draw(4);
+            }
         }
         pass.end();
         device.queue.submit([enc.finish()]);

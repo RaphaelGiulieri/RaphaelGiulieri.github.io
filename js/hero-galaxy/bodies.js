@@ -86,16 +86,27 @@ export function bodyDescFromStar(sys) {
     };
 }
 
-export function bodyDescFromPlanet(planet, sys) {
+// Planet shader is now driven by the body's tier (rocky / earth / gas)
+// instead of a per-planet override. Tier is computed at scene boot from the
+// planet's orbit-radius rank within its system (closest = rocky, next =
+// earth, the rest = gas) — see scene.js. The JSON's `planet.shader` field
+// is intentionally ignored; remove it from the JSON when convenient.
+export const PLANET_TIER_SHADERS = {
+    rocky: 'planets/planet-rocky.wgsl',
+    earth: 'planets/planet-earth.wgsl',
+    gas:   'planets/planet-gas.wgsl',
+};
+
+export function bodyDescFromPlanet(planet, sys, tier = 'earth') {
     return {
         kind: 'planet',
         id: planet.id,
-        shaderPath: planet.shader || 'default-planet.wgsl',
+        shaderPath: PLANET_TIER_SHADERS[tier] || PLANET_TIER_SHADERS.earth,
         accent: new Float32Array(parseAccent(sys.accent || '#ffffff')),
         radiusWorld: planet.size || 1.0,
         scale: planet.size || 1.0,
         orbit: planet.orbit,
-        meta: { systemId: sys.id, planetId: planet.id, ring: planet.ring, planetName: planet.name },
+        meta: { systemId: sys.id, planetId: planet.id, ring: planet.ring, planetName: planet.name, tier },
     };
 }
 

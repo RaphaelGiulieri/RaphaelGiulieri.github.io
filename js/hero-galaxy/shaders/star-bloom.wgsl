@@ -47,6 +47,18 @@ fn vs_main(@builtin(vertex_index) vid : u32) -> VertexOut {
     let sun_world = body.model[3].xyz;
     let sun_clip  = camera.proj * camera.view * vec4<f32>(sun_world, 1.0);
 
+    var out : VertexOut;
+    // If the sun is behind the camera (or on the near plane), perspective
+    // divide on a negative-w vertex produces a smeared blob that splatters
+    // across the screen — the exact "mystery bloom with no label" symptom,
+    // since the label projection also drops on w<=0. Emit a degenerate
+    // off-screen vertex so the triangle-strip gets clipped before rasterisation.
+    if (sun_clip.w <= 0.001) {
+        out.clip_pos = vec4<f32>(2.0, 2.0, -1.0, 1.0);
+        out.uv       = vec2<f32>(0.0, 0.0);
+        return out;
+    }
+
     // Billboard size in world units, then converted to NDC offsets via the
     // projection's per-axis scale factors. proj[1][1] = cot(fov_y/2);
     // dividing by eye→sun distance gives NDC per world unit at this depth.
@@ -62,7 +74,6 @@ fn vs_main(@builtin(vertex_index) vid : u32) -> VertexOut {
                            corner.y * ndc_y * sun_clip.w,
                            0.0, 0.0);
 
-    var out : VertexOut;
     out.clip_pos = sun_clip + offset;
     out.uv       = corner;            // -1..1 across the quad
     return out;

@@ -310,9 +310,22 @@ export async function mountScene({ section }) {
             entries: [{ binding: 0, resource: { buffer: star.bloomBuf } }],
         });
         stars.push(star);
+        // Tier each system's planets by orbit-radius rank so the closest
+        // planet is rocky, the next is the Earth-like habitable, and the
+        // rest are gas giants. Ties (rare) fall on insertion order.
+        const tierByPlanetId = new Map();
+        const ranked = [...sys.planets].sort(
+            (a, b) => (a.orbit?.radius ?? 0) - (b.orbit?.radius ?? 0));
+        ranked.forEach((p, i) => {
+            const tier = i === 0 ? 'rocky'
+                       : i === 1 ? 'earth'
+                       : 'gas';
+            tierByPlanetId.set(p.id, tier);
+        });
         for (const p of sys.planets) {
+            const tier = tierByPlanetId.get(p.id) || 'earth';
             const planetBody = createBody(device, bodyBGL, {
-                ...bodyDescFromPlanet(p, sys), label: `planet ${p.id}`,
+                ...bodyDescFromPlanet(p, sys, tier), label: `planet ${p.id}`,
             });
             planetBody._origScale  = planetBody.scale;
             planetBody._origOrbitR = p.orbit?.radius ?? 0;

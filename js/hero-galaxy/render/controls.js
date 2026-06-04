@@ -5,9 +5,9 @@
 import { applyOrbitDelta, applyZoomDelta } from './camera.js';
 
 const ZOOM_CLAMPS = {
-    galaxy:  { min: 25,  max: 140 },
-    system:  { min: 6,   max: 35  },
-    planet:  { min: 1.5, max: 8   },
+    galaxy:  { min: 45, max: 260 },
+    system:  { min: 12, max: 70  },
+    planet:  { min: 3,  max: 16  },
 };
 
 export function wireControls({ canvas, camera, getState, onInput }) {

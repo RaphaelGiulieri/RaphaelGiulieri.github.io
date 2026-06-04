@@ -30,9 +30,11 @@ async function ensureCore() {
     ]);
 }
 
-export async function getMeshPipeline(device, format, surfacePath) {
+export async function getMeshPipeline(device, format, surfacePath, opts = {}) {
     await ensureCore();
-    if (_pipelineCache.has(surfacePath)) return _pipelineCache.get(surfacePath);
+    // Distinct cache key for blend variants so callers don't collide.
+    const cacheKey = opts.alphaBlend ? `${surfacePath}::alpha` : surfacePath;
+    if (_pipelineCache.has(cacheKey)) return _pipelineCache.get(cacheKey);
 
     let surface = _defaultSurface;
     let usingFallback = surfacePath === 'default-planet.wgsl';
@@ -119,17 +121,29 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
         fragment: {
             module: fragmentModule,
             entryPoint: 'fs_main',
-            targets: [{ format }],
+            targets: [{
+                format,
+                blend: opts.alphaBlend ? {
+                    color: { srcFactor: 'src-alpha', dstFactor: 'one',         operation: 'add' },
+                    alpha: { srcFactor: 'one',       dstFactor: 'one-minus-src-alpha', operation: 'add' },
+                } : undefined,
+            }],
         },
-        primitive: { topology: 'triangle-list', cullMode: 'back' },
+        primitive: {
+            topology: 'triangle-list',
+            // Halo passes render BACK faces so the inside of the larger sphere
+            // is visible (the outside-facing surface would point the wrong way).
+            cullMode: opts.alphaBlend ? 'front' : 'back',
+        },
         depthStencil: {
             format: 'depth24plus',
-            depthWriteEnabled: true,
+            // Halos don't write depth — they're additive over whatever's behind.
+            depthWriteEnabled: !opts.alphaBlend,
             depthCompare: 'less',
         },
     });
 
     const result = { pipeline, cameraBGL, bodyBGL };
-    _pipelineCache.set(surfacePath, result);
+    _pipelineCache.set(cacheKey, result);
     return result;
 }

@@ -124,6 +124,11 @@ export async function mountScene({ section }) {
     });
     const { pipeline: starPipeline } = await getMeshPipeline(device, format, 'star.wgsl');
     const { pipeline: moonPipeline } = await getMeshPipeline(device, format, 'default-moon.wgsl');
+    const { pipeline: starHaloPipeline } = await getMeshPipeline(device, format, 'star-halo.wgsl', { alphaBlend: true });
+    // Halo bodies share the star's accent + UBO data but are drawn at a larger
+    // scale on a separate pass. We re-use the same body UBOs and just multiply
+    // scale in the model matrix at draw time.
+    const HALO_SCALE = 2.4;
 
     // Mount the starfield (on its own canvas, its own GPUDevice). Mobile gets
     // a smaller count for budget; matched to spec § 5.3.
@@ -222,6 +227,18 @@ export async function mountScene({ section }) {
         star.worldPos[0] = sys.galaxyPosition[0];
         star.worldPos[1] = sys.galaxyPosition[1];
         star.worldPos[2] = sys.galaxyPosition[2];
+        // Halo companion — same accent + worldPos, separate UBO so it can be
+        // drawn with the alpha-blended halo pipeline without conflicting with
+        // the star's own UBO write.
+        star.haloBuf = device.createBuffer({
+            label: `star-halo ${sys.id}`,
+            size: 128,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        star.haloBG = device.createBindGroup({
+            layout: bodyBGL,
+            entries: [{ binding: 0, resource: { buffer: star.haloBuf } }],
+        });
         stars.push(star);
         for (const p of sys.planets) {
             const planetBody = createBody(device, bodyBGL, {
@@ -278,25 +295,30 @@ export async function mountScene({ section }) {
         return planets;
     }
     function visibleMoons() {
-        if (state.level !== 'planet') return [];
-        return moons.filter(m => m.body.meta.planetId === state.focusedPlanetId);
+        // Render moons at EVERY level so they're present from the first frame,
+        // not lazily after zoom-in. At galaxy view they're tiny dots that read
+        // as additional structure around their planet; at planet view we
+        // filter to the focal planet's moons to keep the scene clean.
+        if (state.level === 'planet') return moons.filter(m => m.body.meta.planetId === state.focusedPlanetId);
+        if (state.level === 'system') return moons.filter(m => m.body.meta.systemId === state.focusedSystemId);
+        return moons;
     }
 
     function applyStateCamera() {
         if (state.level === 'galaxy') {
             camera.target.set([0, 0, 0]);
-            camera.distance = 80;
+            camera.distance = 140;
         } else if (state.level === 'system') {
             const star = stars.find(s => s.id === state.focusedSystemId);
             if (star) {
                 camera.target.set(star.worldPos);
-                camera.distance = 18;
+                camera.distance = 32;
             }
         } else if (state.level === 'planet') {
             const planetBody = planets.find(p => p.body.id === state.focusedPlanetId)?.body;
             if (planetBody) {
                 camera.target.set(planetBody.worldPos);
-                camera.distance = 3.5;
+                camera.distance = 6;
             }
         }
         applyOrbitDelta(camera, 0, 0);
@@ -309,26 +331,25 @@ export async function mountScene({ section }) {
             yaw: camera.yaw, pitch: camera.pitch, distance: camera.distance,
             target: [camera.target[0], camera.target[1], camera.target[2]],
         };
-        let endTarget = [0, 0, 0], endDist = 80;
+        let endTarget = [0, 0, 0], endDist = 140;
         if (goal.level === 'system' || goal.level === 'planet') {
             const sysId = goal.focusedSystemId || state.focusedSystemId;
             const sys = galaxy.systems.find(s => s.id === sysId);
             if (sys) {
                 for (const p of sys.planets) {
-                    // Fire-and-forget — pipelines build during the Bezier fly.
                     planetPipelineFor(p.shader || 'default-planet.wgsl');
                 }
             }
         }
         if (goal.level === 'system') {
             const star = stars.find(s => s.id === goal.focusedSystemId);
-            if (star) { endTarget = [star.worldPos[0], star.worldPos[1], star.worldPos[2]]; endDist = 18; }
+            if (star) { endTarget = [star.worldPos[0], star.worldPos[1], star.worldPos[2]]; endDist = 32; }
         } else if (goal.level === 'planet') {
             const planetEntry = planets.find(p => p.body.id === goal.focusedPlanetId);
             if (planetEntry) {
                 const body = planetEntry.body;
                 endTarget = [body.worldPos[0], body.worldPos[1], body.worldPos[2]];
-                endDist = 3.5;
+                endDist = 6;
             }
         }
         const fromLevel = state.level, toLevel = goal.level;
@@ -516,7 +537,7 @@ export async function mountScene({ section }) {
         camArr.set([camera.eye[0], camera.eye[1], camera.eye[2], 0], 32);
         device.queue.writeBuffer(camUbo, 0, camArr);
 
-        // Suns UBOs
+        // Stars UBOs (one for the body, one for its alpha-blended halo at HALO_SCALE)
         for (const s of visibleStars()) {
             const M = new Float32Array(16);
             mat4Identity(M);
@@ -524,6 +545,21 @@ export async function mountScene({ section }) {
             M[0] = sc; M[5] = sc; M[10] = sc;
             M[12] = s.worldPos[0]; M[13] = s.worldPos[1]; M[14] = s.worldPos[2];
             writeBodyUbo(device, s, M, t);
+            // Halo UBO — bigger scale, same accent + worldPos. Inlined to
+            // avoid a temporary star_halo body object.
+            const Mh = new Float32Array(16);
+            mat4Identity(Mh);
+            const sch = s.scale * HALO_SCALE;
+            Mh[0] = sch; Mh[5] = sch; Mh[10] = sch;
+            Mh[12] = s.worldPos[0]; Mh[13] = s.worldPos[1]; Mh[14] = s.worldPos[2];
+            const arr = new Float32Array(32);
+            arr.set(Mh, 0);
+            arr.set(s.accent, 16);
+            arr[20] = t;
+            arr[21] = s.radiusWorld * HALO_SCALE;
+            arr[22] = 0;
+            arr[23] = s.hoverT;
+            device.queue.writeBuffer(s.haloBuf, 0, arr);
         }
         // Planet + moon UBOs (only visible ones). Planet self-rotates slowly
         // on Y; phase derived from its id so each planet spins out-of-sync.
@@ -564,13 +600,17 @@ export async function mountScene({ section }) {
             const offY = rect.top  - sectionRect.top;
             for (const { el, body } of labels.values()) {
                 let show = false;
+                // Other systems' star labels stay visible at every zoom level
+                // so the visitor never loses orientation. Planet/moon labels
+                // appear only when we're inside their parent body.
                 if (state.level === 'galaxy') {
                     show = body.kind === 'star';
                 } else if (state.level === 'system') {
-                    show = (body.kind === 'star' && body.id === state.focusedSystemId)
+                    show = body.kind === 'star'
                         || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId);
                 } else if (state.level === 'planet') {
-                    show = (body.kind === 'planet' && body.id === state.focusedPlanetId)
+                    show = body.kind === 'star'
+                        || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId)
                         || (body.kind === 'moon'   && body.meta.planetId === state.focusedPlanetId);
                 }
                 if (!show) { el.classList.remove('is-visible'); continue; }
@@ -645,6 +685,14 @@ export async function mountScene({ section }) {
                 pass.setBindGroup(1, body.bg);
                 pass.drawIndexed(ico.indexCount);
             }
+        }
+        // Star halos last — additive blend, no depth write. They composite
+        // over geometry behind them, but since they render the BACK faces of
+        // a larger sphere they don't hide the star body itself.
+        pass.setPipeline(starHaloPipeline);
+        for (const s of visibleStars()) {
+            pass.setBindGroup(1, s.haloBG);
+            pass.drawIndexed(ico.indexCount);
         }
         pass.end();
         device.queue.submit([enc.finish()]);

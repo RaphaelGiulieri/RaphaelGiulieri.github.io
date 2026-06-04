@@ -8,6 +8,7 @@
 struct Surface {
     world_pos    : vec3<f32>, world_normal : vec3<f32>, uv_sphere : vec2<f32>,
     view_dir     : vec3<f32>, time : f32, accent : vec3<f32>, hover_t : f32,
+    local_pos    : vec3<f32>,
 };
 
 fn terrain_n(p: vec3<f32>) -> f32 {
@@ -29,7 +30,7 @@ fn cloud_n(p: vec3<f32>, t: f32) -> f32 {
 }
 
 fn surface(s: Surface) -> vec4<f32> {
-    let p = s.world_pos * 1.6;
+    let p = s.local_pos * 1.6;
     let nT = terrain_n(p);                 // [-1, 1]
     let nH = humidity_n(p * 1.4);          // ~[0, 1]
     let height = nT * 0.5 + 0.5;           // [0, 1]

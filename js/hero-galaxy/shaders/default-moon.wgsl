@@ -8,6 +8,7 @@ struct Surface {
     time         : f32,
     accent       : vec3<f32>,
     hover_t      : f32,
+    local_pos    : vec3<f32>,
 };
 
 fn surface(s: Surface) -> vec4<f32> {

@@ -3,10 +3,11 @@
 struct Surface {
     world_pos    : vec3<f32>, world_normal : vec3<f32>, uv_sphere : vec2<f32>,
     view_dir     : vec3<f32>, time : f32, accent : vec3<f32>, hover_t : f32,
+    local_pos    : vec3<f32>,
 };
 
 fn surface(s: Surface) -> vec4<f32> {
-    let p = s.world_pos * 3.5;
+    let p = s.local_pos * 3.5;
     let land = fbm3(p + vec3<f32>(s.time * 0.015, 0.0, 0.0), 5);
     let coast = smoothstep(0.42, 0.52, land);
     let base = mix(s.accent * 0.25, s.accent * 1.1, coast);

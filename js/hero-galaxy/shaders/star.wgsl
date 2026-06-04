@@ -10,10 +10,11 @@ struct Surface {
     time         : f32,
     accent       : vec3<f32>,
     hover_t      : f32,
+    local_pos    : vec3<f32>,    // unit-sphere object-space — use for procedural noise
 };
 
 fn surface(s: Surface) -> vec4<f32> {
-    let churn = fbm3(s.world_pos * 2.5 + vec3<f32>(0.0, s.time * 0.07, 0.0), 4);
+    let churn = fbm3(s.local_pos * 2.5 + vec3<f32>(0.0, s.time * 0.07, 0.0), 4);
     let hot   = s.accent * (1.2 + churn * 0.8);
     let corona = pow(1.0 - max(0.0, dot(s.view_dir, s.world_normal)), 2.0);
     return vec4<f32>(hot + s.accent * corona * 1.5, 1.0);

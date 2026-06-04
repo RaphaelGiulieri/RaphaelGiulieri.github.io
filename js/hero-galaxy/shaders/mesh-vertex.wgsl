@@ -27,8 +27,9 @@ struct VertexOut {
     @builtin(position) clip_pos     : vec4<f32>,
     @location(0)       world_pos    : vec3<f32>,
     @location(1)       world_normal : vec3<f32>,
-    @location(2)       uv_sphere    : vec2<f32>,
+    @location(2)       uv_sphere    : vec2<f32>,    // unused — kept for layout compat; fs_main computes per-fragment
     @location(3)       view_dir     : vec3<f32>,
+    @location(4)       local_pos    : vec3<f32>,    // object-space (icosphere unit)
 };
 
 @vertex
@@ -38,10 +39,12 @@ fn vs_main(in: VertexIn) -> VertexOut {
     out.world_pos    = world4.xyz;
     let nrm4 = body.model * vec4<f32>(in.normal, 0.0);
     out.world_normal = normalize(nrm4.xyz);
-    out.uv_sphere    = vec2<f32>(
-        atan2(in.position.z, in.position.x) * 0.15915494 + 0.5,
-        in.position.y * 0.5 + 0.5);
+    out.uv_sphere    = vec2<f32>(0.0, 0.0);   // recomputed in fs_main from local_pos
     out.view_dir     = normalize(camera.eye.xyz - out.world_pos);
     out.clip_pos     = camera.proj * camera.view * world4;
+    // Pass the unit-sphere position untransformed so surface shaders can
+    // sample procedural noise in object space. Patterns then stay painted
+    // on the planet as it orbits instead of swimming across the world.
+    out.local_pos    = in.position;
     return out;
 }

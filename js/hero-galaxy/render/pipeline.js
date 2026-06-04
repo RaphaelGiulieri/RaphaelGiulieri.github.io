@@ -61,6 +61,7 @@ struct VertexOut {
     @location(1)       world_normal : vec3<f32>,
     @location(2)       uv_sphere    : vec2<f32>,
     @location(3)       view_dir     : vec3<f32>,
+    @location(4)       local_pos    : vec3<f32>,
 };
 
 struct BodyUniforms {
@@ -77,7 +78,19 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     var s : Surface;
     s.world_pos    = in.world_pos;
     s.world_normal = normalize(in.world_normal);
-    s.uv_sphere    = in.uv_sphere;
+    // Normalize the interpolated local position back onto the unit sphere —
+    // raw barycentric interpolation gives a point on the flat triangle face,
+    // not the curved sphere, which produces visible triangle-edge ringing in
+    // any 3D noise lookup. Normalizing yields true sphere-surface coords.
+    s.local_pos    = normalize(in.local_pos);
+    // Compute uv_sphere PER-FRAGMENT instead of using the per-vertex value:
+    // atan2 wraps at ±π, and interpolating uv.x across a triangle that
+    // straddles that boundary creates a wide stripe of "rewound" UV space
+    // (the classic icosphere seam). Computing in the fragment confines the
+    // wrap to a one-pixel discontinuity in derivatives.
+    s.uv_sphere    = vec2<f32>(
+        atan2(s.local_pos.z, s.local_pos.x) * 0.15915494 + 0.5,
+        s.local_pos.y * 0.5 + 0.5);
     s.view_dir     = normalize(in.view_dir);
     s.time         = body.params.x;
     s.accent       = body.accent.rgb;

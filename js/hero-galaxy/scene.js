@@ -8,6 +8,7 @@ import { createCamera, setAspect, applyOrbitDelta } from './render/camera.js';
 import { wireControls } from './render/controls.js';
 import { makeIcosphere } from './render/sphere-mesh.js';
 import { getMeshPipeline, getBloomPipeline } from './render/pipeline.js';
+import { createFluidSim, createPlanetSim, writeSimParams } from './render/fluid-sim.js';
 import { loadGalaxyData } from './data-loader.js';
 import { createBody, writeBodyUbo, bodyDescFromStar, bodyDescFromPlanet, bodyDescFromMoon, PLANET_TIER_SHADERS } from './bodies.js';
 import { mat4Identity } from '../particles/core/math.js';
@@ -160,11 +161,16 @@ export async function mountScene({ section }) {
         sunBloomRadiusMul: 5.5,
         sunBloomIntensity: 1.4,
         sunBloomFalloff:   2.4,
-        // Live 2D Navier-Stokes simulation for gas giants (off by default —
-        // sim path lands next; today this toggle just gates the future
-        // compute pass). When on AND we're focused on a system containing
-        // gas giants, the sim ticks once per frame; idle systems are paused.
+        // Live 2D Navier-Stokes-ish sim for gas giants. When ON and a
+        // system is focused, every gas-tier planet in that system ticks
+        // its velocity field via a compute pass before the mesh pass; idle
+        // systems' sims pause (their textures freeze). The gas shader
+        // samples whichever ping-pong texture currently holds the latest
+        // state. OFF = sim is frozen at its initial banded condition.
         gasGiantSim:       false,
+        gasGiantDamping:   0.08,    // bleeds turbulence over time
+        gasGiantBandForce: 0.6,     // strength of the jet-stream restoring torque
+        gasGiantAdvectMul: 1.0,     // global speed multiplier on the advection step
         // Label positioning — see CSS --gap and the per-kind silhouette
         // multipliers used in the per-frame projection.
         labelGapPx:        6,
@@ -228,6 +234,14 @@ export async function mountScene({ section }) {
         entries: [{ binding: 0, resource: { buffer: camUbo } }],
     });
 
+    // ── Fluid sim infrastructure ──
+    // Compute shader + sampler used by every gas-giant body's per-planet
+    // sim instance. The gas mesh pipeline binds the resulting velocity
+    // texture via the extended bodyBGL (withVelocityField: true).
+    const fluidSim = await createFluidSim(device);
+    const { pipeline: gasPipeline, bodyBGL: gasBodyBGL } =
+        await getMeshPipeline(device, format, 'planets/planet-gas.wgsl', { withVelocityField: true });
+
     // Mount the starfield (on its own canvas, its own GPUDevice). Mobile gets
     // a smaller count for budget; matched to spec § 5.3.
     const isMobile = window.matchMedia('(max-width: 720px)').matches;
@@ -255,13 +269,15 @@ export async function mountScene({ section }) {
         planetPipelineCache.set(shaderPath, built);
         return built;
     }
-    // Warm the three tier pipelines (rocky / earth / gas) up-front so every
-    // planet renders from frame 1. Previously this used the JSON
-    // `p.shader` paths which we now ignore — meaning the cache never
-    // contained the actual paths each planet body requests, so the render
-    // loop's `continue` on cache-miss made every planet vanish.
+    // Warm the rocky + earth tier pipelines up-front so every planet renders
+    // from frame 1. The gas tier is built separately above (gasPipeline) with
+    // an extended bodyBGL that adds the fluid velocity texture binding, so we
+    // skip it here — its shader source declares a binding that the regular
+    // body BGL wouldn't provide, and would fail validation against the
+    // standard pipeline layout.
     {
-        const tierPaths = Object.values(PLANET_TIER_SHADERS);
+        const tierPaths = Object.values(PLANET_TIER_SHADERS)
+            .filter(p => p !== PLANET_TIER_SHADERS.gas);
         await Promise.all(tierPaths.map(planetPipelineFor));
     }
 
@@ -346,6 +362,34 @@ export async function mountScene({ section }) {
                 moons.push({ body: moonBody, planet: planetBody, star });
             }
         }
+    }
+
+    // ── Fluid sim state per gas planet ──
+    // Each gas-tier body gets its own ping-pong velocity textures + a pair
+    // of gas-pipeline bind groups (one per ping-pong source). The frame
+    // loop dispatches the compute pass when world.gasGiantSim is on AND
+    // the planet's system is the focused one; otherwise the texture
+    // freezes at its last state and the shader samples that frozen field.
+    let _seed = 0;
+    for (const { body } of planets) {
+        if (body.meta.tier !== 'gas') continue;
+        body.fluidSim = createPlanetSim(device, fluidSim, _seed++);
+        body.gasBG_sampleA = device.createBindGroup({
+            layout: gasBodyBGL,
+            entries: [
+                { binding: 0, resource: { buffer: body.buf } },
+                { binding: 1, resource: body.fluidSim.viewA },
+                { binding: 2, resource: fluidSim.meshSampler },
+            ],
+        });
+        body.gasBG_sampleB = device.createBindGroup({
+            layout: gasBodyBGL,
+            entries: [
+                { binding: 0, resource: { buffer: body.buf } },
+                { binding: 1, resource: body.fluidSim.viewB },
+                { binding: 2, resource: fluidSim.meshSampler },
+            ],
+        });
     }
 
     // ── Per-planet particle rings ──
@@ -948,6 +992,43 @@ export async function mountScene({ section }) {
         }
 
         const enc = device.createCommandEncoder();
+
+        // ── Fluid sim compute pass (before render) ──
+        // Only ticks gas-tier planets in the focused system so idle
+        // systems' sims are paused. At galaxy view, no system is focused
+        // so the entire sim sleeps. Toggle gates the whole block.
+        if (world.gasGiantSim && state.focusedSystemId) {
+            const activeGas = planets.filter(({ body }) =>
+                body.meta.tier === 'gas' &&
+                body.fluidSim &&
+                body.meta.systemId === state.focusedSystemId);
+            if (activeGas.length) {
+                for (const { body } of activeGas) {
+                    writeSimParams(device, body.fluidSim, dt, t, {
+                        damping: world.gasGiantDamping,
+                        band_force: world.gasGiantBandForce,
+                        advect_mul: world.gasGiantAdvectMul,
+                    });
+                }
+                const cpass = enc.beginComputePass({ label: 'fluid-sim tick' });
+                for (const { body } of activeGas) {
+                    cpass.setPipeline(fluidSim.pipeline);
+                    if (body.fluidSim.flipsToB) {
+                        cpass.setBindGroup(0, body.fluidSim.computeBG_AB);
+                        body.fluidSim.currentSampledView = body.fluidSim.viewB;
+                        body.fluidSim.currentSampledTex  = body.fluidSim.texB;
+                    } else {
+                        cpass.setBindGroup(0, body.fluidSim.computeBG_BA);
+                        body.fluidSim.currentSampledView = body.fluidSim.viewA;
+                        body.fluidSim.currentSampledTex  = body.fluidSim.texA;
+                    }
+                    cpass.dispatchWorkgroups(Math.ceil(128 / 8), Math.ceil(64 / 8));
+                    body.fluidSim.flipsToB = !body.fluidSim.flipsToB;
+                }
+                cpass.end();
+            }
+        }
+
         const pass = enc.beginRenderPass({
             colorAttachments: [{
                 view: context.getCurrentTexture().createView(),
@@ -969,14 +1050,25 @@ export async function mountScene({ section }) {
             pass.setBindGroup(1, s.bg);
             pass.drawIndexed(ico.indexCount);
         }
-        // Planets — per-planet pipeline if compiled, else default. Pipelines
-        // not yet ready (compile pending) skip this frame and render next time.
+        // Planets — gas-tier bodies use the dedicated gas pipeline (which
+        // binds their fluid velocity texture); rocky / earth use the
+        // standard tier pipeline from the per-planet cache. Pipelines not
+        // yet ready (compile pending) skip this frame and render next time.
         for (const { body } of visPls) {
-            const built = planetPipelineCache.get(body.shaderPath);
-            if (!built) continue;
-            pass.setPipeline(built.pipeline);
-            pass.setBindGroup(1, body.bg);
-            pass.drawIndexed(ico.indexCount);
+            if (body.meta.tier === 'gas' && body.fluidSim) {
+                pass.setPipeline(gasPipeline);
+                // Pick the bind group sampling whichever ping-pong texture
+                // currently holds the latest sim state (set by tickPlanetSim).
+                const useA = body.fluidSim.currentSampledTex === body.fluidSim.texA;
+                pass.setBindGroup(1, useA ? body.gasBG_sampleA : body.gasBG_sampleB);
+                pass.drawIndexed(ico.indexCount);
+            } else {
+                const built = planetPipelineCache.get(body.shaderPath);
+                if (!built) continue;
+                pass.setPipeline(built.pipeline);
+                pass.setBindGroup(1, body.bg);
+                pass.drawIndexed(ico.indexCount);
+            }
         }
         // Moons
         if (visMs.length) {

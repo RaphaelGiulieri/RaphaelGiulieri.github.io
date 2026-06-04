@@ -35,8 +35,11 @@ async function ensureCore() {
 
 export async function getMeshPipeline(device, format, surfacePath, opts = {}) {
     await ensureCore();
-    // Distinct cache key for blend variants so callers don't collide.
-    const cacheKey = opts.alphaBlend ? `${surfacePath}::alpha` : surfacePath;
+    // Distinct cache key per blend / fluid-binding variant so callers don't collide.
+    const variants = [];
+    if (opts.alphaBlend)        variants.push('alpha');
+    if (opts.withVelocityField) variants.push('vfield');
+    const cacheKey = variants.length ? `${surfacePath}::${variants.join(':')}` : surfacePath;
     if (_pipelineCache.has(cacheKey)) return _pipelineCache.get(cacheKey);
 
     let surface = _defaultSurface;
@@ -76,10 +79,18 @@ export async function getMeshPipeline(device, format, surfacePath, opts = {}) {
         label: 'camera BGL',
         entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }],
     });
-    const bodyBGL = device.createBindGroupLayout({
-        label: 'body BGL',
-        entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }],
-    });
+    // body BGL — uniform buffer always at binding 0. Pipelines that want
+    // access to a per-body fluid velocity texture add bindings 1+2 here.
+    const bodyEntries = [
+        { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+    ];
+    if (opts.withVelocityField) {
+        bodyEntries.push(
+            { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+            { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'non-filtering' } },
+        );
+    }
+    const bodyBGL = device.createBindGroupLayout({ label: 'body BGL', entries: bodyEntries });
 
     const pipeline = device.createRenderPipeline({
         label: `mesh pipeline ${surfacePath}`,

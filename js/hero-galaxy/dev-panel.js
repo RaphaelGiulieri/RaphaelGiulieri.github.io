@@ -284,8 +284,17 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         // ── Gas giants ───────────────────────────────────────────────────
         const sGas = section('Gas giants');
         row(sGas, 'navier sim', world, 'gasGiantSim', 0, 1, 1,
-            'Toggle the live 2D Navier-Stokes fluid simulation for gas giants. OFF = cheap procedural shader (current default). ON = sim ticks once per frame for gas planets in the focused system only; idle systems are paused. Sim path lands next.',
+            'Toggle the live 2D Navier-Stokes-ish fluid sim. ON = each gas planet\'s velocity field advects itself once per frame (only for the focused system; other systems\' sims freeze). OFF = field stays at its initial banded condition (no compute cost).',
             { toUI: (v) => v ? 1 : 0, fromUI: (v) => v >= 0.5, factory: fw.gasGiantSim });
+        row(sGas, 'damping', world, 'gasGiantDamping', 0, 0.5, 0.005,
+            'Per-step velocity damping. Higher = jets bleed off faster (more static look); lower = turbulence persists longer.',
+            { factory: fw.gasGiantDamping });
+        row(sGas, 'band force', world, 'gasGiantBandForce', 0, 3, 0.01,
+            'Strength of the jet-stream restoring torque pulling each cell toward the alternating east/west zonal pattern. 0 = no bands; high = strong banded structure.',
+            { factory: fw.gasGiantBandForce });
+        row(sGas, 'advect mul', world, 'gasGiantAdvectMul', 0, 4, 0.01,
+            'Multiplier on the per-step advection distance. Higher = wind moves faster across the surface.',
+            { factory: fw.gasGiantAdvectMul });
     }
 
     // ── Footer actions: Reset / Save / Factory ────────────────────────────

@@ -493,27 +493,58 @@ export async function mountScene({ section }) {
         // Drag threshold: ≥6 px of movement between down and up = drag, ignore.
         if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return;
         const r = canvas.getBoundingClientRect();
-        const ndc = {
-            x: ((e.clientX - r.left) / r.width)  * 2 - 1,
-            y: -((e.clientY - r.top)  / r.height) * 2 + 1,
-        };
-        const ray = screenToRay(camera, ndc.x, ndc.y);
-        if (!ray) return;
-        // Exclude the currently-focused body from the hit-test entirely.
-        // It sits at the camera target so any ray from the eye toward roughly
-        // the centre of the screen grazes its sphere first — and at system
-        // view the sun is large enough that the ray would always grab it
-        // before any planet behind/beside it. By removing it from the set,
-        // (a) clicking on it still produces "no hit" → handleEmptyClick →
-        // back-step one level, and (b) clicking on another planet hits the
-        // planet cleanly even when the sun is geometrically in the way.
+        const clickX = e.clientX - r.left;
+        const clickY = e.clientY - r.top;
+        const w = r.width, h = r.height;
+
+        // Exclude the currently-focused body from the hit-test entirely so
+        // clicking on it (or empty space) falls through to handleEmptyClick.
         const focusedId = state.level === 'system' ? state.focusedSystemId
                         : state.level === 'planet' ? state.focusedPlanetId
                         : null;
         const targets = currentSelectionTargets().filter(b => b.id !== focusedId);
-        const hit = hitTestBodies(ray, targets);
-        if (hit) handleBodyClick(hit.body);
-        else     handleEmptyClick();
+
+        // ── Screen-space hit test ──────────────────────────────────────────
+        // 3D ray-vs-sphere picking failed badly at system / planet view: the
+        // sun sits at the camera target and intercepts virtually every ray
+        // before it reaches other-system planets / moons / etc. Instead,
+        // project each body to screen pixels and pick whichever body's
+        // visible disc the click landed inside. Tiny bodies (moons) get a
+        // minimum click radius so they stay grabbable.
+        mat4Multiply(camera.proj, camera.view, _vp);
+        const fovScale = (h * 0.5) / Math.tan(camera.fov * 0.5);
+        const MIN_PX = 14;   // minimum click target radius for tiny bodies
+
+        let best = null, bestEyeDist = Infinity, bestScore = Infinity;
+        for (const b of targets) {
+            const wp = b.worldPos;
+            const cx = _vp[0]*wp[0] + _vp[4]*wp[1] + _vp[8] *wp[2] + _vp[12];
+            const cy = _vp[1]*wp[0] + _vp[5]*wp[1] + _vp[9] *wp[2] + _vp[13];
+            const cw = _vp[3]*wp[0] + _vp[7]*wp[1] + _vp[11]*wp[2] + _vp[15];
+            if (cw <= 0.001) continue;  // behind camera
+            const ndcX = cx / cw, ndcY = cy / cw;
+            if (ndcX < -1 || ndcX > 1 || ndcY < -1 || ndcY > 1) continue;  // off-screen
+
+            const bx = (ndcX * 0.5 + 0.5) * w;
+            const by = (-ndcY * 0.5 + 0.5) * h;
+            const dx = wp[0] - camera.eye[0];
+            const dy = wp[1] - camera.eye[1];
+            const dz = wp[2] - camera.eye[2];
+            const eyeDist = Math.max(0.01, Math.hypot(dx, dy, dz));
+            const worldR = b.radiusWorld * b.scale;
+            const screenR = Math.max(MIN_PX, worldR * fovScale / eyeDist);
+            const d = Math.hypot(clickX - bx, clickY - by);
+            if (d > screenR) continue;
+            // Two-level priority: prefer the body whose visible disc most
+            // clearly covers the click (smallest normalized offset); break
+            // ties by depth (closer-to-camera wins for overlapping discs).
+            const score = d / screenR;
+            if (score < bestScore - 0.05 || (score < bestScore + 0.05 && eyeDist < bestEyeDist)) {
+                bestScore = score; bestEyeDist = eyeDist; best = b;
+            }
+        }
+        if (best) handleBodyClick(best);
+        else      handleEmptyClick();
     });
 
     window.addEventListener('keydown', (e) => {

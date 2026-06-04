@@ -427,10 +427,22 @@ export async function mountScene({ section }) {
         if (!transition) return;
         const u = Math.min(1, (now - transition.t0) / transition.ms);
         const e = cubicBezier(u, 0.4, 0, 0.2, 1);
-        const { start, end } = transition;
-        camera.target[0] = start.target[0] + (end.target[0] - start.target[0]) * e;
-        camera.target[1] = start.target[1] + (end.target[1] - start.target[1]) * e;
-        camera.target[2] = start.target[2] + (end.target[2] - start.target[2]) * e;
+        const { start, end, goal } = transition;
+        // Live end-target: re-read the goal body's current worldPos every
+        // frame so the camera lands on the planet's actual position at u=1,
+        // not the frozen snapshot from transitionTo. Without this the camera
+        // snaps to the moving body at the end of the flight.
+        let endTarget = end.target;
+        if (goal.level === 'system') {
+            const star = stars.find(s => s.id === goal.focusedSystemId);
+            if (star) endTarget = star.worldPos;
+        } else if (goal.level === 'planet') {
+            const pb = planets.find(p => p.body.id === goal.focusedPlanetId)?.body;
+            if (pb) endTarget = pb.worldPos;
+        }
+        camera.target[0] = start.target[0] + (endTarget[0] - start.target[0]) * e;
+        camera.target[1] = start.target[1] + (endTarget[1] - start.target[1]) * e;
+        camera.target[2] = start.target[2] + (endTarget[2] - start.target[2]) * e;
         camera.distance = start.distance + (end.distance - start.distance) * e;
         applyOrbitDelta(camera, 0, 0);
         if (u >= 1) {
@@ -581,6 +593,32 @@ export async function mountScene({ section }) {
             body.worldPos[1] = planet.worldPos[1] + Math.sin(tilt) * r * 0.2;
             body.worldPos[2] = planet.worldPos[2] + Math.sin(a) * r * Math.cos(tilt);
             body.scale = body._origScale * world.moonSize;
+        }
+
+        // Lock the camera target to the focused body's current worldPos so
+        // the camera tracks it as it orbits (planets around their star, etc.)
+        // — without this, the target stays frozen at the body's position when
+        // the transition completed and the body drifts off-centre. During a
+        // transition tickTransition is the authority; we only snap here when
+        // idle.
+        if (!transition) {
+            if (state.level === 'system') {
+                const s = stars.find(x => x.id === state.focusedSystemId);
+                if (s) {
+                    camera.target[0] = s.worldPos[0];
+                    camera.target[1] = s.worldPos[1];
+                    camera.target[2] = s.worldPos[2];
+                    applyOrbitDelta(camera, 0, 0);
+                }
+            } else if (state.level === 'planet') {
+                const pl = planets.find(p => p.body.id === state.focusedPlanetId)?.body;
+                if (pl) {
+                    camera.target[0] = pl.worldPos[0];
+                    camera.target[1] = pl.worldPos[1];
+                    camera.target[2] = pl.worldPos[2];
+                    applyOrbitDelta(camera, 0, 0);
+                }
+            }
         }
 
         // Ring orbit centres track their planet's current world position

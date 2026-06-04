@@ -167,13 +167,13 @@ export async function mountScene({ section }) {
         // systems' sims pause (their textures freeze). The gas shader
         // samples whichever ping-pong texture currently holds the latest
         // state. OFF = sim is frozen at its initial banded condition.
-        gasGiantSim:           false,
-        gasGiantDamping:       0.04,   // bleeds turbulence over time
-        gasGiantBandForce:     0.5,    // jet-stream restoring torque
-        gasGiantAdvectMul:     1.0,    // advection step multiplier
-        gasGiantDyeRestore:    0.15,   // rate of pulling dye back toward its fbm seed pattern
-        gasGiantVortexRate:    0.6,    // expected fraction of cells injected with a vortex per second
-        gasGiantVortexStrength:0.25,   // magnitude of each injected vortex impulse
+        gasGiantSim:            false,
+        gasGiantDamping:        0.04,   // velocity damping per second
+        gasGiantBandForce:      0.5,    // jet-stream restoring torque strength
+        gasGiantAdvectMul:      1.0,    // advection step multiplier
+        gasGiantVortexRate:     1.2,    // expected vortex births per cell per second
+        gasGiantVortexStrength: 0.35,   // magnitude of each injected velocity impulse
+        gasGiantDyeInjection:   0.65,   // amount of dye added at each vortex site
         // Label positioning — see CSS --gap and the per-kind silhouette
         // multipliers used in the per-frame projection.
         labelGapPx:        6,
@@ -470,7 +470,16 @@ export async function mountScene({ section }) {
     const _vp     = new Float32Array(16);
     const _proj4  = new Float32Array(4);
 
-    function visibleStars()   { return stars; }
+    function visibleStars() {
+        // At planet / moon view the sun adds nothing — visitor is focused
+        // on a specific body. Hiding it kills the "rogue glowing sphere
+        // 30–60 units behind everything" effect that was previously
+        // unavoidable: even with bloom suppressed, the sun mesh + its
+        // alpha-blended halo would still render at the far side of the
+        // planet's orbit, depth-testing behind every foreground body.
+        if (state.level === 'planet' || state.level === 'moon') return [];
+        return stars;
+    }
     function visiblePlanets() {
         // Render every planet at every level — other-system planets stay
         // visible at planet view so the user can hop to them directly.
@@ -693,12 +702,17 @@ export async function mountScene({ section }) {
     });
 
     function currentSelectionTargets() {
-        // Every star and every planet is selectable at EVERY zoom level —
-        // including galaxy view, so a visitor can click straight from the
-        // top-down view into any individual planet. Moons follow the
-        // contextual filter (visibleMoons resolves which moons are
-        // rendered) so the project / zoom click target stays predictable.
-        const out = [...stars, ...planets.map(p => p.body)];
+        // Stars are selectable at galaxy + system view (they're visually
+        // present and act as the system anchor). At planet / moon view
+        // they're hidden from rendering, so excluding them from selection
+        // keeps the hit-test consistent with what's actually drawn — no
+        // invisible click targets. The breadcrumb still lets visitors hop
+        // back up if they want to switch systems.
+        const out = [];
+        if (state.level !== 'planet' && state.level !== 'moon') {
+            out.push(...stars);
+        }
+        out.push(...planets.map(p => p.body));
         for (const m of visibleMoons()) out.push(m.body);
         return out;
     }
@@ -1019,9 +1033,9 @@ export async function mountScene({ section }) {
                         damping:         world.gasGiantDamping,
                         band_force:      world.gasGiantBandForce,
                         advect_mul:      world.gasGiantAdvectMul,
-                        dye_restore:     world.gasGiantDyeRestore,
                         vortex_rate:     world.gasGiantVortexRate,
                         vortex_strength: world.gasGiantVortexStrength,
+                        dye_injection:   world.gasGiantDyeInjection,
                     });
                 }
                 const cpass = enc.beginComputePass({ label: 'fluid-sim tick' });

@@ -295,15 +295,15 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sGas, 'advect mul', world, 'gasGiantAdvectMul', 0, 4, 0.01,
             'Multiplier on the per-step advection distance. Higher = wind moves faster across the surface.',
             { factory: fw.gasGiantAdvectMul });
-        row(sGas, 'dye restore', world, 'gasGiantDyeRestore', 0, 1.5, 0.005,
-            'Rate at which the dye field is pulled back toward its procedural fbm seed pattern each frame. 0 = dye is purely advected and slowly mixes to grey; >0 = continuous contrast reinjection so the gas giant stays visually alive indefinitely.',
-            { factory: fw.gasGiantDyeRestore });
-        row(sGas, 'vortex rate', world, 'gasGiantVortexRate', 0, 4, 0.01,
-            'Per-second rate of random vortex injection into the velocity field. Higher = more visible swirling eddies forming on the surface.',
+        row(sGas, 'vortex rate', world, 'gasGiantVortexRate', 0, 6, 0.01,
+            'Per-second rate of random vortex injection. Each injected vortex adds BOTH a velocity impulse AND a dye spike — the sim starts from a black texture and builds the visible pattern up from accumulated vortex events. Higher = more swirling eddies forming.',
             { factory: fw.gasGiantVortexRate });
         row(sGas, 'vortex strength', world, 'gasGiantVortexStrength', 0, 1.5, 0.005,
-            'Magnitude of each injected vortex impulse. Higher = stronger, more turbulent eddies that survive longer before damping bleeds them off.',
+            'Magnitude of each injected velocity impulse. Higher = stronger eddies that survive longer before damping bleeds them off.',
             { factory: fw.gasGiantVortexStrength });
+        row(sGas, 'dye injection', world, 'gasGiantDyeInjection', 0, 2, 0.01,
+            'Amount of dye added at every vortex site. Higher = brighter, more saturated trails left by each eddy. 0 = velocity-only sim (no visible dye).',
+            { factory: fw.gasGiantDyeInjection });
     }
 
     // ── Footer actions: Reset / Save / Factory ────────────────────────────

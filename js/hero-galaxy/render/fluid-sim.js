@@ -111,9 +111,10 @@ export async function createFluidSim(device) {
         compute: { module, entryPoint: 'cs_main' },
     });
 
-    // Both samplers are filtering linear — the compute side traces the
-    // velocity field backwards continuously, the mesh side reads it with
-    // smooth bilinear edges. Same sampler can serve both roles.
+    // Compute side samples with textureLoad + manual bilinear that wraps
+    // explicitly across the longitude seam (the navier shader does its own
+    // boundary handling — no sampler config involved). The mesh sampler
+    // stays plain linear; the gas shader manually fract()s its uv.
     const computeSampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
     const meshSampler    = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
 
@@ -132,41 +133,19 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
     const viewA = texA.createView();
     const viewB = texB.createView();
 
-    // Seed: gentle banded velocity in .xy + a 3D-fbm dye field sampled on
-    // the unit sphere in .z. The dye has organic turbulent structure (not
-    // sine harmonics) so the gas giant reads as a cloudy fluid surface
-    // even when the sim is paused. Per-planet seedOffset rotates the
-    // sample point so each gas giant gets a distinct pattern.
-    const init16 = new Uint16Array(GRID_W * GRID_H * 4);
-    const phase = seedOffset * 17.31;
-    for (let y = 0; y < GRID_H; y++) {
-        const lat = (y + 0.5) / GRID_H * Math.PI - Math.PI / 2;       // -π/2 … π/2
-        const cosLat = Math.cos(lat);
-        const sinLat = Math.sin(lat);
-        // Soft banded zonal target — 5 major jets across the planet, not 22.
-        // Amplitude reduced so the bands aren't visually overwhelming.
-        const band = Math.sin(lat * 5.0) * 0.35;
-        for (let x = 0; x < GRID_W; x++) {
-            const lon = (x + 0.5) / GRID_W * Math.PI * 2;
-            // Unit-sphere position for noise sampling. fbm in 3D space is
-            // seamless across the longitude seam — no stitching artifacts.
-            const sx = Math.cos(lon) * cosLat;
-            const sy = sinLat;
-            const sz = Math.sin(lon) * cosLat;
-            const dye = fbm3d(sx * 2.4 + phase, sy * 2.4, sz * 2.4 - phase, 5);
-            // Light turbulent perturbation on the velocity too — gives the
-            // sim something non-uniform to advect from the first frame.
-            const nx = (noise1(sx * 4.0 + phase + 100, sy * 4.0, sz * 4.0) - 0.5) * 0.18;
-            const ny = (noise1(sx * 4.0, sy * 4.0 + phase + 200, sz * 4.0) - 0.5) * 0.10;
-            const i = (y * GRID_W + x) * 4;
-            init16[i + 0] = f32ToF16(band + nx);
-            init16[i + 1] = f32ToF16(ny);
-            init16[i + 2] = f32ToF16(Math.max(0, Math.min(1, dye)));
-            init16[i + 3] = 0;
-        }
-    }
+    // Start completely black. The vortex-injection in fluid-sim.wgsl puts
+    // both velocity AND dye into random cells every frame; the field
+    // builds up dynamically over the first few seconds of sim. No fbm
+    // seed, no banded init — just zero, and let the sim do its thing.
+    const init16 = new Uint16Array(GRID_W * GRID_H * 4);   // Uint16Array defaults to zero
     device.queue.writeTexture(
         { texture: texA },
+        init16,
+        { bytesPerRow: GRID_W * 4 * 2, rowsPerImage: GRID_H },
+        [GRID_W, GRID_H, 1],
+    );
+    device.queue.writeTexture(
+        { texture: texB },
         init16,
         { bytesPerRow: GRID_W * 4 * 2, rowsPerImage: GRID_H },
         [GRID_W, GRID_H, 1],
@@ -247,17 +226,16 @@ export function tickPlanetSim(pass, sim, state, dt, time, opts = {}) {
     state.flipsToB = !state.flipsToB;
 }
 
-// Helper for the caller — write the sim params into the buffer prior to
-// opening the compute pass. `seedPhase` is the per-planet phase offset
-// stored on the sim state at allocation (so the GPU's seed-dye sample
-// matches the JS seed we wrote to the texture).
+// Helper for the caller — writes the sim params into the buffer prior to
+// opening the compute pass. Layout MUST match WGSL SimParams in
+// shaders/fluid-sim.wgsl exactly.
 export function writeSimParams(device, state, dt, time, opts = {}) {
     const damping         = opts.damping         ?? 0.04;
     const band_force      = opts.band_force      ?? 0.5;
     const advect_mul      = opts.advect_mul      ?? 1.0;
-    const dye_restore     = opts.dye_restore     ?? 0.15;
-    const vortex_rate     = opts.vortex_rate     ?? 0.6;
-    const vortex_strength = opts.vortex_strength ?? 0.25;
+    const vortex_rate     = opts.vortex_rate     ?? 1.2;
+    const vortex_strength = opts.vortex_strength ?? 0.35;
+    const dye_injection   = opts.dye_injection   ?? 0.65;
     _params[0]  = Math.min(0.05, dt);
     _params[1]  = time;
     _params[2]  = GRID_W;
@@ -265,9 +243,9 @@ export function writeSimParams(device, state, dt, time, opts = {}) {
     _params[4]  = damping;
     _params[5]  = band_force;
     _params[6]  = advect_mul;
-    _params[7]  = dye_restore;
-    _params[8]  = vortex_rate;
-    _params[9]  = vortex_strength;
+    _params[7]  = vortex_rate;
+    _params[8]  = vortex_strength;
+    _params[9]  = dye_injection;
     _params[10] = state.seedPhase;
     _params[11] = 0;
     device.queue.writeBuffer(state.paramBuf, 0, _params);

@@ -519,9 +519,17 @@ export async function mountScene({ section }) {
 
     function currentSelectionTargets() {
         if (state.level === 'galaxy') return stars;
-        if (state.level === 'system') return visiblePlanets().map(p => p.body);
-        if (state.level === 'planet') return visibleMoons().map(m => m.body);
-        return [];
+        // At system / planet view, every star and every planet stays
+        // clickable so the user can hop directly between bodies — clicking
+        // another planet at planet view re-focuses on that planet (instead of
+        // back-stepping to the system), clicking another sun re-focuses on
+        // that sun's system, etc. Moons are included only when they're the
+        // contextual selection (system view: moons of the focused system;
+        // planet view: moons of the focused planet) so their project-modal
+        // click target stays predictable.
+        const out = [...stars, ...planets.map(p => p.body)];
+        for (const m of visibleMoons()) out.push(m.body);
+        return out;
     }
 
     function handleBodyClick(body) {

@@ -190,15 +190,9 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
 
     // ── Ambient motion ────────────────────────────────────────────────────
     const sAmbient = section('Ambient');
-    row(sAmbient, 'galaxy spin', ambient, 'galaxySpinRate', 0, 2, 0.01,
-        'Galaxy-view auto-orbit rate (deg/sec).',
-        { factory: fa.galaxySpinRate });
     row(sAmbient, 'planet spin', ambient, 'planetSpinRate', 0, 2, 0.01,
         'Per-planet self-rotation rate (rad/sec).',
         { factory: fa.planetSpinRate });
-    row(sAmbient, 'idle delay s', ambient, 'idleSeconds', 0, 30, 0.5,
-        'Seconds idle before auto-orbit resumes.',
-        { factory: fa.idleSeconds });
 
     if (world) {
         // ── Body spread ──────────────────────────────────────────────────

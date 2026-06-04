@@ -73,10 +73,8 @@ export async function mountScene({ section }) {
         },
     });
 
-    let lastInputAt = performance.now();
     const controls = wireControls({
         canvas, camera, getState: () => state.level,
-        onInput: () => { lastInputAt = performance.now(); },
     });
 
     // Live-mutable tuning state for the dev panel + render loop.
@@ -90,9 +88,7 @@ export async function mountScene({ section }) {
         vignette:       0.08,
     };
     const ambient = {
-        galaxySpinRate: 0.5,   // deg/sec when idle at galaxy
         planetSpinRate: 0.2,   // rad/sec planet self-rotation factor
-        idleSeconds:    4,     // seconds before auto-orbit kicks in
     };
     // Body spread + camera distances — multipliers on top of the JSON values
     // so the dev panel can tune the whole scene's scale without re-baking data.
@@ -522,12 +518,6 @@ export async function mountScene({ section }) {
         frame._lastNow = now;
         controls.tickInertia(dt);
         tickTransition(now);
-
-        // Galaxy auto-orbit after `idleSeconds` of no input; rate is the
-        // dev-panel-tunable `ambient.galaxySpinRate` (deg/sec).
-        if (state.level === 'galaxy' && !transition && (now - lastInputAt > ambient.idleSeconds * 1000)) {
-            applyOrbitDelta(camera, ambient.galaxySpinRate * (Math.PI / 180) * dt, 0);
-        }
 
         // Stars: apply the galaxy-spread multiplier to the cached JSON pos.
         for (const star of stars) {

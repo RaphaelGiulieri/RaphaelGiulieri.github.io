@@ -171,17 +171,20 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
 
 const _params = new Float32Array(16);
 
-// Writes the FluidParams UBO. Layout MUST match WGSL FluidParams exactly.
+// Writes the FluidParams UBO. Defaults match the portfolio fluid demo's
+// splat-and-confine setup: NO viscosity, VORTICITY = 18, very tight
+// forcing radius (0.0035), strong force (matches the portfolio's
+// SPLAT_FORCE × dx scale). Layout MUST match WGSL FluidParams exactly.
 export function writeSimParams(device, state, dt, time, opts = {}) {
-    const viscosity          = opts.viscosity          ?? 0.4;
-    const jet_force          = opts.jet_force          ?? 0.5;
+    const viscosity          = opts.viscosity          ?? 0.0;       // portfolio: NO viscosity
+    const jet_force          = opts.jet_force          ?? 0.15;      // soft band restoring (portfolio has none)
     const advect_mul         = opts.advect_mul         ?? 1.0;
-    const forcing_rate       = opts.forcing_rate       ?? 0.6;
-    const forcing_strength   = opts.forcing_strength   ?? 0.5;
-    const forcing_width      = opts.forcing_width      ?? 0.30;
-    const tracer_source      = opts.tracer_source      ?? 0.5;
-    const tracer_decay       = opts.tracer_decay       ?? 1.0;
-    const vorticity_strength = opts.vorticity_strength ?? 18.0;
+    const forcing_rate       = opts.forcing_rate       ?? 1.0;
+    const forcing_strength   = opts.forcing_strength   ?? 12.0;      // ~ portfolio SPLAT_FORCE × typical pointer dx
+    const forcing_width      = opts.forcing_width      ?? 0.0035;    // exact portfolio SPLAT_RADIUS
+    const tracer_source      = opts.tracer_source      ?? 1.5;       // visible dye injection
+    const tracer_decay       = opts.tracer_decay       ?? 1.2;       // portfolio DYE_DISSIPATION
+    const vorticity_strength = opts.vorticity_strength ?? 18.0;      // portfolio VORTICITY exact
     _params[0]  = Math.min(0.05, dt);
     _params[1]  = time;
     _params[2]  = GRID_W;

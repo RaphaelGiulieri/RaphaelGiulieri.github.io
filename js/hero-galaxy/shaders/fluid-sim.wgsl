@@ -114,31 +114,70 @@ fn cs_advect_vel(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// KERNEL 2: ADD FORCES — equatorial gaussian band + zonal-jet target
+// KERNEL 2: ADD FORCES — N orbiting splats along the equator (the
+//   "portfolio fluid demo click logic, but continuous in the equator")
+//
 //   src_a = velocity
 //   dst   = forced velocity
+//
+// Each splat is the portfolio's exact gaussian formula:
+//   splat = exp(-dot(Δuv, Δuv) / radius) × color
+// where radius = forcing_width (typically very small, ~0.003), and color
+// is a velocity vector. We apply N=8 splats whose centres orbit slowly
+// along the equator, each pushing fluid in a rotational direction
+// (tangent to the radial vector from the splat centre) so the splats
+// inject curl, not bulk flow. Vorticity confinement then amplifies that
+// curl into persistent eddies.
+//
+// The zonal-jet restoring torque from the old shader stays, but at low
+// default `jet_force` so it doesn't drown out the splat-driven dynamics.
+
+const SPLAT_COUNT : u32 = 8u;
+
+fn wrapped_delta(a: f32, b: f32) -> f32 {
+    // Periodic distance on [0,1] — picks the shorter of (a-b) or (a-b±1).
+    var d = a - b;
+    d = d - round(d);
+    return d;
+}
+
 @compute @workgroup_size(8, 8)
 fn cs_add_forces(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (!in_bounds(gid.xy)) { return; }
-    let uv      = cell_uv(gid.xy);
-    var vel     = load_a_clamped(vec2<i32>(gid.xy)).xy;
+    let uv  = cell_uv(gid.xy);
+    var vel = load_a_clamped(vec2<i32>(gid.xy)).xy;
 
-    // Zonal-jet restoring torque
+    // ── Splat loop ──
+    // N splats evenly spaced along the equator, all rotating slowly with
+    // time. Each splat lat oscillates ±0.04 around the equator for visual
+    // life. Each adds a rotational (curl-injecting) velocity push.
+    let radius = max(0.0001, params.forcing_width);
+    let drift  = params.time * 0.05 + params.seed_phase;
+    for (var i = 0u; i < SPLAT_COUNT; i = i + 1u) {
+        let fi      = f32(i);
+        let splat_x = fract(fi / f32(SPLAT_COUNT) + drift);
+        let splat_y = 0.5 + sin(params.time * 0.3 + fi * 1.7 + params.seed_phase) * 0.04;
+        let dx      = wrapped_delta(uv.x, splat_x);
+        let dy      = uv.y - splat_y;
+        let d2      = dx * dx + dy * dy;
+        if (d2 > radius * 6.0) { continue; }    // outside ~3σ — skip
+        let w       = exp(-d2 / radius);
+
+        // Rotational direction: 90°-rotated radial. Creates a vortex.
+        let inv_r = 1.0 / max(0.001, sqrt(d2));
+        let tangent = vec2<f32>(-dy * inv_r, dx * inv_r);
+
+        // Alternate spin direction for adjacent splats so adjacent eddies
+        // don't fight each other — they shed off into a counter-rotating
+        // vortex-street pattern.
+        let spin = select(-1.0, 1.0, (i % 2u) == 0u);
+        vel = vel + tangent * spin * params.forcing_strength * params.forcing_rate * w * params.dt;
+    }
+
+    // Zonal-jet restoring torque (kept; tune via jet_force).
     let lat        = uv.y * 2.0 - 1.0;
     let jet_target = vec2<f32>(sin(lat * 5.0) * 0.35, 0.0);
     vel = mix(vel, jet_target, params.jet_force * params.dt);
-
-    // Continuous equatorial forcing band — gaussian-weighted, per-cell
-    // stable random direction.
-    let sigma   = max(0.02, params.forcing_width);
-    let band    = exp(-(lat * lat) / (2.0 * sigma * sigma));
-    let seed    = fract(sin(f32(gid.x) * 12.345
-                          + f32(gid.y) * 78.901
-                          + params.seed_phase) * 43758.5453);
-    let angle   = seed * 6.2831;
-    let dir     = vec2<f32>(cos(angle), sin(angle));
-    let flux    = params.forcing_rate * params.dt * band;
-    vel = vel + dir * params.forcing_strength * flux;
 
     textureStore(dst, vec2<i32>(gid.xy), vec4<f32>(vel, 0.0, 0.0));
 }
@@ -254,7 +293,9 @@ fn cs_pressure_project(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// KERNEL 8: ADVECT TRACER — backwards-advect dye using FINAL velocity
+// KERNEL 8: ADVECT TRACER — backwards-advect dye using FINAL velocity,
+//                          then add dye splats at the same N equator
+//                          positions as the velocity forcing.
 //   src_a = tracer (previous)
 //   src_b = velocity (post pressure projection)
 //   dst   = tracer (new)
@@ -265,17 +306,23 @@ fn cs_advect_tracer(@builtin(global_invocation_id) gid: vec3<u32>) {
     let v_here = load_b_clamped(vec2<i32>(gid.xy)).xy;
     let prev_uv = uv - v_here * params.dt * params.advect_mul;
 
-    // Manual bilinear of tracer (src_a, .x) with wrap. Can't reuse bilinear_a
-    // since it operates on src_a — but src_a here IS the tracer, so it works.
-    let v = bilinear_a(prev_uv).x;
-    var tracer = v * (1.0 - clamp(params.tracer_decay * params.dt, 0.0, 1.0));
+    let advected = bilinear_a(prev_uv).x;
+    var tracer = advected * (1.0 - clamp(params.tracer_decay * params.dt, 0.0, 1.0));
 
-    // Source term in the equatorial band — same shape as velocity forcing
-    // so the dye accumulates where the velocity is most actively perturbed.
-    let lat   = uv.y * 2.0 - 1.0;
-    let sigma = max(0.02, params.forcing_width);
-    let band  = exp(-(lat * lat) / (2.0 * sigma * sigma));
-    tracer = tracer + params.tracer_source * params.forcing_rate * params.dt * band;
+    // ── Dye splats — same N orbiting equator positions as cs_add_forces ──
+    let radius = max(0.0001, params.forcing_width);
+    let drift  = params.time * 0.05 + params.seed_phase;
+    for (var i = 0u; i < SPLAT_COUNT; i = i + 1u) {
+        let fi      = f32(i);
+        let splat_x = fract(fi / f32(SPLAT_COUNT) + drift);
+        let splat_y = 0.5 + sin(params.time * 0.3 + fi * 1.7 + params.seed_phase) * 0.04;
+        let dx      = wrapped_delta(uv.x, splat_x);
+        let dy      = uv.y - splat_y;
+        let d2      = dx * dx + dy * dy;
+        if (d2 > radius * 6.0) { continue; }
+        let w = exp(-d2 / radius);
+        tracer = tracer + params.tracer_source * params.forcing_rate * w * params.dt;
+    }
 
     textureStore(dst, vec2<i32>(gid.xy), vec4<f32>(clamp(tracer, 0.0, 4.0), 0.0, 0.0, 0.0));
 }

@@ -298,14 +298,14 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sGas, 'forcing rate', world, 'gasGiantForcingRate', 0, 4, 0.01,
             'Global rate multiplier on the equatorial forcing band. Multiplies both velocity perturbation and tracer source. 0 = no forcing (field decays to zero); high = strong continuous injection.',
             { factory: fw.gasGiantForcingRate });
-        row(sGas, 'forcing strength', world, 'gasGiantForcingStrength', 0, 2, 0.01,
-            'Velocity perturbation magnitude in the band. Combined with forcing rate as: v_kick = strength × rate × dt × band. Random per-cell direction (stable across frames) so the result is turbulent rather than uniform flow.',
+        row(sGas, 'forcing strength', world, 'gasGiantForcingStrength', 0, 60, 0.1,
+            'Per-splat velocity force magnitude. Each of 8 equator splats injects a rotational push of this magnitude × forcing_rate × gaussian_weight × dt. Portfolio reference (SPLAT_FORCE × typical pointer dx) ≈ 12.',
             { factory: fw.gasGiantForcingStrength });
-        row(sGas, 'forcing width', world, 'gasGiantForcingWidth', 0.02, 1.5, 0.005,
-            'Gaussian σ of the equatorial forcing band in UV space. 0.05 = pinpoint equator; 0.30 = broad mid-latitude belt; 1.0 = almost the whole sphere.',
+        row(sGas, 'forcing width', world, 'gasGiantForcingWidth', 0.0005, 0.5, 0.0005,
+            'Splat gaussian radius (the divisor in exp(-d²/radius), matching the portfolio SPLAT_RADIUS convention). Portfolio uses 0.0035. Smaller = tighter splats → finer eddies; larger = broader injection.',
             { factory: fw.gasGiantForcingWidth });
-        row(sGas, 'tracer source', world, 'gasGiantTracerSource', 0, 2, 0.01,
-            'Dye flux into the equatorial band. Combined as: dye_kick = source × rate × dt × band. Higher = brighter visible pattern.',
+        row(sGas, 'tracer source', world, 'gasGiantTracerSource', 0, 10, 0.05,
+            'Per-splat dye amount. Same 8 equator splats inject this amount of dye × forcing_rate × gaussian × dt. The dye then advects with the divergence-free velocity, so eddies in the flow show up as eddies in the visible pattern.',
             { factory: fw.gasGiantTracerSource });
         row(sGas, 'tracer decay', world, 'gasGiantTracerDecay', 0, 4, 0.01,
             'Dye decay per second. Steady-state ≈ tracer_source × forcing_rate / tracer_decay (per band cell). Tune so the steady-state lands in the visible smoothstep range (0.15…0.85).',

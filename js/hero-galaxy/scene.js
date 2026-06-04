@@ -168,21 +168,25 @@ export async function mountScene({ section }) {
         // samples whichever ping-pong texture currently holds the latest
         // state. OFF = sim is frozen at its initial banded condition.
         gasGiantSim:             false,
-        // ── Navier-Stokes-ish sim parameters ──
-        // Standard fluid-dynamics naming so the controls map to physical
-        // concepts: viscosity bleeds velocity; jet_force pulls the field
-        // toward a banded zonal pattern; the equatorial forcing band
-        // continuously injects velocity perturbation + tracer dye.
-        gasGiantViscosity:       0.4,    // velocity damping per second
-        gasGiantJetForce:        0.5,    // zonal-jet restoring torque
-        gasGiantAdvectMul:       1.0,    // backwards-advect step multiplier
-        gasGiantForcingRate:     0.6,    // global forcing rate multiplier
-        gasGiantForcingStrength: 0.5,    // velocity perturbation magnitude in the band
-        gasGiantForcingWidth:    0.30,   // gaussian σ (uv-space) of the equatorial band
-        gasGiantTracerSource:    0.5,    // dye flux into the band
-        gasGiantTracerDecay:     1.0,    // dye decay per second
-        gasGiantVorticityStrength: 18.0, // matches the volumetric-fluid reference
-        gasGiantPressureIters:   20,     // Jacobi pressure iterations per frame
+        // ── Navier-Stokes sim params ──
+        // Defaults match the portfolio fluid demo's splat-and-confine
+        // setup (Volumetric/Atmospheric/Qatar lineage): NO viscosity,
+        // VORTICITY = 18, tight splat radius (= SPLAT_RADIUS), strong
+        // splat force (= SPLAT_FORCE × pointer dx), continuous along the
+        // equator instead of mouse-driven. 8 splats orbit the equator
+        // each frame, alternating spin direction → counter-rotating
+        // vortex street that vorticity confinement amplifies into
+        // persistent eddies.
+        gasGiantViscosity:        0.0,    // no damping (portfolio: VISCOSITY=0)
+        gasGiantJetForce:         0.15,   // soft band restoring
+        gasGiantAdvectMul:        1.0,
+        gasGiantForcingRate:      1.0,
+        gasGiantForcingStrength:  12.0,   // ≈ SPLAT_FORCE × typical pointer dx (~6000×0.002)
+        gasGiantForcingWidth:     0.0035, // exact portfolio SPLAT_RADIUS
+        gasGiantTracerSource:     1.5,
+        gasGiantTracerDecay:      1.2,    // = DYE_DISSIPATION
+        gasGiantVorticityStrength: 18.0,  // exact portfolio VORTICITY
+        gasGiantPressureIters:    20,     // 30 in portfolio; 20 is enough here
         // Particle ring tunables. Apply only to planets without moons (the
         // rings-XOR-moons rule). Distance is LIVE (updated via the orbit
         // module each frame); width / count / brightness are baked into the

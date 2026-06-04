@@ -25,18 +25,22 @@ struct FluidParams {
     time                : f32,
     grid_w              : f32,
     grid_h              : f32,
-    viscosity           : f32,    // velocity damping per second (dissipation factor)
-    jet_force           : f32,    // zonal-jet restoring torque
+    viscosity           : f32,    // velocity damping per second
+    jet_force           : f32,    // mild zonal-jet restoring (kept low; bands now emerge from β)
     advect_mul          : f32,    // backwards-advect step multiplier
-    forcing_rate        : f32,    // global rate multiplier on the equatorial band
-    forcing_strength    : f32,    // velocity perturbation magnitude in the band
-    forcing_width       : f32,    // gaussian σ (uv) of the band
-    tracer_source       : f32,    // dye flux into the band
+    forcing_rate        : f32,    // global rate multiplier
+    forcing_strength    : f32,    // splat velocity force magnitude
+    forcing_width       : f32,    // splat gaussian radius (exp denominator)
+    tracer_source       : f32,    // dye amount per splat
     tracer_decay        : f32,    // dye decay per second
-    vorticity_strength  : f32,    // how aggressively curl is amplified
-    seed_phase          : f32,    // per-planet phase offset
+    vorticity_strength  : f32,    // vorticity-confinement strength (portfolio = 18)
+    seed_phase          : f32,    // per-planet phase
+    coriolis_f0         : f32,    // baseline rotation rate
+    coriolis_beta       : f32,    // β = df/dy — sets jet count via Rhines scale
+    splat_count         : f32,    // number of convective splats distributed in lat/lon
+    splat_lifetime      : f32,    // seconds each splat persists before randomizing
+    equator_force       : f32,    // prograde-equator forcing (Jupiter super-rotation fake)
     _pad0               : f32,
-    _pad1               : f32,
 };
 
 @group(0) @binding(0) var<uniform> params : FluidParams;
@@ -114,31 +118,29 @@ fn cs_advect_vel(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// KERNEL 2: ADD FORCES — N orbiting splats along the equator (the
-//   "portfolio fluid demo click logic, but continuous in the equator")
+// KERNEL 2: ADD FORCES
+//   Adds (in order): β-plane Coriolis rotation · prograde equator forcing
+//   · N distributed convective splats with finite lifetime · soft jet
+//   restoring torque.
 //
-//   src_a = velocity
-//   dst   = forced velocity
+//   This is the post-research physics-correct version — band structure
+//   emerges from the β-effect organizing distributed convection into
+//   zonal jets via Rossby-wave breaking (Tan & Showman 2019, Yoden &
+//   Yamada 1993, Heimpel & Aurnou 2007 Icarus). NOT from explicit jet
+//   targets, NOT from equator-only forcing.
 //
-// Each splat is the portfolio's exact gaussian formula:
-//   splat = exp(-dot(Δuv, Δuv) / radius) × color
-// where radius = forcing_width (typically very small, ~0.003), and color
-// is a velocity vector. We apply N=8 splats whose centres orbit slowly
-// along the equator, each pushing fluid in a rotational direction
-// (tangent to the radial vector from the splat centre) so the splats
-// inject curl, not bulk flow. Vorticity confinement then amplifies that
-// curl into persistent eddies.
-//
-// The zonal-jet restoring torque from the old shader stays, but at low
-// default `jet_force` so it doesn't drown out the splat-driven dynamics.
+//   src_a = velocity   dst = forced velocity
 
-const SPLAT_COUNT : u32 = 8u;
+const MAX_SPLATS : u32 = 32u;
 
 fn wrapped_delta(a: f32, b: f32) -> f32 {
-    // Periodic distance on [0,1] — picks the shorter of (a-b) or (a-b±1).
     var d = a - b;
     d = d - round(d);
     return d;
+}
+
+fn rand1(seed: f32) -> f32 {
+    return fract(sin(seed * 12.9898) * 43758.5453);
 }
 
 @compute @workgroup_size(8, 8)
@@ -147,36 +149,77 @@ fn cs_add_forces(@builtin(global_invocation_id) gid: vec3<u32>) {
     let uv  = cell_uv(gid.xy);
     var vel = load_a_clamped(vec2<i32>(gid.xy)).xy;
 
-    // ── Splat loop ──
-    // N splats evenly spaced along the equator, all rotating slowly with
-    // time. Each splat lat oscillates ±0.04 around the equator for visual
-    // life. Each adds a rotational (curl-injecting) velocity push.
-    let radius = max(0.0001, params.forcing_width);
-    let drift  = params.time * 0.05 + params.seed_phase;
-    for (var i = 0u; i < SPLAT_COUNT; i = i + 1u) {
-        let fi      = f32(i);
-        let splat_x = fract(fi / f32(SPLAT_COUNT) + drift);
-        let splat_y = 0.5 + sin(params.time * 0.3 + fi * 1.7 + params.seed_phase) * 0.04;
-        let dx      = wrapped_delta(uv.x, splat_x);
-        let dy      = uv.y - splat_y;
-        let d2      = dx * dx + dy * dy;
-        if (d2 > radius * 6.0) { continue; }    // outside ~3σ — skip
-        let w       = exp(-d2 / radius);
+    // ── β-plane Coriolis ──
+    // f(y) = f0 + β · sin(latitude). Latitude maps uv.y ∈ [0,1] to
+    // [−π/2, +π/2] (south pole to north pole). f is positive in the
+    // northern hemisphere, negative in the southern. The Coriolis term
+    // dv/dt = −f ẑ × v rotates velocity clockwise (in N) / counter-
+    // clockwise (in S) per timestep — this is what breaks the latitudinal
+    // symmetry and channels the inverse cascade into zonal jets.
+    let lat   = (uv.y - 0.5) * 3.14159;
+    let f_cor = params.coriolis_f0 + params.coriolis_beta * sin(lat);
+    let ang   = f_cor * params.dt;
+    let c     = cos(ang);
+    let s     = sin(ang);
+    vel = vec2<f32>(vel.x * c + vel.y * s, -vel.x * s + vel.y * c);
 
-        // Rotational direction: 90°-rotated radial. Creates a vortex.
-        let inv_r = 1.0 / max(0.001, sqrt(d2));
+    // ── Prograde-equator force (Jupiter super-rotation fake) ──
+    // Warneford & Dellar 2014 / Scott & Polvani 2008: pure Rayleigh
+    // friction in shallow-water gives the WRONG (retrograde) equator
+    // direction; you need Newtonian thickness relaxation to get
+    // super-rotation. We're 2D-incompressible so we fake it: a gaussian
+    // eastward push centered on the equator.
+    let eq_band = exp(-(lat * lat) / 0.10);   // σ ≈ 0.22 rad ≈ ±13°
+    vel.x = vel.x + params.equator_force * eq_band * params.dt;
+
+    // ── Distributed convective splats ──
+    // N splats at random (lat, lon), each persisting for splat_lifetime
+    // seconds before its position is re-randomized. Distributed AT ALL
+    // LATITUDES (not equator-only) — this is what real gas-giant
+    // convection looks like, and the β-effect organizes it into bands.
+    // Each splat adds curl (rotational push), alternating spin per index.
+    let n        = u32(clamp(params.splat_count, 1.0, f32(MAX_SPLATS)));
+    let lifetime = max(0.5, params.splat_lifetime);
+    let epoch    = floor(params.time / lifetime);
+    let radius   = max(1e-5, params.forcing_width);
+
+    for (var i = 0u; i < MAX_SPLATS; i = i + 1u) {
+        if (i >= n) { break; }
+        let fi = f32(i);
+        // Pseudo-random (lat, lon) drawn from (i, epoch, seed_phase).
+        // Stays fixed across the entire lifetime, then jumps.
+        let h1 = rand1(fi * 1.31 + epoch * 7.71  + params.seed_phase);
+        let h2 = rand1(fi * 4.77 + epoch * 13.31 + params.seed_phase * 1.7);
+        let splat_x = h1;
+        // Bias lat toward mid-latitudes (avoid polar caps), using
+        // (1 - (2x-1)²)^p shaping so splats cluster around lat 0.5.
+        let raw_y   = h2;
+        let centered = (raw_y - 0.5) * 1.8;
+        let splat_y = 0.5 + centered;
+
+        let dx = wrapped_delta(uv.x, splat_x);
+        let dy = uv.y - splat_y;
+        let d2 = dx * dx + dy * dy;
+        if (d2 > radius * 8.0) { continue; }
+        let w = exp(-d2 / radius);
+
+        // Tangent (curl) direction with alternating spin.
+        let inv_r   = 1.0 / max(0.001, sqrt(d2));
         let tangent = vec2<f32>(-dy * inv_r, dx * inv_r);
+        let spin    = select(-1.0, 1.0, (i % 2u) == 0u);
 
-        // Alternate spin direction for adjacent splats so adjacent eddies
-        // don't fight each other — they shed off into a counter-rotating
-        // vortex-street pattern.
-        let spin = select(-1.0, 1.0, (i % 2u) == 0u);
-        vel = vel + tangent * spin * params.forcing_strength * params.forcing_rate * w * params.dt;
+        // Lifetime envelope: fade in 15%, plateau, fade out 15% — so
+        // splats appear and dissolve smoothly instead of popping.
+        let t_in = fract(params.time / lifetime);
+        let env  = smoothstep(0.0, 0.15, t_in) * (1.0 - smoothstep(0.85, 1.0, t_in));
+
+        vel = vel + tangent * spin * params.forcing_strength * params.forcing_rate
+              * w * env * params.dt;
     }
 
-    // Zonal-jet restoring torque (kept; tune via jet_force).
-    let lat        = uv.y * 2.0 - 1.0;
-    let jet_target = vec2<f32>(sin(lat * 5.0) * 0.35, 0.0);
+    // ── Soft jet restoring (optional) ──
+    let lat_norm   = (uv.y - 0.5) * 2.0;
+    let jet_target = vec2<f32>(sin(lat_norm * 5.0) * 0.05, 0.0);
     vel = mix(vel, jet_target, params.jet_force * params.dt);
 
     textureStore(dst, vec2<i32>(gid.xy), vec4<f32>(vel, 0.0, 0.0));
@@ -309,19 +352,35 @@ fn cs_advect_tracer(@builtin(global_invocation_id) gid: vec3<u32>) {
     let advected = bilinear_a(prev_uv).x;
     var tracer = advected * (1.0 - clamp(params.tracer_decay * params.dt, 0.0, 1.0));
 
-    // ── Dye splats — same N orbiting equator positions as cs_add_forces ──
-    let radius = max(0.0001, params.forcing_width);
-    let drift  = params.time * 0.05 + params.seed_phase;
-    for (var i = 0u; i < SPLAT_COUNT; i = i + 1u) {
-        let fi      = f32(i);
-        let splat_x = fract(fi / f32(SPLAT_COUNT) + drift);
-        let splat_y = 0.5 + sin(params.time * 0.3 + fi * 1.7 + params.seed_phase) * 0.04;
-        let dx      = wrapped_delta(uv.x, splat_x);
-        let dy      = uv.y - splat_y;
-        let d2      = dx * dx + dy * dy;
-        if (d2 > radius * 6.0) { continue; }
+    // ── Dye splats — mirror cs_add_forces exactly (same RNG seeds, same
+    //    epoch, same lifetime envelope) so velocity injection and dye
+    //    injection happen at the SAME positions. The dye then advects
+    //    with the divergence-free velocity, so eddies in the flow
+    //    show up as eddies in the visible pattern.
+    let n        = u32(clamp(params.splat_count, 1.0, f32(MAX_SPLATS)));
+    let lifetime = max(0.5, params.splat_lifetime);
+    let epoch    = floor(params.time / lifetime);
+    let radius   = max(1e-5, params.forcing_width);
+
+    for (var i = 0u; i < MAX_SPLATS; i = i + 1u) {
+        if (i >= n) { break; }
+        let fi = f32(i);
+        let h1 = rand1(fi * 1.31 + epoch * 7.71  + params.seed_phase);
+        let h2 = rand1(fi * 4.77 + epoch * 13.31 + params.seed_phase * 1.7);
+        let splat_x = h1;
+        let centered = (h2 - 0.5) * 1.8;
+        let splat_y = 0.5 + centered;
+
+        let dx = wrapped_delta(uv.x, splat_x);
+        let dy = uv.y - splat_y;
+        let d2 = dx * dx + dy * dy;
+        if (d2 > radius * 8.0) { continue; }
         let w = exp(-d2 / radius);
-        tracer = tracer + params.tracer_source * params.forcing_rate * w * params.dt;
+
+        let t_in = fract(params.time / lifetime);
+        let env  = smoothstep(0.0, 0.15, t_in) * (1.0 - smoothstep(0.85, 1.0, t_in));
+
+        tracer = tracer + params.tracer_source * params.forcing_rate * w * env * params.dt;
     }
 
     textureStore(dst, vec2<i32>(gid.xy), vec4<f32>(clamp(tracer, 0.0, 4.0), 0.0, 0.0, 0.0));

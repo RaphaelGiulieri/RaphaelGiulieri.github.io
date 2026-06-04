@@ -316,6 +316,21 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sGas, 'pressure iters', world, 'gasGiantPressureIters', 0, 50, 1,
             'Number of Jacobi iterations per frame for the pressure Poisson solve. The reference uses 30. Higher = better incompressibility (eddies sustain longer) but more compute cost per frame.',
             { fromUI: (v) => v | 0, factory: fw.gasGiantPressureIters });
+        row(sGas, 'coriolis β', world, 'gasGiantCoriolisBeta', 0, 6, 0.05,
+            'β-plane Coriolis. f(y) = f₀ + β·sin(lat). β controls jet count via the Rhines scale L_R = π√(U/β). 0.5 ≈ 3 bands (Neptune); 1.2 ≈ 6 (Saturn); 3.5 ≈ 16 (Jupiter cloud bands). This is THE physics that makes bands emerge.',
+            { factory: fw.gasGiantCoriolisBeta });
+        row(sGas, 'coriolis f₀', world, 'gasGiantCoriolisF0', -2, 2, 0.01,
+            'Baseline rotation rate (independent of latitude). 0 = symmetric β-plane (jets centered on equator); nonzero = shifts the zonal pattern N or S.',
+            { factory: fw.gasGiantCoriolisF0 });
+        row(sGas, 'splat count', world, 'gasGiantSplatCount', 1, 32, 1,
+            'Number of distributed convective splats. They appear at random (lat, lon), persist for `splat lifetime`, then jump to new positions. Real gas-giant convection happens AT ALL LATITUDES — these splats provide the small-scale energy injection that β organizes into bands.',
+            { fromUI: (v) => v | 0, factory: fw.gasGiantSplatCount });
+        row(sGas, 'splat lifetime', world, 'gasGiantSplatLifetime', 0.5, 30, 0.1,
+            'Seconds each splat persists at its position before re-randomizing. Longer = slower scene change. The lifetime envelope fades in/out so splats appear and dissolve smoothly.',
+            { factory: fw.gasGiantSplatLifetime });
+        row(sGas, 'equator force', world, 'gasGiantEquatorForce', -0.3, 0.3, 0.005,
+            'Prograde-equator velocity force. Pure 2D NS in shallow-water Jovian regime gives retrograde equator (Warneford-Dellar 2014); we fake Jupiter\'s super-rotating equator with a small eastward push centered on lat 0. Positive = Jupiter-style, negative = Neptune-style retrograde.',
+            { factory: fw.gasGiantEquatorForce });
 
         // ── Particle rings ──────────────────────────────────────────────
         const sRing = section('Particle rings');

@@ -168,25 +168,40 @@ export async function mountScene({ section }) {
         // samples whichever ping-pong texture currently holds the latest
         // state. OFF = sim is frozen at its initial banded condition.
         gasGiantSim:             false,
-        // ── Navier-Stokes sim params ──
-        // Defaults match the portfolio fluid demo's splat-and-confine
-        // setup (Volumetric/Atmospheric/Qatar lineage): NO viscosity,
-        // VORTICITY = 18, tight splat radius (= SPLAT_RADIUS), strong
-        // splat force (= SPLAT_FORCE × pointer dx), continuous along the
-        // equator instead of mouse-driven. 8 splats orbit the equator
-        // each frame, alternating spin direction → counter-rotating
-        // vortex street that vorticity confinement amplifies into
-        // persistent eddies.
-        gasGiantViscosity:        0.0,    // no damping (portfolio: VISCOSITY=0)
-        gasGiantJetForce:         0.15,   // soft band restoring
-        gasGiantAdvectMul:        1.0,
-        gasGiantForcingRate:      1.0,
-        gasGiantForcingStrength:  12.0,   // ≈ SPLAT_FORCE × typical pointer dx (~6000×0.002)
-        gasGiantForcingWidth:     0.0035, // exact portfolio SPLAT_RADIUS
-        gasGiantTracerSource:     1.5,
-        gasGiantTracerDecay:      1.2,    // = DYE_DISSIPATION
-        gasGiantVorticityStrength: 18.0,  // exact portfolio VORTICITY
-        gasGiantPressureIters:    20,     // 30 in portfolio; 20 is enough here
+        // ── Navier-Stokes sim params, post-research ──
+        // Tuned from the deep-research findings (gas-giant fluid dynamics
+        // workflow wjvwa8bz9): slow wall-clock motion, β-plane Coriolis
+        // for spontaneous jet emergence, distributed convective splats
+        // (NOT equator-only), prograde-equator force for Jupiter-style
+        // super-rotation.
+        //
+        // Sources: Heimpel-Aurnou 2007, Tan-Showman 2019, Yoden-Yamada
+        // 1993, Warneford-Dellar 2014, Wong et al. 2021 (Hubble OPAL).
+        gasGiantViscosity:         0.05,
+        gasGiantJetForce:          0.02,
+        gasGiantAdvectMul:         1.0,
+        gasGiantForcingRate:       1.0,
+        gasGiantForcingStrength:   0.35,    // ~30× slower than v1
+        gasGiantForcingWidth:      0.006,   // ~Rhines-scale vortex size
+        gasGiantTracerSource:      0.45,
+        gasGiantTracerDecay:       0.25,
+        gasGiantVorticityStrength: 14.0,
+        gasGiantPressureIters:     20,
+        // β-plane Coriolis: f(y) = f0 + β·sin(lat). β controls band count
+        // via Rhines scale L_R = π·√(U/β). 0.5 ≈ 3 bands (Neptune), 1.2 ≈ 6
+        // (Saturn), 3.5 ≈ ~16 (Jupiter cloud bands).
+        gasGiantCoriolisF0:        0.0,
+        gasGiantCoriolisBeta:      1.2,
+        // Distributed splats — N splats at random (lat, lon), each
+        // persisting for `splat_lifetime` seconds. Bias toward
+        // mid-latitudes (convection clusters off-equator).
+        gasGiantSplatCount:        16,
+        gasGiantSplatLifetime:     6.0,
+        // Prograde equator force — fakes Jupiter's super-rotating equator
+        // (Warneford-Dellar 2014 show pure Rayleigh friction gives the
+        // wrong sign; you need Newtonian thickness relaxation or a forced
+        // term to get prograde).
+        gasGiantEquatorForce:      0.04,
         // Particle ring tunables. Apply only to planets without moons (the
         // rings-XOR-moons rule). Distance is LIVE (updated via the orbit
         // module each frame); width / count / brightness are baked into the
@@ -1114,6 +1129,11 @@ export async function mountScene({ section }) {
                         tracer_source:      world.gasGiantTracerSource,
                         tracer_decay:       world.gasGiantTracerDecay,
                         vorticity_strength: world.gasGiantVorticityStrength,
+                        coriolis_f0:        world.gasGiantCoriolisF0,
+                        coriolis_beta:      world.gasGiantCoriolisBeta,
+                        splat_count:        world.gasGiantSplatCount,
+                        splat_lifetime:     world.gasGiantSplatLifetime,
+                        equator_force:      world.gasGiantEquatorForce,
                     });
                 }
                 const cpass = enc.beginComputePass({ label: 'fluid-sim multi-pass tick' });

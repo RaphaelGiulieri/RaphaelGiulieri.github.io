@@ -140,7 +140,7 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
 
     const paramBuf = device.createBuffer({
         label: 'fluid params',
-        size: 64,   // 16 f32 fields = 64 bytes; matches WGSL FluidParams
+        size: 80,   // 20 f32 fields = 80 bytes; matches WGSL FluidParams
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -169,22 +169,34 @@ export function createPlanetSim(device, sim, seedOffset = 0) {
     };
 }
 
-const _params = new Float32Array(16);
+const _params = new Float32Array(20);   // matches WGSL FluidParams (20 f32)
 
-// Writes the FluidParams UBO. Defaults match the portfolio fluid demo's
-// splat-and-confine setup: NO viscosity, VORTICITY = 18, very tight
-// forcing radius (0.0035), strong force (matches the portfolio's
-// SPLAT_FORCE × dx scale). Layout MUST match WGSL FluidParams exactly.
+// Writes the FluidParams UBO. Defaults are tuned from the deep-research
+// findings (Heimpel-Aurnou 2007, Tan-Showman 2019, Yoden-Yamada 1993,
+// Warneford-Dellar 2014, Wong et al. 2021):
+//   • Slow wall-clock motion — dye should drift ~1 band per 5–15 sec
+//   • β-plane Coriolis breaks N-S symmetry → zonal jets emerge
+//   • Distributed forcing (all latitudes) → convective splats with
+//     finite lifetime, organized into bands by β
+//   • Prograde equator force fakes Jupiter super-rotation
+//   • Vortices end up between jets via Rossby-wave / PV-staircase
+//
+// Layout MUST match WGSL FluidParams exactly (20 f32 fields).
 export function writeSimParams(device, state, dt, time, opts = {}) {
-    const viscosity          = opts.viscosity          ?? 0.0;       // portfolio: NO viscosity
-    const jet_force          = opts.jet_force          ?? 0.15;      // soft band restoring (portfolio has none)
+    const viscosity          = opts.viscosity          ?? 0.05;       // gentle damping
+    const jet_force          = opts.jet_force          ?? 0.02;       // very weak (β does the work)
     const advect_mul         = opts.advect_mul         ?? 1.0;
     const forcing_rate       = opts.forcing_rate       ?? 1.0;
-    const forcing_strength   = opts.forcing_strength   ?? 12.0;      // ~ portfolio SPLAT_FORCE × typical pointer dx
-    const forcing_width      = opts.forcing_width      ?? 0.0035;    // exact portfolio SPLAT_RADIUS
-    const tracer_source      = opts.tracer_source      ?? 1.5;       // visible dye injection
-    const tracer_decay       = opts.tracer_decay       ?? 1.2;       // portfolio DYE_DISSIPATION
-    const vorticity_strength = opts.vorticity_strength ?? 18.0;      // portfolio VORTICITY exact
+    const forcing_strength   = opts.forcing_strength   ?? 0.35;       // ~30× slower than v1
+    const forcing_width      = opts.forcing_width      ?? 0.006;      // ~Rhines-scale vortex size
+    const tracer_source      = opts.tracer_source      ?? 0.45;
+    const tracer_decay       = opts.tracer_decay       ?? 0.25;       // slow decay — dye persists
+    const vorticity_strength = opts.vorticity_strength ?? 14.0;       // confines forming eddies
+    const coriolis_f0        = opts.coriolis_f0        ?? 0.0;        // baseline rotation (0 = symmetric)
+    const coriolis_beta      = opts.coriolis_beta      ?? 1.2;        // ~6 bands (Saturn-like)
+    const splat_count        = opts.splat_count        ?? 16;
+    const splat_lifetime     = opts.splat_lifetime     ?? 6.0;        // sec — long lifetime = slow scene
+    const equator_force      = opts.equator_force      ?? 0.04;       // prograde Jupiter-style equator
     _params[0]  = Math.min(0.05, dt);
     _params[1]  = time;
     _params[2]  = GRID_W;
@@ -199,8 +211,12 @@ export function writeSimParams(device, state, dt, time, opts = {}) {
     _params[11] = tracer_decay;
     _params[12] = vorticity_strength;
     _params[13] = state.seedPhase;
-    _params[14] = 0;
-    _params[15] = 0;
+    _params[14] = coriolis_f0;
+    _params[15] = coriolis_beta;
+    _params[16] = splat_count;
+    _params[17] = splat_lifetime;
+    _params[18] = equator_force;
+    _params[19] = 0;
     device.queue.writeBuffer(state.paramBuf, 0, _params);
 }
 

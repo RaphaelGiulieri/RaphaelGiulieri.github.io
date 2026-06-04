@@ -94,6 +94,26 @@ export async function mountScene({ section }) {
         planetSpinRate: 0.2,   // rad/sec planet self-rotation factor
         idleSeconds:    4,     // seconds before auto-orbit kicks in
     };
+    // Body spread + camera distances — multipliers on top of the JSON values
+    // so the dev panel can tune the whole scene's scale without re-baking data.
+    const world = {
+        galaxySpread:      1.0,   // multiplier on star positions from origin
+        planetOrbitSpread: 1.0,   // multiplier on planet orbit radii
+        moonOrbitSpread:   1.0,   // multiplier on moon orbit radii
+        starSize:          1.0,
+        planetSize:        1.0,
+        moonSize:          1.0,
+        haloScale:         2.4,
+        camDistGalaxy:     140,
+        camDistSystem:     32,
+        camDistPlanet:     6,
+        // Label positioning — see CSS --gap and the per-kind silhouette
+        // multipliers used in the per-frame projection.
+        labelGapPx:        6,
+        labelMultStar:     1.2,   // multiplier of star's body radius (no halo math)
+        labelMultPlanet:   1.0,
+        labelMultMoon:     1.0,
+    };
 
     const ico = makeIcosphere(5);
     const vbuf = device.createBuffer({ size: ico.vertexData.byteLength, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
@@ -126,9 +146,8 @@ export async function mountScene({ section }) {
     const { pipeline: moonPipeline } = await getMeshPipeline(device, format, 'default-moon.wgsl');
     const { pipeline: starHaloPipeline } = await getMeshPipeline(device, format, 'star-halo.wgsl', { alphaBlend: true });
     // Halo bodies share the star's accent + UBO data but are drawn at a larger
-    // scale on a separate pass. We re-use the same body UBOs and just multiply
-    // scale in the model matrix at draw time.
-    const HALO_SCALE = 2.4;
+    // scale on a separate pass. The multiplier lives in `world.haloScale` so
+    // the dev panel can tune the bloom-disc size live.
 
     // Mount the starfield (on its own canvas, its own GPUDevice). Mobile gets
     // a smaller count for budget; matched to spec § 5.3.
@@ -224,6 +243,10 @@ export async function mountScene({ section }) {
         star.accent[1] = sys.sunTint[1];
         star.accent[2] = sys.sunTint[2];
         star.accent[3] = 1.0;
+        // Cache the original position from JSON; the frame loop multiplies by
+        // world.galaxySpread so the dev panel can re-space the galaxy live.
+        star._origPos = [sys.galaxyPosition[0], sys.galaxyPosition[1], sys.galaxyPosition[2]];
+        star._origScale = star.scale;
         star.worldPos[0] = sys.galaxyPosition[0];
         star.worldPos[1] = sys.galaxyPosition[1];
         star.worldPos[2] = sys.galaxyPosition[2];
@@ -244,11 +267,15 @@ export async function mountScene({ section }) {
             const planetBody = createBody(device, bodyBGL, {
                 ...bodyDescFromPlanet(p, sys), label: `planet ${p.id}`,
             });
+            planetBody._origScale  = planetBody.scale;
+            planetBody._origOrbitR = p.orbit?.radius ?? 0;
             planets.push({ body: planetBody, star });
             for (const m of p.moons || []) {
                 const moonBody = createBody(device, bodyBGL, {
                     ...bodyDescFromMoon(m, p, sys), label: `moon ${m.projectId}`,
                 });
+                moonBody._origScale  = moonBody.scale;
+                moonBody._origOrbitR = m.orbit?.radius ?? 0;
                 moons.push({ body: moonBody, planet: planetBody });
             }
         }
@@ -307,18 +334,18 @@ export async function mountScene({ section }) {
     function applyStateCamera() {
         if (state.level === 'galaxy') {
             camera.target.set([0, 0, 0]);
-            camera.distance = 140;
+            camera.distance = world.camDistGalaxy;
         } else if (state.level === 'system') {
             const star = stars.find(s => s.id === state.focusedSystemId);
             if (star) {
                 camera.target.set(star.worldPos);
-                camera.distance = 32;
+                camera.distance = world.camDistSystem;
             }
         } else if (state.level === 'planet') {
             const planetBody = planets.find(p => p.body.id === state.focusedPlanetId)?.body;
             if (planetBody) {
                 camera.target.set(planetBody.worldPos);
-                camera.distance = 6;
+                camera.distance = world.camDistPlanet;
             }
         }
         applyOrbitDelta(camera, 0, 0);
@@ -491,22 +518,34 @@ export async function mountScene({ section }) {
             applyOrbitDelta(camera, ambient.galaxySpinRate * (Math.PI / 180) * dt, 0);
         }
 
-        // Update planet positions (orbit around their sun)
+        // Stars: apply the galaxy-spread multiplier to the cached JSON pos.
+        for (const star of stars) {
+            star.worldPos[0] = star._origPos[0] * world.galaxySpread;
+            star.worldPos[1] = star._origPos[1] * world.galaxySpread;
+            star.worldPos[2] = star._origPos[2] * world.galaxySpread;
+            star.scale = star._origScale * world.starSize;
+        }
+        // Planets: orbit around their star with the planet-orbit-spread multiplier.
         for (const { body, star } of planets) {
             const o = body.orbit; if (!o) continue;
+            const r = body._origOrbitR * world.planetOrbitSpread;
             const a = (t * (2 * Math.PI / o.period)) + (o.phase || 0);
             const tilt = (o.tilt || 0) * Math.PI / 180;
-            body.worldPos[0] = star.worldPos[0] + Math.cos(a) * o.radius;
-            body.worldPos[1] = star.worldPos[1] + Math.sin(tilt) * o.radius * 0.15;
-            body.worldPos[2] = star.worldPos[2] + Math.sin(a) * o.radius * Math.cos(tilt);
+            body.worldPos[0] = star.worldPos[0] + Math.cos(a) * r;
+            body.worldPos[1] = star.worldPos[1] + Math.sin(tilt) * r * 0.15;
+            body.worldPos[2] = star.worldPos[2] + Math.sin(a) * r * Math.cos(tilt);
+            body.scale = body._origScale * world.planetSize;
         }
+        // Moons: orbit around their planet with the moon-orbit-spread multiplier.
         for (const { body, planet } of moons) {
             const o = body.orbit; if (!o) continue;
+            const r = body._origOrbitR * world.moonOrbitSpread;
             const a = (t * (2 * Math.PI / o.period)) + (o.phase || 0);
             const tilt = (o.tilt || 0) * Math.PI / 180;
-            body.worldPos[0] = planet.worldPos[0] + Math.cos(a) * o.radius;
-            body.worldPos[1] = planet.worldPos[1] + Math.sin(tilt) * o.radius * 0.2;
-            body.worldPos[2] = planet.worldPos[2] + Math.sin(a) * o.radius * Math.cos(tilt);
+            body.worldPos[0] = planet.worldPos[0] + Math.cos(a) * r;
+            body.worldPos[1] = planet.worldPos[1] + Math.sin(tilt) * r * 0.2;
+            body.worldPos[2] = planet.worldPos[2] + Math.sin(a) * r * Math.cos(tilt);
+            body.scale = body._origScale * world.moonSize;
         }
 
         // Ring orbit centres track their planet's current world position
@@ -537,7 +576,7 @@ export async function mountScene({ section }) {
         camArr.set([camera.eye[0], camera.eye[1], camera.eye[2], 0], 32);
         device.queue.writeBuffer(camUbo, 0, camArr);
 
-        // Stars UBOs (one for the body, one for its alpha-blended halo at HALO_SCALE)
+        // Stars UBOs (one for the body, one for its alpha-blended halo at world.haloScale)
         for (const s of visibleStars()) {
             const M = new Float32Array(16);
             mat4Identity(M);
@@ -549,14 +588,14 @@ export async function mountScene({ section }) {
             // avoid a temporary star_halo body object.
             const Mh = new Float32Array(16);
             mat4Identity(Mh);
-            const sch = s.scale * HALO_SCALE;
+            const sch = s.scale * world.haloScale;
             Mh[0] = sch; Mh[5] = sch; Mh[10] = sch;
             Mh[12] = s.worldPos[0]; Mh[13] = s.worldPos[1]; Mh[14] = s.worldPos[2];
             const arr = new Float32Array(32);
             arr.set(Mh, 0);
             arr.set(s.accent, 16);
             arr[20] = t;
-            arr[21] = s.radiusWorld * HALO_SCALE;
+            arr[21] = s.radiusWorld * world.haloScale;
             arr[22] = 0;
             arr[23] = s.hoverT;
             device.queue.writeBuffer(s.haloBuf, 0, arr);
@@ -592,6 +631,9 @@ export async function mountScene({ section }) {
         // — system view shows the focal system's sun + planets
         // — planet view shows the focal planet + its moons
         if (labelsRoot) {
+            // CSS reads --gap from the labels container so we set it once per
+            // frame; individual labels inherit it through the cascade.
+            labelsRoot.style.setProperty('--gap', world.labelGapPx + 'px');
             mat4Multiply(camera.proj, camera.view, _vp);
             const rect = canvas.getBoundingClientRect();
             const sectionRect = section.getBoundingClientRect();
@@ -626,8 +668,21 @@ export async function mountScene({ section }) {
                 if (ndcX < -1.05 || ndcX > 1.05 || ndcY < -1.05 || ndcY > 1.05) { el.classList.remove('is-visible'); continue; }
                 const px = offX + (ndcX * 0.5 + 0.5) * w;
                 const py = offY + (-ndcY * 0.5 + 0.5) * h;
+                // Project a per-kind silhouette radius onto the screen so the
+                // label sits above the visible body. Multipliers are tunable
+                // via the dev panel (labelMultStar / labelMultPlanet /
+                // labelMultMoon) so e.g. stars can clear their halo or not.
+                const dx = wp[0] - camera.eye[0];
+                const dy = wp[1] - camera.eye[1];
+                const dz = wp[2] - camera.eye[2];
+                const eyeDist = Math.max(0.01, Math.hypot(dx, dy, dz));
+                const mult = body.kind === 'star'   ? world.labelMultStar
+                           : body.kind === 'planet' ? world.labelMultPlanet
+                           : world.labelMultMoon;
+                const worldRadius = body.radiusWorld * body.scale * mult;
+                const screenRadius = worldRadius * (h * 0.5) / (eyeDist * Math.tan(camera.fov * 0.5));
                 el.style.setProperty('--x', px + 'px');
-                el.style.setProperty('--y', py + 'px');
+                el.style.setProperty('--y', (py - screenRadius) + 'px');
                 el.classList.add('is-visible');
             }
         }
@@ -700,7 +755,7 @@ export async function mountScene({ section }) {
         requestAnimationFrame(frame);
     }
     breadcrumb.render(state);
-    if (HERO_GALAXY_DEV_PANEL) setupDevPanel({ postfx, ambient });
+    if (HERO_GALAXY_DEV_PANEL) setupDevPanel({ postfx, ambient, world });
     requestAnimationFrame(frame);
 
     // Expose programmatic navigation for verification + Phase 7 click handlers

@@ -3,7 +3,7 @@
 // frame. To remove for ship: flip HERO_GALAXY_DEV_PANEL to false in
 // js/hero-galaxy/index.js (or delete this file + its call site).
 
-export function setupDevPanel({ postfx, ambient }) {
+export function setupDevPanel({ postfx, ambient, world }) {
     if (!document.getElementById('hero-galaxy-dev-style')) {
         const styleEl = document.createElement('style');
         styleEl.id = 'hero-galaxy-dev-style';
@@ -134,6 +134,59 @@ export function setupDevPanel({ postfx, ambient }) {
     row(sAmbient, 'idle delay s', ambient.idleSeconds, 0, 30, 0.5,
         'How long the visitor must be idle before the galaxy resumes its auto-orbit.',
         (v) => { ambient.idleSeconds = v; });
+
+    // ── Body spread ───────────────────────────────────────────────────────
+    if (world) {
+        const sSpread = section('Spread');
+        row(sSpread, 'galaxy spread',  world.galaxySpread,      0.3, 4, 0.01,
+            'Multiplier on every star\'s distance from origin. >1 spreads systems apart; <1 packs them together.',
+            (v) => { world.galaxySpread = v; });
+        row(sSpread, 'planet orbits',  world.planetOrbitSpread, 0.3, 4, 0.01,
+            'Multiplier on every planet\'s orbital radius around its star.',
+            (v) => { world.planetOrbitSpread = v; });
+        row(sSpread, 'moon orbits',    world.moonOrbitSpread,   0.3, 4, 0.01,
+            'Multiplier on every moon\'s orbital radius around its planet.',
+            (v) => { world.moonOrbitSpread = v; });
+        row(sSpread, 'star size',      world.starSize,          0.3, 4, 0.01,
+            'Multiplier on every star\'s radius.',
+            (v) => { world.starSize = v; });
+        row(sSpread, 'planet size',    world.planetSize,        0.3, 4, 0.01,
+            'Multiplier on every planet\'s radius.',
+            (v) => { world.planetSize = v; });
+        row(sSpread, 'moon size',      world.moonSize,          0.3, 4, 0.01,
+            'Multiplier on every moon\'s radius.',
+            (v) => { world.moonSize = v; });
+        row(sSpread, 'halo scale',     world.haloScale,         1.0, 6, 0.05,
+            'Size of the alpha-blended halo sphere around each star, relative to the star\'s body.',
+            (v) => { world.haloScale = v; });
+
+        // ── Labels ────────────────────────────────────────────────────────
+        const sLabels = section('Labels');
+        row(sLabels, 'gap (px)',       world.labelGapPx,        0, 80, 1,
+            'Pixels between the body\'s projected silhouette and the bottom of the label text.',
+            (v) => { world.labelGapPx = v; });
+        row(sLabels, 'star silhouette',   world.labelMultStar,   0.2, 4, 0.05,
+            'Multiplier on the star\'s body radius when projecting the silhouette for label placement. Higher = label sits further out (clears the halo); lower = label sits tighter.',
+            (v) => { world.labelMultStar = v; });
+        row(sLabels, 'planet silhouette', world.labelMultPlanet, 0.2, 4, 0.05,
+            'Same as the star multiplier but for planets.',
+            (v) => { world.labelMultPlanet = v; });
+        row(sLabels, 'moon silhouette',   world.labelMultMoon,   0.2, 4, 0.05,
+            'Same as the star multiplier but for moons.',
+            (v) => { world.labelMultMoon = v; });
+
+        // ── Camera ───────────────────────────────────────────────────────
+        const sCam = section('Camera distances');
+        row(sCam, 'galaxy dist', world.camDistGalaxy, 40, 400, 1,
+            'Camera target distance when at the galaxy zoom level. Click \'Galaxy\' in the breadcrumb after changing to re-apply.',
+            (v) => { world.camDistGalaxy = v; });
+        row(sCam, 'system dist', world.camDistSystem, 8, 120, 0.5,
+            'Camera target distance at system zoom level. Re-enter a system to re-apply.',
+            (v) => { world.camDistSystem = v; });
+        row(sCam, 'planet dist', world.camDistPlanet, 1.5, 30, 0.1,
+            'Camera target distance at planet zoom level. Re-enter a planet to re-apply.',
+            (v) => { world.camDistPlanet = v; });
+    }
 
     panel.querySelector('[data-act="toggle"]').addEventListener('click', () => {
         const collapsed = panel.classList.toggle('is-collapsed');

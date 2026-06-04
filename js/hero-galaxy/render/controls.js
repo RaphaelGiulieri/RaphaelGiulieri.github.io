@@ -36,9 +36,18 @@ export function wireControls({ canvas, camera, getState, onInput }) {
         canvas.releasePointerCapture?.(e.pointerId ?? 1);
     }
     function onWheel(e) {
+        const stateLevel = getState();
+        const c = ZOOM_CLAMPS[stateLevel] ?? { min: 1, max: 200 };
+        // At galaxy view, when already pinned at the max zoom-out distance
+        // and the wheel direction is "further out", do NOT intercept — let
+        // the browser scroll the page so visitors can reach the sections
+        // below the hero. Any other case (zooming in, or any non-galaxy
+        // state) keeps the wheel for camera control.
+        if (stateLevel === 'galaxy' && e.deltaY > 0 && camera.distance >= c.max - 0.01) {
+            return;
+        }
         e.preventDefault();
         const factor = Math.pow(1.0015, e.deltaY);
-        const c = ZOOM_CLAMPS[getState()] ?? { min: 1, max: 200 };
         applyZoomDelta(camera, factor, c.min, c.max);
         onInput?.();
     }

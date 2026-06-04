@@ -494,7 +494,9 @@ button {
 .hero-galaxy .galaxy-label {
     position: absolute;
     left: 0; top: 0;
-    transform: translate(calc(var(--x, 0px) - 50%), calc(var(--y, 0px) - 100% - 14px));
+    /* --gap controls the pixel offset above the body silhouette; tunable live
+       via the dev panel. */
+    transform: translate(calc(var(--x, 0px) - 50%), calc(var(--y, 0px) - 100% - var(--gap, 6px)));
     font-family: var(--f-mono, monospace);
     font-size: 10px;
     letter-spacing: 0.14em;
@@ -510,15 +512,6 @@ button {
 .hero-galaxy .galaxy-label.is-star    { color: var(--accent, #ff4b1f); font-weight: 600; }
 .hero-galaxy .galaxy-label.is-moon   { font-size: 9px; opacity: 0; }
 .hero-galaxy .galaxy-label.is-moon.is-visible { opacity: 0.85; }
-.hero-galaxy .galaxy-label::before {
-    content: '';
-    position: absolute;
-    left: 50%; bottom: -8px;
-    width: 1px; height: 6px;
-    background: rgba(240, 235, 224, 0.3);
-    transform: translateX(-50%);
-}
-.hero-galaxy .galaxy-label.is-star::before { background: var(--accent, #ff4b1f); }
 /* Fallback content is hidden in live mode (visually + from clicks; kept for SR/SEO) */
 .hero-galaxy .hero-fallback {
     position: absolute;

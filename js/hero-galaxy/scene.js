@@ -93,7 +93,11 @@ export async function mountScene({ section }) {
         canvas, camera, getState: () => state.level,
     });
 
-    // Live-mutable tuning state for the dev panel + render loop.
+    // Live-mutable tuning state for the dev panel + render loop. These
+    // literals are the factory defaults that "reset" restores when there's
+    // no saved snapshot in localStorage. They are baked from the operator's
+    // tuned save so a fresh visitor sees the same scene without needing
+    // their own settings.
     const postfx = {
         enableBloom:    true,
         bloomThreshold: 0.55,
@@ -101,7 +105,7 @@ export async function mountScene({ section }) {
         bloomIntensity: 0.7,
         blurPasses:     2,
         exposure:       1.0,
-        vignette:       0.08,
+        vignette:       0.0,
     };
     const ambient = {
         planetSpinRate: 0.2,   // rad/sec planet self-rotation factor
@@ -124,19 +128,21 @@ export async function mountScene({ section }) {
 
     // Body spread + camera distances — multipliers on top of the JSON values
     // so the dev panel can tune the whole scene's scale without re-baking data.
+    // Factory defaults below are baked from the operator's tuned save; they
+    // are NOT derived from the raw JSON layout anymore.
     const world = {
-        galaxySpread:      1.0,   // multiplier on star positions from origin
+        galaxySpread:      1.76,
         // Per-orbit ranges. Innermost body across all systems sits at *Min,
-        // outermost at *Max; everything in between is lerped proportionally.
-        // Factory defaults reproduce the original JSON layout.
-        planetOrbitMin:    _planetOrigMin,
-        planetOrbitMax:    _planetOrigMax,
-        moonOrbitMin:      _moonOrigMin,
-        moonOrbitMax:      _moonOrigMax,
-        starSize:          1.0,
+        // outermost at *Max; everything in between is lerped proportionally
+        // based on its original JSON position within the global min/max.
+        planetOrbitMin:    24.0,
+        planetOrbitMax:    54.9,
+        moonOrbitMin:      3.6,
+        moonOrbitMax:      8.55,
+        starSize:          1.84,
         planetSize:        1.0,
         moonSize:          1.0,
-        haloScale:         2.4,
+        haloScale:         1.0,
         camDistGalaxy:     140,
         camDistSystem:     32,
         camDistPlanet:     6,
@@ -152,13 +158,13 @@ export async function mountScene({ section }) {
         // additively after the halo pass. Independent of the bloom on
         // distant starfield particles (which is handled by the engine's
         // post-fx on its own canvas).
-        sunBloomRadiusMul: 5.5,   // billboard size = sun radius × this
-        sunBloomIntensity: 1.4,   // brightness of the glow at centre
-        sunBloomFalloff:   2.4,   // gaussian sharpness — higher = tighter
+        sunBloomRadiusMul: 5.5,
+        sunBloomIntensity: 1.4,
+        sunBloomFalloff:   2.4,
         // Label positioning — see CSS --gap and the per-kind silhouette
         // multipliers used in the per-frame projection.
         labelGapPx:        6,
-        labelMultStar:     1.2,   // multiplier of star's body radius (no halo math)
+        labelMultStar:     0.45,
         labelMultPlanet:   1.0,
         labelMultMoon:     1.0,
     };
@@ -230,50 +236,10 @@ export async function mountScene({ section }) {
         }
     }
 
-    // ── Phase 12: per-planet particle rings ──
-    // Disc-mesh rings + bloom are deferred to v2 (see spec § Out of scope and
-    // Task 14.1). Particle rings work today by adding emitters to the
-    // starfield ps and binding the orbit module's centre params to live
-    // planet positions (we update them in the frame loop below).
+    // Particle rings are wired AFTER the body-creation loop below so that
+    // `planets` is fully populated by the time the ring code resolves each
+    // planet entry. See the block after the per-body labels setup.
     const ringOrbits = [];   // [{ planetBody, orbitMod }]
-    if (starPs) {
-        try {
-            const { Emitter, shapes, modules } = await import('../particles/index.js');
-            for (const sys of galaxy.systems) {
-                for (const p of sys.planets) {
-                    const r = p.ring;
-                    if (!r || r.type !== 'particles') continue;
-                    const planetEntry = planets.find(pl => pl.body.id === p.id);
-                    if (!planetEntry) continue;
-                    const body = planetEntry.body;
-                    const meanR = (r.innerRadius + r.outerRadius) / 2;
-                    const thick = r.outerRadius - r.innerRadius;
-                    const tiltRad = (r.tilt || 0) * Math.PI / 180;
-                    const axis = [0, Math.cos(tiltRad), Math.sin(tiltRad)];
-                    const orbitMod = modules.orbit({
-                        center: [body.worldPos[0], body.worldPos[1], body.worldPos[2]],
-                        axis, speed: 0.4, radius: meanR, springK: 8,
-                    });
-                    ringOrbits.push({ planetBody: body, orbitMod });
-                    await starPs.addEmitter(new Emitter({
-                        position: [body.worldPos[0], body.worldPos[1], body.worldPos[2]],
-                        shape: shapes.ring({ radius: meanR, thickness: thick, height: 0.05 }),
-                        rate: 0,
-                        bursts: [{ time: 0, count: isMobile ? Math.floor((r.count || 3000) * 0.4) : (r.count || 3000) }],
-                        initial: {
-                            lifetime: { min: 1e9, max: 1e9 },
-                            speed:    { min: 0, max: 0 },
-                            size:     { min: 0.6, max: 1.4 },
-                            color:    [body.accent[0], body.accent[1], body.accent[2], 1],
-                        },
-                        modules: [orbitMod],
-                    }));
-                }
-            }
-        } catch (e) {
-            console.warn('[hero-galaxy] particle rings setup failed (continuing without rings):', e);
-        }
-    }
 
     // Per-planet pipeline cache. Keys are shader paths; values are built
     // pipelines (or the default-planet pipeline on fetch/compile failure).
@@ -364,6 +330,50 @@ export async function mountScene({ section }) {
                 // without a chain lookup.
                 moons.push({ body: moonBody, planet: planetBody, star });
             }
+        }
+    }
+
+    // ── Per-planet particle rings ──
+    // `planets` is now fully populated, so the ring code can safely resolve
+    // each entry. Adds emitters to the starfield ps + binds the orbit
+    // module's centre params to the live planet position (updated each
+    // frame in the render loop).
+    if (starPs) {
+        try {
+            const { Emitter, shapes, modules } = await import('../particles/index.js');
+            for (const sys of galaxy.systems) {
+                for (const p of sys.planets) {
+                    const r = p.ring;
+                    if (!r || r.type !== 'particles') continue;
+                    const planetEntry = planets.find(pl => pl.body.id === p.id);
+                    if (!planetEntry) continue;
+                    const body = planetEntry.body;
+                    const meanR = (r.innerRadius + r.outerRadius) / 2;
+                    const thick = r.outerRadius - r.innerRadius;
+                    const tiltRad = (r.tilt || 0) * Math.PI / 180;
+                    const axis = [0, Math.cos(tiltRad), Math.sin(tiltRad)];
+                    const orbitMod = modules.orbit({
+                        center: [body.worldPos[0], body.worldPos[1], body.worldPos[2]],
+                        axis, speed: 0.4, radius: meanR, springK: 8,
+                    });
+                    ringOrbits.push({ planetBody: body, orbitMod });
+                    await starPs.addEmitter(new Emitter({
+                        position: [body.worldPos[0], body.worldPos[1], body.worldPos[2]],
+                        shape: shapes.ring({ radius: meanR, thickness: thick, height: 0.05 }),
+                        rate: 0,
+                        bursts: [{ time: 0, count: isMobile ? Math.floor((r.count || 3000) * 0.4) : (r.count || 3000) }],
+                        initial: {
+                            lifetime: { min: 1e9, max: 1e9 },
+                            speed:    { min: 0, max: 0 },
+                            size:     { min: 0.6, max: 1.4 },
+                            color:    [body.accent[0], body.accent[1], body.accent[2], 1],
+                        },
+                        modules: [orbitMod],
+                    }));
+                }
+            }
+        } catch (e) {
+            console.warn('[hero-galaxy] particle rings setup failed (continuing without rings):', e);
         }
     }
 

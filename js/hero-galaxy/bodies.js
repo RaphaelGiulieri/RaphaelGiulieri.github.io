@@ -30,7 +30,17 @@ export function createBody(device, bodyBGL, opts) {
     };
 }
 
-export function writeBodyUbo(device, body, model16, time) {
+// Writes the 128-byte body UBO. Layout (Float32 offsets):
+//   0..15  model
+//   16..19 accent (rgba)
+//   20..23 params: time, radiusWorld, _, hoverT
+//   24..27 light_pos: x, y, z, ambient_floor
+//
+// `lightPos` is the parent star's world position. `ambientFloor` is the
+// night-side luminance the body retains (0 = pure black at the terminator,
+// 1 = fully lit / self-emissive — pass 1 for stars and halos so the Lambert
+// wrap in fs_main collapses to lit=1 and they render unchanged).
+export function writeBodyUbo(device, body, model16, time, lightPos = null, ambientFloor = 1.0) {
     const arr = new Float32Array(32);
     arr.set(model16, 0);
     arr.set(body.accent, 16);
@@ -38,6 +48,12 @@ export function writeBodyUbo(device, body, model16, time) {
     arr[21] = body.radiusWorld;
     arr[22] = 0;
     arr[23] = body.hoverT;
+    if (lightPos) {
+        arr[24] = lightPos[0];
+        arr[25] = lightPos[1];
+        arr[26] = lightPos[2];
+    }
+    arr[27] = ambientFloor;
     device.queue.writeBuffer(body.buf, 0, arr);
 }
 

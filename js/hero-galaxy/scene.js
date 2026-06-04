@@ -141,6 +141,10 @@ export async function mountScene({ section }) {
         camDistSystem:     32,
         camDistPlanet:     6,
         camDistMoon:       1.5,
+        // Lighting. Each planet + moon is lit by its parent star via Lambert
+        // in fs_main; ambientFloor is the night-side luminance it keeps so
+        // the dark side still reads (editorial > realism).
+        ambientFloor:      0.18,
         // Label positioning — see CSS --gap and the per-kind silhouette
         // multipliers used in the per-frame projection.
         labelGapPx:        6,
@@ -323,7 +327,10 @@ export async function mountScene({ section }) {
                 moonBody._origScale  = moonBody.scale;
                 moonBody._origOrbitR = m.orbit?.radius ?? 0;
                 moonBody._origOrbitFrac = (moonBody._origOrbitR - _moonOrigMin) / _moonSpan;
-                moons.push({ body: moonBody, planet: planetBody });
+                // `star` is denormalized here so the frame loop can pass
+                // the moon's grandparent-star position into the lighting UBO
+                // without a chain lookup.
+                moons.push({ body: moonBody, planet: planetBody, star });
             }
         }
     }
@@ -741,14 +748,17 @@ export async function mountScene({ section }) {
         camArr.set([camera.eye[0], camera.eye[1], camera.eye[2], 0], 32);
         device.queue.writeBuffer(camUbo, 0, camArr);
 
-        // Stars UBOs (one for the body, one for its alpha-blended halo at world.haloScale)
+        // Stars UBOs (one for the body, one for its alpha-blended halo at
+        // world.haloScale). Stars + halos are self-emissive — pass ambient
+        // floor = 1.0 so the Lambert wrap in fs_main collapses to lit=1 and
+        // the existing star / halo shaders render unchanged.
         for (const s of visibleStars()) {
             const M = new Float32Array(16);
             mat4Identity(M);
             const sc = s.scale;
             M[0] = sc; M[5] = sc; M[10] = sc;
             M[12] = s.worldPos[0]; M[13] = s.worldPos[1]; M[14] = s.worldPos[2];
-            writeBodyUbo(device, s, M, t);
+            writeBodyUbo(device, s, M, t);   // default ambientFloor=1.0 → self-lit
             // Halo UBO — bigger scale, same accent + worldPos. Inlined to
             // avoid a temporary star_halo body object.
             const Mh = new Float32Array(16);
@@ -763,12 +773,15 @@ export async function mountScene({ section }) {
             arr[21] = s.radiusWorld * world.haloScale;
             arr[22] = 0;
             arr[23] = s.hoverT;
+            // light_pos.w = 1.0 → halo is self-lit, ignored by Lambert wrap.
+            arr[24] = 0; arr[25] = 0; arr[26] = 0; arr[27] = 1.0;
             device.queue.writeBuffer(s.haloBuf, 0, arr);
         }
         // Planet + moon UBOs (only visible ones). Planet self-rotates slowly
         // on Y; phase derived from its id so each planet spins out-of-sync.
+        // Each gets its parent star's worldPos as the Lambert light source.
         const visPls = visiblePlanets();
-        for (const { body } of visPls) {
+        for (const { body, star } of visPls) {
             const M = new Float32Array(16);
             const spin = t * ambient.planetSpinRate + (body.id.length * 0.7);
             const cs = Math.cos(spin), sn = Math.sin(spin);
@@ -778,16 +791,16 @@ export async function mountScene({ section }) {
             M[8]  = -sn * sc; M[10] =  cs * sc;
             M[15] = 1;
             M[12] = body.worldPos[0]; M[13] = body.worldPos[1]; M[14] = body.worldPos[2];
-            writeBodyUbo(device, body, M, t);
+            writeBodyUbo(device, body, M, t, star.worldPos, world.ambientFloor);
         }
         const visMs = visibleMoons();
-        for (const { body } of visMs) {
+        for (const { body, star } of visMs) {
             const M = new Float32Array(16);
             mat4Identity(M);
             const sc = body.scale;
             M[0] = sc; M[5] = sc; M[10] = sc;
             M[12] = body.worldPos[0]; M[13] = body.worldPos[1]; M[14] = body.worldPos[2];
-            writeBodyUbo(device, body, M, t);
+            writeBodyUbo(device, body, M, t, star.worldPos, world.ambientFloor);
         }
 
         // Project + position floating labels. Labels stay constant CSS px

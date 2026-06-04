@@ -12,8 +12,9 @@ struct Surface {
 };
 
 fn surface(s: Surface) -> vec4<f32> {
-    let ndl  = clamp(dot(s.world_normal, normalize(vec3<f32>(0.3, 0.7, 0.4))), 0.0, 1.0);
+    // Albedo only — Lambert is applied by the wrap in fs_main from the
+    // parent star's world_pos. Rim is view-relative and stays here.
     let rim  = fresnel(s.view_dir, s.world_normal, 3.0);
-    let base = s.accent * (0.25 + 0.75 * ndl);
+    let base = s.accent;
     return vec4<f32>(base + s.accent * rim * (0.4 + s.hover_t * 1.5), 1.0);
 }

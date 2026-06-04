@@ -6,9 +6,9 @@ struct Surface {
 };
 
 fn surface(s: Surface) -> vec4<f32> {
+    // Albedo only — Lambert applied by fs_main against the parent star.
     let v = voronoi(s.world_pos * 6.0 + vec3<f32>(0.0, 0.0, s.time * 0.03));
     let edge = smoothstep(0.0, 0.05, v);
     let base = mix(s.accent * 0.15, s.accent * 0.9, edge);
-    let ndl = clamp(dot(s.world_normal, normalize(vec3<f32>(0.5, 0.6, 0.6))), 0.0, 1.0);
-    return vec4<f32>(base * (0.4 + 0.6 * ndl) + s.accent * s.hover_t * 0.6, 1.0);
+    return vec4<f32>(base + s.accent * s.hover_t * 0.6, 1.0);
 }

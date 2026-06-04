@@ -5,6 +5,7 @@ struct BodyUniforms {
     model     : mat4x4<f32>,
     accent    : vec4<f32>,
     params    : vec4<f32>,    // x = time, y = radius_world, z = body_id, w = hover_t
+    light_pos : vec4<f32>,    // xyz = parent star world pos, w = ambient floor
 };
 
 struct CameraUniforms {

@@ -63,9 +63,10 @@ struct VertexOut {
 };
 
 struct BodyUniforms {
-    model  : mat4x4<f32>,
-    accent : vec4<f32>,
-    params : vec4<f32>,
+    model     : mat4x4<f32>,
+    accent    : vec4<f32>,
+    params    : vec4<f32>,
+    light_pos : vec4<f32>,    // xyz = parent star world pos, w = ambient floor (1.0 = self-lit)
 };
 @group(1) @binding(0) var<uniform> body : BodyUniforms;
 
@@ -79,7 +80,19 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     s.time         = body.params.x;
     s.accent       = body.accent.rgb;
     s.hover_t      = body.params.w;
-    return surface(s);
+    let col = surface(s);
+    // Per-pixel Lambert wrap. The parent star's position is fed in via
+    // body.light_pos.xyz; body.light_pos.w is the night-side ambient floor.
+    // Setting w = 1.0 collapses lit to 1 (self-emissive bodies — stars +
+    // halos — render unchanged). For planets/moons w is the small floor
+    // value the dev panel exposes so the dark side retains its character
+    // instead of going pure black.
+    let to_light = body.light_pos.xyz - s.world_pos;
+    let L = normalize(to_light);
+    let ndl = max(0.0, dot(s.world_normal, L));
+    let ambient_floor = body.light_pos.w;
+    let lit = ambient_floor + (1.0 - ambient_floor) * ndl;
+    return vec4<f32>(col.rgb * lit, col.a);
 }
 `;
 

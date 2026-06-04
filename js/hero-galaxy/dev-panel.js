@@ -254,6 +254,12 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sCam, 'moon dist', world, 'camDistMoon', 0.6, 8, 0.05,
             'Camera distance at moon zoom level. Click a moon to re-apply.',
             { factory: fw.camDistMoon });
+
+        // ── Lighting ─────────────────────────────────────────────────────
+        const sLight = section('Lighting');
+        row(sLight, 'ambient floor', world, 'ambientFloor', 0, 1, 0.01,
+            'Night-side luminance kept by planets / moons under the sun-lit Lambert wrap. 0 = pure black at the terminator (realistic). 1 = no shading effect (self-lit, like the suns).',
+            { factory: fw.ambientFloor });
     }
 
     // ── Footer actions: Reset to default + Save as default ────────────────

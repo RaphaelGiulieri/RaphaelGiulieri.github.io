@@ -10,6 +10,7 @@ const _pipelineCache = new Map();   // surfacePath → { pipeline, cameraBGL, bo
 let _prelude        = null;
 let _vertex         = null;
 let _defaultSurface = null;
+let _bloomPipeline  = null;
 
 async function fetchWgsl(path) {
     if (_wgslCache.has(path)) return _wgslCache.get(path);
@@ -167,4 +168,48 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
     const result = { pipeline, cameraBGL, bodyBGL };
     _pipelineCache.set(cacheKey, result);
     return result;
+}
+
+// Star bloom billboard pipeline. Separate from getMeshPipeline because the
+// bloom shader has its own vs_main (builds a camera-facing quad from
+// vertex_index — no vertex buffer needed) and renders with additive blend +
+// no depth write. Cached singleton.
+export async function getBloomPipeline(device, format) {
+    if (_bloomPipeline) return _bloomPipeline;
+    const source = await fetchWgsl('star-bloom.wgsl');
+    const mod = device.createShaderModule({ label: 'star-bloom', code: source });
+
+    const cameraBGL = device.createBindGroupLayout({
+        label: 'bloom camera BGL',
+        entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'uniform' } }],
+    });
+    const bodyBGL = device.createBindGroupLayout({
+        label: 'bloom body BGL',
+        entries: [{ binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }],
+    });
+
+    const pipeline = device.createRenderPipeline({
+        label: 'star bloom billboard',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [cameraBGL, bodyBGL] }),
+        vertex:   { module: mod, entryPoint: 'vs_main' },
+        fragment: {
+            module: mod, entryPoint: 'fs_main',
+            targets: [{
+                format,
+                blend: {
+                    color: { srcFactor: 'src-alpha', dstFactor: 'one',         operation: 'add' },
+                    alpha: { srcFactor: 'one',       dstFactor: 'one-minus-src-alpha', operation: 'add' },
+                },
+            }],
+        },
+        // 4-vertex triangle-strip → one quad.
+        primitive: { topology: 'triangle-strip', cullMode: 'none' },
+        // Depth-test against the scene so foreground planets occlude the
+        // bloom (correct physical behaviour for "sun behind planet"), but
+        // don't write to depth — additive over whatever's behind.
+        depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' },
+    });
+
+    _bloomPipeline = { pipeline, cameraBGL, bodyBGL };
+    return _bloomPipeline;
 }

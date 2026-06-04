@@ -268,6 +268,18 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sLight, 'sun tint', world, 'sunTintStrength', 0, 1, 0.01,
             'How strongly each planet / moon picks up the parent star\'s colour on its day-side. 0 = colour-neutral Lambert (luminance only). 1 = day-side fully multiplied by the sun\'s tint; night-side keeps the planet\'s own accent.',
             { factory: fw.sunTintStrength });
+
+        // ── Sun bloom ────────────────────────────────────────────────────
+        const sSunBloom = section('Sun bloom');
+        row(sSunBloom, 'radius mul', world, 'sunBloomRadiusMul', 0, 30, 0.1,
+            'Bloom billboard size as a multiple of the sun\'s world radius. Larger = glow extends further past the sun\'s silhouette. Independent of haloScale.',
+            { factory: fw.sunBloomRadiusMul });
+        row(sSunBloom, 'intensity', world, 'sunBloomIntensity', 0, 6, 0.05,
+            'Peak brightness of the bloom at the centre of the billboard (before gaussian falloff). 0 disables the bloom entirely.',
+            { factory: fw.sunBloomIntensity });
+        row(sSunBloom, 'falloff', world, 'sunBloomFalloff', 0.5, 8, 0.05,
+            'Gaussian sharpness exponent. Low = soft, wide glow (washes the screen). High = tight, point-like glow.',
+            { factory: fw.sunBloomFalloff });
     }
 
     // ── Footer actions: Reset / Save / Factory ────────────────────────────

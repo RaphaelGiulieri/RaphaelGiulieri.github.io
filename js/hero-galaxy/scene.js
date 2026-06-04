@@ -7,7 +7,7 @@
 import { createCamera, setAspect, applyOrbitDelta } from './render/camera.js';
 import { wireControls } from './render/controls.js';
 import { makeIcosphere } from './render/sphere-mesh.js';
-import { getMeshPipeline } from './render/pipeline.js';
+import { getMeshPipeline, getBloomPipeline } from './render/pipeline.js';
 import { loadGalaxyData } from './data-loader.js';
 import { createBody, writeBodyUbo, bodyDescFromStar, bodyDescFromPlanet, bodyDescFromMoon } from './bodies.js';
 import { mat4Identity } from '../particles/core/math.js';
@@ -148,6 +148,13 @@ export async function mountScene({ section }) {
         // Lambert, 1 = day-side fully picks up the sun's colour).
         ambientFloor:      0.18,
         sunTintStrength:   0.55,
+        // Sun bloom — a camera-facing gaussian billboard per sun, drawn
+        // additively after the halo pass. Independent of the bloom on
+        // distant starfield particles (which is handled by the engine's
+        // post-fx on its own canvas).
+        sunBloomRadiusMul: 5.5,   // billboard size = sun radius × this
+        sunBloomIntensity: 1.4,   // brightness of the glow at centre
+        sunBloomFalloff:   2.4,   // gaussian sharpness — higher = tighter
         // Label positioning — see CSS --gap and the per-kind silhouette
         // multipliers used in the per-frame projection.
         labelGapPx:        6,
@@ -200,6 +207,16 @@ export async function mountScene({ section }) {
     // Halo bodies share the star's accent + UBO data but are drawn at a larger
     // scale on a separate pass. The multiplier lives in `world.haloScale` so
     // the dev panel can tune the bloom-disc size live.
+
+    // Star bloom billboard pipeline — gaussian sprite per sun, drawn last so
+    // the glow stacks over halos + meshes additively. Builds its own camera
+    // bind group because its bodyBGL is a separate layout.
+    const { pipeline: sunBloomPipeline, cameraBGL: bloomCameraBGL, bodyBGL: bloomBodyBGL }
+        = await getBloomPipeline(device, format);
+    const bloomCameraBG = device.createBindGroup({
+        layout: bloomCameraBGL,
+        entries: [{ binding: 0, resource: { buffer: camUbo } }],
+    });
 
     // Mount the starfield (on its own canvas, its own GPUDevice). Mobile gets
     // a smaller count for budget; matched to spec § 5.3.
@@ -313,6 +330,18 @@ export async function mountScene({ section }) {
         star.haloBG = device.createBindGroup({
             layout: bodyBGL,
             entries: [{ binding: 0, resource: { buffer: star.haloBuf } }],
+        });
+        // Bloom billboard UBO — separate buffer + bind group bound to the
+        // bloom pipeline's own bodyBGL (the bloom shader has its own
+        // BindGroupLayout in pipeline.js).
+        star.bloomBuf = device.createBuffer({
+            label: `star-bloom ${sys.id}`,
+            size: 128,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+        });
+        star.bloomBG = device.createBindGroup({
+            layout: bloomBodyBGL,
+            entries: [{ binding: 0, resource: { buffer: star.bloomBuf } }],
         });
         stars.push(star);
         for (const p of sys.planets) {
@@ -781,6 +810,23 @@ export async function mountScene({ section }) {
             // light_color.w = 0 → no sun-tint blend (halo keeps its own glow).
             arr[28] = 1; arr[29] = 1; arr[30] = 1; arr[31] = 0;
             device.queue.writeBuffer(s.haloBuf, 0, arr);
+            // Bloom billboard UBO — only model (for worldPos via translation),
+            // accent (for glow tint), and params (radius, multiplier,
+            // intensity, plus the gaussian falloff in light_pos.x).
+            const Bm = new Float32Array(16);
+            mat4Identity(Bm);
+            const bsc = s.scale;   // model scale is irrelevant for the billboard,
+            Bm[0] = bsc; Bm[5] = bsc; Bm[10] = bsc;
+            Bm[12] = s.worldPos[0]; Bm[13] = s.worldPos[1]; Bm[14] = s.worldPos[2];
+            const barr = new Float32Array(32);
+            barr.set(Bm, 0);
+            barr.set(s.accent, 16);
+            barr[20] = t;                                       // unused
+            barr[21] = s.radiusWorld;                           // radius_world
+            barr[22] = world.sunBloomRadiusMul;                 // radius multiplier
+            barr[23] = world.sunBloomIntensity;                 // intensity
+            barr[24] = world.sunBloomFalloff;                   // gaussian falloff exponent
+            device.queue.writeBuffer(s.bloomBuf, 0, barr);
         }
         // Planet + moon UBOs (only visible ones). Planet self-rotates slowly
         // on Y; phase derived from its id so each planet spins out-of-sync.
@@ -927,13 +973,23 @@ export async function mountScene({ section }) {
                 pass.drawIndexed(ico.indexCount);
             }
         }
-        // Star halos last — additive blend, no depth write. They composite
-        // over geometry behind them, but since they render the BACK faces of
-        // a larger sphere they don't hide the star body itself.
+        // Star halos — additive blend, no depth write. They composite over
+        // geometry behind them, but since they render the BACK faces of a
+        // larger sphere they don't hide the star body itself.
         pass.setPipeline(starHaloPipeline);
         for (const s of visibleStars()) {
             pass.setBindGroup(1, s.haloBG);
             pass.drawIndexed(ico.indexCount);
+        }
+        // Star bloom — gaussian sprite billboard per sun, drawn last so the
+        // glow stacks additively over halos + meshes. Uses its own camera +
+        // body bind groups (the bloom pipeline has a separate bodyBGL) and
+        // 4 vertices in a triangle-strip (no vertex buffer).
+        pass.setPipeline(sunBloomPipeline);
+        pass.setBindGroup(0, bloomCameraBG);
+        for (const s of visibleStars()) {
+            pass.setBindGroup(1, s.bloomBG);
+            pass.draw(4);
         }
         pass.end();
         device.queue.submit([enc.finish()]);

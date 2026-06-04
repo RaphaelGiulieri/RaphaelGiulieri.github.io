@@ -11,8 +11,6 @@ import { getMeshPipeline, getBloomPipeline } from './render/pipeline.js';
 import { loadGalaxyData } from './data-loader.js';
 import { createBody, writeBodyUbo, bodyDescFromStar, bodyDescFromPlanet, bodyDescFromMoon, PLANET_TIER_SHADERS } from './bodies.js';
 import { mat4Identity } from '../particles/core/math.js';
-// raycast helpers are no longer needed; screen-space picker lives in
-// scene.js (pickBodyAtPx) and serves both click + hover detection.
 import { createBreadcrumb } from './breadcrumb.js';
 import { mountStarfield } from './render/starfield.js';
 import { mat4Multiply } from '../particles/core/math.js';

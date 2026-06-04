@@ -8,6 +8,7 @@ const _wgslCache     = new Map();   // path → source string
 const _pipelineCache = new Map();   // surfacePath → { pipeline, cameraBGL, bodyBGL }
 
 let _prelude        = null;
+let _postlude       = null;
 let _vertex         = null;
 let _defaultSurface = null;
 let _bloomPipeline  = null;
@@ -23,9 +24,10 @@ async function fetchWgsl(path) {
 }
 
 async function ensureCore() {
-    if (_prelude && _vertex && _defaultSurface) return;
-    [_prelude, _vertex, _defaultSurface] = await Promise.all([
+    if (_prelude && _postlude && _vertex && _defaultSurface) return;
+    [_prelude, _postlude, _vertex, _defaultSurface] = await Promise.all([
         fetchWgsl('_planet-prelude.wgsl'),
+        fetchWgsl('_planet-postlude.wgsl'),
         fetchWgsl('mesh-vertex.wgsl'),
         fetchWgsl('default-planet.wgsl'),
     ]);
@@ -50,82 +52,13 @@ export async function getMeshPipeline(device, format, surfacePath, opts = {}) {
     }
 
     const vertexCode = `${_prelude}\n${_vertex}`;
-    const fragmentCode = `
-${_prelude}
-
-${surface}
-
-struct VertexOut {
-    @builtin(position) clip_pos     : vec4<f32>,
-    @location(0)       world_pos    : vec3<f32>,
-    @location(1)       world_normal : vec3<f32>,
-    @location(2)       uv_sphere    : vec2<f32>,
-    @location(3)       view_dir     : vec3<f32>,
-    @location(4)       local_pos    : vec3<f32>,
-};
-
-struct BodyUniforms {
-    model       : mat4x4<f32>,
-    accent      : vec4<f32>,
-    params      : vec4<f32>,
-    light_pos   : vec4<f32>,    // xyz = parent star world pos, w = ambient floor (1.0 = self-lit)
-    light_color : vec4<f32>,    // rgb = parent star tint,      w = tint strength (0 = colour-neutral)
-};
-@group(1) @binding(0) var<uniform> body : BodyUniforms;
-
-@fragment
-fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    var s : Surface;
-    s.world_pos    = in.world_pos;
-    s.world_normal = normalize(in.world_normal);
-    // Normalize the interpolated local position back onto the unit sphere —
-    // raw barycentric interpolation gives a point on the flat triangle face,
-    // not the curved sphere, which produces visible triangle-edge ringing in
-    // any 3D noise lookup. Normalizing yields true sphere-surface coords.
-    s.local_pos    = normalize(in.local_pos);
-    // Compute uv_sphere PER-FRAGMENT instead of using the per-vertex value:
-    // atan2 wraps at ±π, and interpolating uv.x across a triangle that
-    // straddles that boundary creates a wide stripe of "rewound" UV space
-    // (the classic icosphere seam). Computing in the fragment confines the
-    // wrap to a one-pixel discontinuity in derivatives.
-    s.uv_sphere    = vec2<f32>(
-        atan2(s.local_pos.z, s.local_pos.x) * 0.15915494 + 0.5,
-        s.local_pos.y * 0.5 + 0.5);
-    s.view_dir     = normalize(in.view_dir);
-    s.time         = body.params.x;
-    s.accent       = body.accent.rgb;
-    s.hover_t      = body.params.w;
-    let col = surface(s);
-    // Per-pixel Lambert wrap. The parent star's position is fed in via
-    // body.light_pos.xyz; body.light_pos.w is the night-side ambient floor.
-    // Setting w = 1.0 collapses lit to 1 (self-emissive bodies — stars +
-    // halos — render unchanged). For planets/moons w is the small floor
-    // value the dev panel exposes so the dark side retains its character
-    // instead of going pure black.
-    let to_light = body.light_pos.xyz - s.world_pos;
-    let L = normalize(to_light);
-    let ndl = max(0.0, dot(s.world_normal, L));
-    let ambient_floor = body.light_pos.w;
-    let lit = ambient_floor + (1.0 - ambient_floor) * ndl;
-    // Sun-colour tint — blend the day-side toward the parent star's tint by
-    // (ndl * tint_strength). At tint_strength = 0 (default for self-lit
-    // bodies) the multiplier is white → no colour shift. At tint_strength
-    // = 1 the day-side fully picks up the sun's colour while the night-side
-    // (ndl = 0) keeps the planet's own accent identity.
-    let tint_strength = body.light_color.w;
-    let sun_tint = mix(vec3<f32>(1.0, 1.0, 1.0), body.light_color.rgb, ndl * tint_strength);
-    // Universal hover highlight — a bright additive rim that's visible
-    // regardless of how saturated the underlying surface() output is. Each
-    // shader can still bake its own subtle hover effect on top via s.hover_t;
-    // this guarantees a baseline that reads on dark and bright planets alike.
-    let hover = body.params.w;
-    let view_facing = max(0.0, dot(s.world_normal, s.view_dir));
-    let hover_rim = pow(1.0 - view_facing, 2.0) * hover;
-    let highlight = vec3<f32>(1.0, 1.0, 1.0) * hover_rim * 0.9
-                  + s.accent * hover * 0.35;
-    return vec4<f32>(col.rgb * sun_tint * lit + highlight, col.a);
-}
-`;
+    // Fragment module = prelude (noise helpers) + the planet-specific surface
+    // shader (defines Surface struct + surface() function) + the postlude
+    // (VertexOut, BodyUniforms, fs_main contract). The postlude lives in its
+    // own .wgsl file rather than a JS template literal so wgsl-analyzer /
+    // IntelliSense can lint it, and so it follows the project's "no inline
+    // shader strings" rule.
+    const fragmentCode = `${_prelude}\n\n${surface}\n\n${_postlude}`;
 
     const vertexModule   = device.createShaderModule({ label: `vert ${surfacePath}`, code: vertexCode });
     const fragmentModule = device.createShaderModule({ label: `frag ${surfacePath}`, code: fragmentCode });

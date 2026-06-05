@@ -217,6 +217,12 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sSpread, 'moon max dist', world, 'moonOrbitMax', 0.1, 20, 0.05,
             'Orbit radius of the outermost moon (across every planet).',
             { factory: fw.moonOrbitMax });
+        row(sSpread, 'planet orbit rate', world, 'planetOrbitalRate', 0, 80, 0.1,
+            'Kepler constant K for planet orbits. Angular velocity ω = K / r^(3/2). Outer planets are automatically (r_outer / r_inner)^1.5 times slower than inner ones — same physics as the real solar system. Crank this to speed every planet up proportionally, drop to 0 to freeze orbits.',
+            { factory: fw.planetOrbitalRate });
+        row(sSpread, 'moon orbit rate', world, 'moonOrbitalRate', 0, 20, 0.05,
+            'Kepler constant K for moon orbits around their parent planet. Same ω = K / r^(3/2) law. Moons have their own knob because moon radii are much smaller than planet radii — picking the same K would make moons orbit hundreds of times faster than planets, which looks chaotic.',
+            { factory: fw.moonOrbitalRate });
         row(sSpread, 'star size', world, 'starSize', 0.3, 4, 0.01,
             'Multiplier on every star\'s radius.',
             { factory: fw.starSize });

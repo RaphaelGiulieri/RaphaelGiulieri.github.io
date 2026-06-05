@@ -139,6 +139,14 @@ export async function mountScene({ section }) {
         planetOrbitMax:    54.9,
         moonOrbitMin:      3.6,
         moonOrbitMax:      8.55,
+        // Kepler's third law: angular velocity ω = K / r^(3/2). The K
+        // constants ("gravitational parameter" GM) are tuned so that the
+        // innermost planet/moon orbits at a comfortable visible pace
+        // (~one revolution per minute at default sizes). Outer planets/
+        // moons are automatically slower by the (r_outer / r_inner)^1.5
+        // ratio — Jupiter orbits the Sun ~10× slower than Mercury IRL.
+        planetOrbitalRate: 12.0,
+        moonOrbitalRate:   2.5,
         starSize:          1.84,
         planetSize:        1.0,
         moonSize:          1.0,
@@ -863,10 +871,14 @@ export async function mountScene({ section }) {
             star.scale = star._origScale * world.starSize;
         }
         // Planets: orbit around their star at lerp(min, max, normalized_orbit_frac).
+        // Angular velocity follows Kepler's third law: ω = K / r^(3/2). Farther
+        // planets orbit proportionally slower than nearer ones — same physics as
+        // the real solar system (Mercury vs Neptune).
         for (const { body, star } of planets) {
             const o = body.orbit; if (!o) continue;
             const r = world.planetOrbitMin + (world.planetOrbitMax - world.planetOrbitMin) * body._origOrbitFrac;
-            const a = (t * (2 * Math.PI / o.period)) + (o.phase || 0);
+            const omega = world.planetOrbitalRate / Math.pow(Math.max(0.1, r), 1.5);
+            const a = (t * omega) + (o.phase || 0);
             const tilt = (o.tilt || 0) * Math.PI / 180;
             body.worldPos[0] = star.worldPos[0] + Math.cos(a) * r;
             body.worldPos[1] = star.worldPos[1] + Math.sin(tilt) * r * 0.15;
@@ -874,10 +886,12 @@ export async function mountScene({ section }) {
             body.scale = body._origScale * world.planetSize;
         }
         // Moons: orbit around their planet at lerp(min, max, normalized_orbit_frac).
+        // Same Kepler law against the moon's distance from its planet.
         for (const { body, planet } of moons) {
             const o = body.orbit; if (!o) continue;
             const r = world.moonOrbitMin + (world.moonOrbitMax - world.moonOrbitMin) * body._origOrbitFrac;
-            const a = (t * (2 * Math.PI / o.period)) + (o.phase || 0);
+            const omega = world.moonOrbitalRate / Math.pow(Math.max(0.1, r), 1.5);
+            const a = (t * omega) + (o.phase || 0);
             const tilt = (o.tilt || 0) * Math.PI / 180;
             body.worldPos[0] = planet.worldPos[0] + Math.cos(a) * r;
             body.worldPos[1] = planet.worldPos[1] + Math.sin(tilt) * r * 0.2;

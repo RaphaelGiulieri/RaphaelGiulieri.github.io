@@ -168,6 +168,13 @@ export async function mountScene({ section }) {
         // samples whichever ping-pong texture currently holds the latest
         // state. OFF = sim is frozen at its initial banded condition.
         gasGiantSim:             false,
+        // Global sim speed multiplier — scales BOTH the per-frame dt and
+        // the accumulated sim time passed to the shader. 1.0 = wall-clock
+        // pace; 0.15 = ~7× slower (matches real gas-giant timescales —
+        // one band-crossing per ~7 sec wall-clock at viewer scale).
+        // Affects everything: forces, advection, Coriolis rotation,
+        // viscosity, splat lifetimes, tracer decay. Coherent slowdown.
+        gasGiantSimSpeed:        0.15,
         // ── Navier-Stokes sim params, post-research ──
         // Tuned from the deep-research findings (gas-giant fluid dynamics
         // workflow wjvwa8bz9): slow wall-clock motion, β-plane Coriolis
@@ -1118,8 +1125,14 @@ export async function mountScene({ section }) {
                 body.fluidSim &&
                 body.meta.systemId === state.focusedSystemId);
             if (activeGas.length) {
+                // Global sim speed — scales both per-frame dt and the
+                // accumulated sim time per planet. Lower = slower coherent
+                // evolution across every dt-driven process in the sim.
+                const speed = world.gasGiantSimSpeed;
+                const scaledDt = dt * speed;
                 for (const { body } of activeGas) {
-                    writeSimParams(device, body.fluidSim, dt, t, {
+                    body.fluidSim.simTime = (body.fluidSim.simTime || 0) + scaledDt;
+                    writeSimParams(device, body.fluidSim, scaledDt, body.fluidSim.simTime, {
                         viscosity:          world.gasGiantViscosity,
                         jet_force:          world.gasGiantJetForce,
                         advect_mul:         world.gasGiantAdvectMul,

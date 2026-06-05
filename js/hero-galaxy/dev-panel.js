@@ -286,6 +286,9 @@ export function setupDevPanel({ postfx, ambient, world, factoryDefaults }) {
         row(sGas, 'navier sim', world, 'gasGiantSim', 0, 1, 1,
             'Toggle the live sim. ON = each gas planet\'s velocity field is integrated once per frame (focused system only). OFF = field stays at its initial black state.',
             { toUI: (v) => v ? 1 : 0, fromUI: (v) => v >= 0.5, factory: fw.gasGiantSim });
+        row(sGas, 'sim speed', world, 'gasGiantSimSpeed', 0.01, 5, 0.005,
+            'Global sim speed multiplier. Scales BOTH per-frame dt AND accumulated sim time. 1.0 = wall-clock pace (way too fast for a gas giant); 0.15 = ~7× slower (matches real Jupiter/Saturn timescales — one band-crossing per ~7 sec); 0.05 = glacial. Affects EVERY dt-driven process coherently: advection, Coriolis, splat lifetimes, dye decay, viscosity.',
+            { factory: fw.gasGiantSimSpeed });
         row(sGas, 'viscosity', world, 'gasGiantViscosity', 0, 4, 0.01,
             'Velocity damping per second (kinematic-viscosity proxy). Higher = field bleeds energy faster, calmer look. Lower = momentum persists longer, more turbulent.',
             { factory: fw.gasGiantViscosity });

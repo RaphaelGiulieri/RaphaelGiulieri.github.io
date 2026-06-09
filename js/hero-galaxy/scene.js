@@ -18,7 +18,7 @@ import { mat4Multiply } from '../particles/core/math.js';
 import { setupDevPanel, applySavedDefaults } from './dev-panel.js';
 import { mountConsole } from './console.js';
 
-const HERO_GALAXY_DEV_PANEL = true;   // flip to false in production
+const HERO_GALAXY_DEV_PANEL = false;  // production — dev panel off; defaults baked into the objects below
 
 // Mesh canvas is layered ON TOP of the starfield canvas; clear with alpha=0
 // so the stars show through wherever meshes don't draw.
@@ -160,7 +160,7 @@ export async function mountScene({ section }) {
         // the dark side still reads (editorial > realism). sunTintStrength
         // bleeds the parent star's tint onto the day-side (0 = colour-neutral
         // Lambert, 1 = day-side fully picks up the sun's colour).
-        ambientFloor:      0.18,
+        ambientFloor:      0.03,
         sunTintStrength:   0.55,
         // Sun bloom — a camera-facing gaussian billboard per sun, drawn
         // additively after the halo pass. Independent of the bloom on
@@ -175,7 +175,7 @@ export async function mountScene({ section }) {
         // systems' sims pause (their textures freeze). The gas shader
         // samples whichever ping-pong texture currently holds the latest
         // state. OFF = sim is frozen at its initial banded condition.
-        gasGiantSim:             false,
+        gasGiantSim:             true,
         // Global sim speed multiplier — scales BOTH the per-frame dt and
         // the accumulated sim time passed to the shader. 1.0 = wall-clock
         // pace; 0.15 = ~7× slower (matches real gas-giant timescales —

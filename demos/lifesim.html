@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LifeSim — village relationship graph · Raphael Giulieri</title>
+<style>
+    html, body { margin: 0; height: 100%; background: #0c0a07; color: #f0ebe0; font-family: "JetBrains Mono", ui-monospace, monospace; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+    .label { position: absolute; bottom: 12px; left: 12px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.78); pointer-events: none; line-height: 1.55; max-width: calc(100% - 24px); text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+    .label b { color: #ff4b1f; font-weight: 500; }
+    .label .rel { color: #f0ebe0; text-transform: none; letter-spacing: 0.02em; }
+    .label .rel i { font-style: normal; color: #f2a51f; }
+    .controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; max-width: calc(100% - 24px); }
+    .controls button { font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.55); background: rgba(12,10,7,0.55); border: 1px solid rgba(240,235,224,0.18); padding: 4px 8px; cursor: pointer; backdrop-filter: blur(6px); }
+    .controls button.on { color: #ff4b1f; border-color: #ff4b1f; }
+    body.still .controls, body.still .label { display: none; }
+</style>
+</head>
+<body>
+<canvas id="c" role="img" aria-label="Directed relationship graph of representative village NPCs; edges are asymmetric — A can love B while B fears A — on four axes: love, fear, trust, owes."></canvas>
+<div class="controls">
+    <button data-axis="all" class="on">All</button>
+    <button data-axis="love">Love</button>
+    <button data-axis="fear">Fear</button>
+    <button data-axis="trust">Trust</button>
+    <button data-axis="owes">Owes</button>
+</div>
+<p class="label"><b>Village relationship graph · hover a villager</b><br>Illustrative design data, not gameplay · directed, asymmetric edges on four axes — love / fear / trust / owes · A→B is independent of B→A · solid = positive sentiment, dashed = negative<br><span class="rel" id="relLine"></span></p>
+<script>
+(() => {
+'use strict';
+const STILL = new URLSearchParams(location.search).get('still') === '1';
+if (STILL) document.body.classList.add('still');
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const relLine = document.getElementById('relLine');
+
+// ---- Axis palette (warm family; fear reads cool/negative) ----
+const AXES = {
+    love:  { col: '#ff4b1f',                label: 'love'  },   // vermilion
+    trust: { col: 'rgb(255,158,51)',        label: 'trust' },   // amber
+    fear:  { col: 'rgba(120,150,170,0.92)', label: 'fear'  },   // cool shadow
+    owes:  { col: 'rgb(230,209,158)',       label: 'owes'  },   // bone
+};
+const INK = '#f0ebe0';
+const MUTED = 'rgba(240,235,224,0.55)';
+const NODE_FILL = '#141009';
+const NODE_STROKE = 'rgba(240,235,224,0.20)';
+
+// ---- Nodes: representative archetype villagers (roles, not named persons) ----
+// Layout positions are normalised (0..1) and frozen so the live demo and the
+// ?still=1 hero export are pixel-deterministic.
+const NODES = [
+    { id: 'you',     label: 'STRANGER / YOU', x: 0.50, y: 0.50 },
+    { id: 'smith',   label: 'SMITH',          x: 0.78, y: 0.27 },
+    { id: 'elder',   label: 'ELDER',          x: 0.24, y: 0.24 },
+    { id: 'herder',  label: 'HERDER',         x: 0.20, y: 0.76 },
+    { id: 'merchant',label: 'MERCHANT',       x: 0.80, y: 0.74 },
+    { id: 'guard',   label: 'GUARD',          x: 0.50, y: 0.92 },
+];
+const NODE = Object.fromEntries(NODES.map(n => [n.id, n]));
+
+// ---- Directed edges: { from, to, axis, w (signed -1..1), note } ----
+// Hand-authored to demonstrate ASYMMETRY: each pair carries different feelings
+// in each direction. e.g. Smith admires You (trust+) while You resent him (trust-).
+const EDGES = [
+    // Smith <-> You : the dossier's own example (he admires you; you resent him)
+    { from: 'smith', to: 'you',   axis: 'trust', w:  0.6, note: 'admires' },
+    { from: 'you',   to: 'smith', axis: 'trust', w: -0.4, note: 'resents' },
+    { from: 'you',   to: 'smith', axis: 'owes',  w:  0.5, note: 'owes for a blade' },
+
+    // Elder <-> You : she is wary of the stranger; you respect her
+    { from: 'elder', to: 'you',   axis: 'fear',  w:  0.45, note: 'wary of a stranger' },
+    { from: 'you',   to: 'elder', axis: 'trust', w:  0.55, note: 'respects the council' },
+
+    // Elder <-> Smith : long trust, but he owes her a favour
+    { from: 'smith', to: 'elder', axis: 'love',  w:  0.5, note: 'loyal' },
+    { from: 'elder', to: 'smith', axis: 'trust', w:  0.6, note: 'relies on' },
+    { from: 'smith', to: 'elder', axis: 'owes',  w:  0.4, note: 'owes a favour' },
+
+    // Herder <-> Merchant : the merchant underpays; the herder distrusts
+    { from: 'merchant', to: 'herder', axis: 'love',  w:  0.35, note: 'needs the wool' },
+    { from: 'herder',   to: 'merchant', axis: 'trust', w: -0.5, note: 'distrusts prices' },
+    { from: 'herder',   to: 'merchant', axis: 'owes',  w:  0.45, note: 'owes for grain' },
+
+    // Merchant <-> You : he fears your reputation; you want his coin
+    { from: 'merchant', to: 'you',   axis: 'fear',  w:  0.4, note: 'fears your reputation' },
+    { from: 'you',      to: 'merchant', axis: 'trust', w: 0.3, note: 'cautious trade' },
+
+    // Guard <-> Smith / Elder : the guard owes the smith; defends the elder
+    { from: 'guard', to: 'smith', axis: 'owes',  w:  0.5, note: 'owes for repairs' },
+    { from: 'guard', to: 'elder', axis: 'love',  w:  0.55, note: 'sworn to protect' },
+    { from: 'guard', to: 'you',   axis: 'fear',  w:  0.35, note: 'watches you' },
+
+    // Herder <-> Elder : kinship
+    { from: 'herder', to: 'elder', axis: 'love',  w:  0.45, note: 'kin' },
+    { from: 'elder',  to: 'herder', axis: 'trust', w:  0.5, note: 'trusts with the herd' },
+];
+
+let activeAxis = 'all';
+let hoverId = null;
+
+// ---- Controls ----
+document.querySelectorAll('.controls button').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.controls button').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        activeAxis = btn.dataset.axis;
+        draw();
+    });
+});
+
+// ---- Resize (DPR-clamped) ----
+let W = 0, H = 0, dpr = 1;
+function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const cw = canvas.clientWidth || 1280;
+    const ch = canvas.clientHeight || 800;
+    W = cw; H = ch;
+    canvas.width = Math.floor(cw * dpr);
+    canvas.height = Math.floor(ch * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+}
+
+// Map normalised node coords into a padded box so labels never clip.
+function nodePx(n) {
+    const padX = Math.min(W * 0.16, 150);
+    const padY = Math.min(H * 0.16, 110);
+    return { x: padX + n.x * (W - 2 * padX), y: padY + n.y * (H - 2 * padY) };
+}
+function nodeRadius() { return Math.max(7, Math.min(W, H) * 0.013); }
+
+// ---- Hover hit-test ----
+canvas.addEventListener('pointermove', e => {
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const rad = nodeRadius() + 14;
+    let found = null;
+    for (const n of NODES) {
+        const p = nodePx(n);
+        if ((mx - p.x) ** 2 + (my - p.y) ** 2 <= rad * rad) { found = n.id; break; }
+    }
+    if (found !== hoverId) { hoverId = found; updateRelLine(); draw(); }
+});
+canvas.addEventListener('pointerleave', () => { if (hoverId) { hoverId = null; updateRelLine(); draw(); } });
+
+function signWord(e) {
+    if (e.axis === 'fear') return e.note;                 // fear: magnitude reads as intensity
+    return e.note;
+}
+function updateRelLine() {
+    if (!relLine) return;
+    if (!hoverId) { relLine.innerHTML = ''; return; }
+    const me = NODE[hoverId];
+    const out = EDGES.filter(e => e.from === hoverId);
+    const inc = EDGES.filter(e => e.to === hoverId);
+    const fmt = (e, dir) => {
+        const other = dir === 'out' ? NODE[e.to] : NODE[e.from];
+        const a = dir === 'out' ? me.label : other.label;
+        const b = dir === 'out' ? other.label : me.label;
+        const sgn = (e.w >= 0 ? '+' : '−') + Math.abs(e.w).toFixed(1);
+        return `${a} → ${b}: <i>${AXES[e.axis].label} ${sgn}</i> (${e.note})`;
+    };
+    const parts = out.map(e => fmt(e, 'out')).concat(inc.map(e => fmt(e, 'in')));
+    relLine.innerHTML = parts.slice(0, 4).join(' · ');
+}
+
+// ---- Drawing ----
+function arrow(ax, ay, bx, by, color, dashed, alpha, weight) {
+    const dx = bx - ax, dy = by - ay;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const r = nodeRadius();
+    // trim ends so the line starts/ends at node rim, not centre
+    const sx = ax + ux * (r + 3), sy = ay + uy * (r + 3);
+    const ex = bx - ux * (r + 7), ey = by - uy * (r + 7);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = weight;
+    ctx.setLineDash(dashed ? [5, 5] : []);
+    // gentle curve so opposing A->B / B->A edges don't overlap
+    const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+    const nx = -uy, ny = ux;
+    const bow = Math.min(len * 0.10, 26);
+    const cx = mx + nx * bow, cy = my + ny * bow;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.quadraticCurveTo(cx, cy, ex, ey);
+    ctx.stroke();
+    // arrowhead at the end, tangent to the curve
+    const tx = ex - cx, ty = ey - cy;
+    const tl = Math.hypot(tx, ty) || 1;
+    const hx = tx / tl, hy = ty / tl;
+    const ah = 8 + weight;
+    ctx.setLineDash([]);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(ex, ey);
+    ctx.lineTo(ex - hx * ah - hy * ah * 0.5, ey - hy * ah + hx * ah * 0.5);
+    ctx.lineTo(ex - hx * ah + hy * ah * 0.5, ey - hy * ah - hx * ah * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+}
+
+function draw() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0c0a07';
+    ctx.fillRect(0, 0, W, H);
+
+    const r = nodeRadius();
+    const focus = hoverId;
+
+    // Determine, per edge, whether it is dimmed.
+    for (const e of EDGES) {
+        const a = nodePx(NODE[e.from]);
+        const b = nodePx(NODE[e.to]);
+        const ax = AXES[e.axis];
+        const axisOn = (activeAxis === 'all' || activeAxis === e.axis);
+        let alpha, weight, color = ax.col;
+        if (!axisOn) { alpha = 0.06; weight = 1; }
+        else if (focus) {
+            if (e.from === focus)      { alpha = 0.95; weight = 1.5 + Math.abs(e.w) * 2.2; }  // outgoing
+            else if (e.to === focus)   { alpha = 0.80; weight = 1.2 + Math.abs(e.w) * 1.8; }  // incoming
+            else                       { alpha = 0.05; weight = 1; }
+        } else {
+            alpha = 0.40 + Math.abs(e.w) * 0.30;
+            weight = 1 + Math.abs(e.w) * 1.6;
+        }
+        const dashed = e.w < 0;   // dashed = negative sentiment
+        arrow(a.x, a.y, b.x, b.y, color, dashed, alpha, weight);
+    }
+
+    // Outgoing/incoming colour cue ring when a node is focused
+    if (focus) {
+        const out = new Set(EDGES.filter(e => e.from === focus).map(e => e.to));
+        const inc = new Set(EDGES.filter(e => e.to === focus).map(e => e.from));
+        for (const n of NODES) {
+            if (n.id === focus) continue;
+            const p = nodePx(n);
+            let ring = null;
+            if (out.has(n.id) && inc.has(n.id)) ring = '#f2a51f';
+            else if (out.has(n.id)) ring = '#ff4b1f';
+            else if (inc.has(n.id)) ring = 'rgba(120,150,170,0.95)';
+            if (ring) {
+                ctx.save();
+                ctx.strokeStyle = ring; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.9;
+                ctx.beginPath(); ctx.arc(p.x, p.y, r + 5, 0, Math.PI * 2); ctx.stroke();
+                ctx.restore();
+            }
+        }
+    }
+
+    // Nodes
+    for (const n of NODES) {
+        const p = nodePx(n);
+        const isHover = n.id === focus;
+        const isYou = n.id === 'you';
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = NODE_FILL;
+        ctx.fill();
+        ctx.lineWidth = isHover ? 2.4 : 1.4;
+        ctx.strokeStyle = isHover ? '#ff4b1f' : (isYou ? 'rgba(255,75,31,0.7)' : NODE_STROKE);
+        ctx.stroke();
+        if (isYou) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, r * 0.42, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff4b1f'; ctx.globalAlpha = 0.9; ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+        ctx.restore();
+
+        // Label below the node
+        ctx.save();
+        ctx.font = `${Math.max(9, Math.min(W, H) * 0.0145)}px "JetBrains Mono", ui-monospace, monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = isHover ? INK : 'rgba(240,235,224,0.82)';
+        ctx.fillText(n.label, p.x, p.y + r + 6);
+        ctx.restore();
+    }
+
+    drawLegend();
+}
+
+function drawLegend() {
+    const pad = 14;
+    const items = STILL
+        ? [['love', 'love'], ['trust', 'trust'], ['fear', 'fear'], ['owes', 'owes']]
+        : [['love', 'love'], ['trust', 'trust'], ['fear', 'fear'], ['owes', 'owes']];
+    ctx.save();
+    ctx.font = `${Math.max(9, Math.min(W, H) * 0.0125)}px "JetBrains Mono", ui-monospace, monospace`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    const lh = Math.max(15, Math.min(W, H) * 0.022);
+    let y = pad + lh * 0.6;
+    const x = W - pad - 118;
+    for (const [k, lbl] of items) {
+        ctx.strokeStyle = AXES[k].col;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([]);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 26, y); ctx.stroke();
+        ctx.fillStyle = 'rgba(240,235,224,0.78)';
+        ctx.fillText(lbl, x + 34, y);
+        y += lh;
+    }
+    // sign legend
+    ctx.strokeStyle = MUTED; ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 26, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = MUTED;
+    ctx.fillText('= negative', x + 34, y);
+    ctx.restore();
+}
+
+resize();
+new ResizeObserver(resize).observe(canvas);
+
+if (STILL) {
+    // Hero export: fixed 16:9 frame, all axes, layout frozen. Render once.
+    activeAxis = 'all';
+    requestAnimationFrame(draw);
+}
+})();
+</script>
+</body>
+</html>

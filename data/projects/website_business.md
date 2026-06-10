@@ -1,7 +1,7 @@
 ---
 id: website_business
 title: "Business-website design resources"
-tagline: "A working folder of design documentation and a nascent docs site — reference material for business-website engagements."
+tagline: "A working folder of design documentation and a nascent docs site — reference material for business-website builds."
 categories: [web, docs]
 skills_short:
   - Design-system documentation
@@ -15,7 +15,7 @@ highlight: false
 rank: 20
 headline:
   value: "reference material"
-  label: "for business engagements"
+  label: "for business-website builds"
 links:
   repo: null
   demo: null
@@ -23,7 +23,7 @@ links:
 
 # Business-website design resources
 
-A reference workspace. Design docs, component inventories, and a `docs-site/` folder scaffolded for a standalone documentation site. Not a shipped project — the design material feeds bespoke business-website engagements (like Site Avocat) and is periodically consolidated here for reuse.
+A reference workspace. Design docs, component inventories, and a `docs-site/` folder scaffolded for a standalone documentation site. Not a shipped project — the design material feeds bespoke business-website builds (like the self-directed Site Avocat project) and is periodically consolidated here for reuse.
 
 ## Where it stands
 

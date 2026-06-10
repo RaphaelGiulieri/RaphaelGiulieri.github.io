@@ -18,6 +18,9 @@ data/private/
 data/_scratch/phase1-exploration-findings.md
 data/_scratch/asset-needs.md
 data/_scratch/*-private.md
+# 2026-06-08 portfolio plans hold sensitive honesty/CV notes (fabrication
+# review, family reference, trading-performance candour) — keep local-only.
+docs/superpowers/specs/2026-06-08-*.md
 
 # --- Cloudflare Worker local state — contains account id, email, cache.
 # Worker secrets (ANTHROPIC_API_KEY) live in Cloudflare's encrypted store,

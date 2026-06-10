@@ -335,16 +335,6 @@
                     },
                     "moons": [
                         {
-                            "projectId": "planning_manager",
-                            "size": 0.45,
-                            "orbit": {
-                                "radius": 2.88,
-                                "period": 13,
-                                "phase": 0,
-                                "tilt": 0
-                            }
-                        },
-                        {
                             "projectId": "site_avocat",
                             "size": 0.38,
                             "orbit": {

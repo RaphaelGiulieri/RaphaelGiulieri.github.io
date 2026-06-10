@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" width="100%" font-family="JetBrains Mono, ui-monospace, monospace">
+  <defs>
+    <marker id="h-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ff4b1f"/>
+    </marker>
+    <marker id="h-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f2a51f"/>
+    </marker>
+    <linearGradient id="h-fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0c0a07"/>
+      <stop offset="1" stop-color="#15100a"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="600" fill="url(#h-fade)"/>
+
+  <!-- faint background scaffold dots / rhythm -->
+  <g fill="rgba(240,235,224,0.04)">
+    <circle cx="120" cy="540" r="2"/><circle cx="220" cy="540" r="2"/><circle cx="320" cy="540" r="2"/>
+    <circle cx="420" cy="540" r="2"/><circle cx="520" cy="540" r="2"/><circle cx="620" cy="540" r="2"/>
+    <circle cx="720" cy="540" r="2"/><circle cx="820" cy="540" r="2"/><circle cx="920" cy="540" r="2"/>
+    <circle cx="1020" cy="540" r="2"/><circle cx="1120" cy="540" r="2"/><circle cx="1220" cy="540" r="2"/>
+    <circle cx="1320" cy="540" r="2"/><circle cx="1420" cy="540" r="2"/>
+  </g>
+
+  <!-- header -->
+  <text x="80" y="92" fill="#f0ebe0" font-size="38" letter-spacing="1.5">Quantitative trading R&amp;D framework</text>
+  <text x="80" y="128" fill="rgba(240,235,224,0.62)" font-size="17" letter-spacing="0.6">a system that bets only when the math agrees — signal pipeline + an overnight research orchestrator</text>
+
+  <!-- ============ condensed pipeline rail ============ -->
+  <!-- 7 stages across the width, centred ~ y=300, the conformal gate highlighted -->
+
+  <!-- stage helper geometry: boxes 178 wide, 96 tall, gap via arrows -->
+
+  <!-- Data -->
+  <g>
+    <rect x="80" y="252" width="176" height="100" rx="7" fill="#141009" stroke="rgba(240,235,224,0.20)"/>
+    <text x="100" y="288" fill="#f0ebe0" font-size="15">Market data</text>
+    <text x="100" y="312" fill="rgba(240,235,224,0.6)" font-size="11.5">OHLCV · macro</text>
+    <text x="100" y="330" fill="rgba(240,235,224,0.6)" font-size="11.5">cross-asset · IV</text>
+  </g>
+
+  <!-- Features -->
+  <g>
+    <rect x="296" y="252" width="176" height="100" rx="7" fill="#141009" stroke="rgba(240,235,224,0.20)"/>
+    <text x="316" y="288" fill="#f0ebe0" font-size="15">Features</text>
+    <text x="316" y="312" fill="rgba(240,235,224,0.6)" font-size="11.5">per-ticker set</text>
+    <text x="316" y="330" fill="rgba(240,235,224,0.6)" font-size="11.5">SHAP-selected</text>
+  </g>
+
+  <!-- Ensemble -->
+  <g>
+    <rect x="512" y="252" width="176" height="100" rx="7" fill="#141009" stroke="rgba(240,235,224,0.20)"/>
+    <text x="532" y="288" fill="#f0ebe0" font-size="15">Ensemble</text>
+    <text x="532" y="312" fill="rgba(240,235,224,0.6)" font-size="11.5">XGB + LGBM</text>
+    <text x="532" y="330" fill="rgba(240,235,224,0.6)" font-size="11.5">(+ TabPFN)</text>
+  </g>
+
+  <!-- Calibration -->
+  <g>
+    <rect x="728" y="252" width="176" height="100" rx="7" fill="#141009" stroke="rgba(240,235,224,0.20)"/>
+    <text x="748" y="288" fill="#f0ebe0" font-size="15">Calibration</text>
+    <text x="748" y="312" fill="rgba(240,235,224,0.6)" font-size="11.5">Platt scaling</text>
+    <text x="748" y="330" fill="rgba(240,235,224,0.6)" font-size="11.5">honest probability</text>
+  </g>
+
+  <!-- CONFORMAL GATE — highlighted -->
+  <g>
+    <rect x="944" y="246" width="184" height="112" rx="7" fill="rgba(255,75,31,0.12)" stroke="#ff4b1f" stroke-width="2.2"/>
+    <text x="964" y="284" fill="#ff4b1f" font-size="15" font-weight="bold">Conformal gate</text>
+    <text x="964" y="308" fill="#f0ebe0" font-size="11.5">abstain when</text>
+    <text x="964" y="326" fill="#f0ebe0" font-size="11.5">ambiguous — no bet</text>
+    <text x="964" y="347" fill="rgba(242,165,31,0.95)" font-size="11">the thesis</text>
+  </g>
+
+  <!-- Sizing -->
+  <g>
+    <rect x="1168" y="252" width="176" height="100" rx="7" fill="#141009" stroke="rgba(240,235,224,0.20)"/>
+    <text x="1188" y="288" fill="#f0ebe0" font-size="15">Sizing</text>
+    <text x="1188" y="312" fill="rgba(240,235,224,0.6)" font-size="11.5">1%-risk / ATR</text>
+    <text x="1188" y="330" fill="rgba(240,235,224,0.6)" font-size="11.5">correlation caps</text>
+  </g>
+
+  <!-- Order -->
+  <g>
+    <rect x="1384" y="252" width="176" height="100" rx="7" fill="#141009" stroke="rgba(242,165,31,0.45)"/>
+    <text x="1404" y="288" fill="#f2a51f" font-size="15">Bracket order</text>
+    <text x="1404" y="312" fill="rgba(240,235,224,0.6)" font-size="11.5">ATR stop + TP</text>
+    <text x="1404" y="330" fill="rgba(240,235,224,0.6)" font-size="11.5">paper broker</text>
+  </g>
+
+  <!-- arrows along the rail -->
+  <line x1="256"  y1="302" x2="294"  y2="302" stroke="#ff4b1f" stroke-width="2" marker-end="url(#h-arrow)"/>
+  <line x1="472"  y1="302" x2="510"  y2="302" stroke="#ff4b1f" stroke-width="2" marker-end="url(#h-arrow)"/>
+  <line x1="688"  y1="302" x2="726"  y2="302" stroke="#ff4b1f" stroke-width="2" marker-end="url(#h-arrow)"/>
+  <line x1="904"  y1="302" x2="942"  y2="302" stroke="#ff4b1f" stroke-width="2" marker-end="url(#h-arrow)"/>
+  <line x1="1128" y1="302" x2="1166" y2="302" stroke="#ff4b1f" stroke-width="2" marker-end="url(#h-arrow)"/>
+  <line x1="1344" y1="302" x2="1382" y2="302" stroke="#ff4b1f" stroke-width="2" marker-end="url(#h-arrow)"/>
+
+  <!-- abstain branch off the gate -->
+  <path d="M1036,246 L1036,214" stroke="#f2a51f" stroke-width="1.8" fill="none" stroke-dasharray="5 4" marker-end="url(#h-arrow-amber)"/>
+  <text x="1052" y="226" fill="#f2a51f" font-size="12">abstain &#8594; skip</text>
+
+  <!-- ============ underpinning line ============ -->
+  <line x1="80" y1="430" x2="1560" y2="430" stroke="rgba(240,235,224,0.14)" stroke-width="1"/>
+  <text x="80" y="466" fill="rgba(240,235,224,0.72)" font-size="14" letter-spacing="0.5">Validated on walk-forward folds with purged embargo · researched overnight by a budgeted multi-agent orchestrator</text>
+  <text x="80" y="494" fill="rgba(242,165,31,0.85)" font-size="12.5">Concept diagram — not a screenshot of a running instance.</text>
+</svg>

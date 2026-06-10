@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solar calepinage · abstract layout · Raphael Giulieri</title>
+<style>
+    html, body { margin: 0; height: 100%; background: #0c0a07; color: #f0ebe0; font-family: "JetBrains Mono", ui-monospace, monospace; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; background: #0c0a07; }
+    .label { position: absolute; bottom: 12px; left: 12px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.78); pointer-events: none; line-height: 1.5; max-width: calc(100% - 24px); text-shadow: 0 1px 6px rgba(0,0,0,0.6); }
+    .label b { color: #ff4b1f; font-weight: 500; }
+    .label i { color: #f2a51f; font-style: normal; }
+    .controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    .controls button { font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.55); background: rgba(12,10,7,0.55); border: 1px solid rgba(240,235,224,0.18); padding: 4px 8px; cursor: pointer; backdrop-filter: blur(6px); }
+    .controls button:hover { border-color: #ff4b1f; color: #ff4b1f; }
+    .controls button.on { color: #ff4b1f; border-color: #ff4b1f; }
+    .tip { position: absolute; pointer-events: none; padding: 5px 8px; font-size: 10px; letter-spacing: 0.04em; line-height: 1.4; color: #f0ebe0; background: rgba(12,10,7,0.92); border: 1px solid rgba(240,235,224,0.22); transform: translate(-50%, calc(-100% - 10px)); white-space: nowrap; opacity: 0; transition: opacity 0.1s; text-transform: none; }
+    .tip b { color: #ff4b1f; font-weight: 500; }
+    .err { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; font-size: 13px; line-height: 1.6; color: #ff4b1f; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="controls">
+    <button data-view="grid" class="on">Calepinage</button>
+    <button data-view="wiring">Wiring</button>
+</div>
+<div class="tip" id="tip"></div>
+<p class="label" id="lbl"></p>
+<script>
+(() => {
+'use strict';
+
+const canvas = document.getElementById('c');
+const tip = document.getElementById('tip');
+const lbl = document.getElementById('lbl');
+const ctx = canvas.getContext('2d');
+if (!ctx) {
+    document.body.innerHTML = '<p class="err">This concept demo needs a 2D canvas. Try a recent browser.</p>';
+    return;
+}
+
+// ----------------------------------------------------------------------------
+// THE ONLY CONCRETE FIGURES — the four public aggregate counts from the dossier.
+// Everything else (the lattice shape, the per-string distribution, the
+// string→inverter grouping) is ILLUSTRATIVE: it is NOT the site roof and NOT the
+// as-built combiner map. It exists only to make 734/35/4 legible.
+// ----------------------------------------------------------------------------
+const KWC      = 337;   // kWc — installed DC capacity
+const N_PANELS = 734;   // panels
+const N_STRING = 35;    // electrical strings
+const N_INV    = 4;     // inverters
+
+// Build an UNEVEN per-string distribution that reconciles to EXACTLY 734.
+// 734 = 35 * 20 + 34  →  34 strings of 21 panels + 1 string of 20.
+// Shown honestly as a varying-length mix; not a real wiring topology.
+const stringLen = [];
+(() => {
+    let remaining = N_PANELS;
+    for (let i = 0; i < N_STRING; i++) {
+        const left = N_STRING - i;
+        // distribute as evenly as integer division allows → mix of 20 and 21
+        const len = Math.round(remaining / left);
+        stringLen.push(len);
+        remaining -= len;
+    }
+})();
+// sanity: total must equal 734
+const totalPanels = stringLen.reduce((a, b) => a + b, 0); // === 734
+
+// Representative string→inverter grouping (≈8–9 strings each): 9+9+9+8 = 35.
+const invGroups = [9, 9, 9, 8];
+const stringInv = [];
+(() => {
+    let inv = 0, count = 0;
+    for (let s = 0; s < N_STRING; s++) {
+        if (count >= invGroups[inv] && inv < N_INV - 1) { inv++; count = 0; }
+        stringInv.push(inv);
+        count++;
+    }
+})();
+// panels per inverter (derived) — illustrative
+const invPanels = new Array(N_INV).fill(0);
+for (let s = 0; s < N_STRING; s++) invPanels[stringInv[s]] += stringLen[s];
+
+// Low-saturation editorial multi-hue ramp, keyed to string id. Three families
+// (slate / amber / teal) cycled so adjacent strings stay distinguishable.
+function stringColor(s, lit) {
+    const fam = s % 3;
+    const t = (Math.floor(s / 3) % 6) / 6;          // shade within the family
+    const L = (lit ? 64 : 46) + t * 10;             // lightness
+    const S = lit ? 60 : 34;                         // saturation
+    let H;
+    if (fam === 0)      H = 205 - t * 18;            // slate / steel blue
+    else if (fam === 1) H = 36  + t * 8;             // amber
+    else                H = 168 + t * 14;            // teal
+    return `hsl(${H}, ${S}%, ${L}%)`;
+}
+
+const ACCENT = '#ff4b1f';
+const AMBER  = '#f2a51f';
+const INK    = '#f0ebe0';
+const MUTED  = 'rgba(240,235,224,0.6)';
+
+// ----------------------------------------------------------------------------
+// Mode: still-export vs. interactive
+// ----------------------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const STILL = params.get('still') === '1';
+let view = params.get('view') === 'wiring' ? 'wiring' : 'grid';
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+document.querySelectorAll('.controls button').forEach(btn => {
+    if (btn.dataset.view === view) btn.classList.add('on'); else btn.classList.remove('on');
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.controls button').forEach(b => b.classList.remove('on'));
+        btn.classList.add('on');
+        view = btn.dataset.view;
+        hover = -1;
+        updateLabel();
+    });
+});
+
+function updateLabel() {
+    if (view === 'grid') {
+        lbl.innerHTML = '<b>Calepinage · abstract layout — not the site roof</b><br>' +
+            N_PANELS + ' panels · ' + N_STRING + ' strings (uneven, 20–21 panels, <i>illustrative</i>) · hover a panel to read its string · ' + KWC + ' kWc';
+    } else {
+        lbl.innerHTML = '<b>Single-line · electrical fan-in</b><br>' +
+            N_PANELS + ' panels → ' + N_STRING + ' strings → ' + N_INV + ' inverters → grid (PDL) · string→inverter grouping is <i>representative, not the as-built combiner map</i>';
+    }
+}
+updateLabel();
+
+// ----------------------------------------------------------------------------
+// Resize (DPR-clamped, ResizeObserver)
+// ----------------------------------------------------------------------------
+let W = 0, H = 0, dpr = 1;
+function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 1.6);
+    W = Math.max(1, canvas.clientWidth);
+    H = Math.max(1, canvas.clientHeight);
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+}
+resize();
+new ResizeObserver(() => { resize(); }).observe(canvas);
+
+// ----------------------------------------------------------------------------
+// GRID VIEW — abstract calepinage lattice. Panels laid out column-major into a
+// regular rectangle (NOT the roof). Each panel coloured by its string id.
+// ----------------------------------------------------------------------------
+// Precompute per-panel string id following the (illustrative) string order.
+const panelString = new Int16Array(N_PANELS);
+(() => {
+    let p = 0;
+    for (let s = 0; s < N_STRING; s++) {
+        for (let k = 0; k < stringLen[s]; k++) { panelString[p++] = s; }
+    }
+})();
+
+// Choose a near-square lattice that holds 734 cells. 28 cols × 27 rows = 756 ≥ 734.
+const COLS = 34, ROWS = Math.ceil(N_PANELS / COLS); // 34 × 22 = 748 ≥ 734
+let gridGeom = null;
+function computeGrid() {
+    const padX = Math.max(40, W * 0.06), padTop = 64, padBot = 56;
+    const availW = W - padX * 2;
+    const availH = H - padTop - padBot;
+    const cw = availW / COLS;
+    const ch = availH / ROWS;
+    const cell = Math.max(4, Math.min(cw, ch));
+    const gw = cell * COLS, gh = cell * ROWS;
+    const ox = (W - gw) / 2;
+    const oy = padTop + (availH - gh) / 2;
+    gridGeom = { ox, oy, cell, gw, gh };
+}
+
+function panelRect(i) {
+    // column-major fill so each string reads as a vertical-ish run
+    const col = Math.floor(i / ROWS);
+    const row = i % ROWS;
+    const { ox, oy, cell } = gridGeom;
+    return { x: ox + col * cell, y: oy + row * cell, s: cell };
+}
+
+function drawGrid() {
+    computeGrid();
+    const gap = Math.max(0.5, gridGeom.cell * 0.10);
+    for (let i = 0; i < N_PANELS; i++) {
+        const r = panelRect(i);
+        const s = panelString[i];
+        const lit = hover >= 0 && panelString[hover] === s;
+        ctx.fillStyle = stringColor(s, lit);
+        roundRect(r.x + gap, r.y + gap, r.s - gap * 2, r.s - gap * 2, Math.min(2.5, r.s * 0.18));
+        ctx.fill();
+    }
+    // highlight the hovered string's outline
+    if (hover >= 0) {
+        const hs = panelString[hover];
+        ctx.strokeStyle = ACCENT;
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < N_PANELS; i++) {
+            if (panelString[i] !== hs) continue;
+            const r = panelRect(i);
+            ctx.strokeRect(r.x + gap, r.y + gap, r.s - gap * 2, r.s - gap * 2);
+        }
+    }
+    // (legend lives in the bottom-left HTML caption — no canvas strip, avoids overlap)
+    // title
+    ctx.fillStyle = MUTED;
+    ctx.font = '11px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('CALEPINAGE — ABSTRACT GRID (CONCEPT, NOT TO SITE)', gridGeom.ox, gridGeom.oy - 16);
+}
+
+function drawLegend() {
+    const y = H - 30;
+    const x0 = gridGeom.ox;
+    ctx.font = '11px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    // metric readout
+    ctx.fillStyle = INK;
+    ctx.fillText(KWC + ' kWc', x0, y);
+    let cx = x0 + 90;
+    const items = [
+        [N_PANELS + ' panels', AMBER],
+        [N_STRING + ' strings', '#7fb2c8'],
+        [N_INV + ' inverters', '#cf9f5a'],
+    ];
+    items.forEach(([txt, col]) => {
+        ctx.fillStyle = col;
+        ctx.fillRect(cx, y - 5, 10, 10);
+        ctx.fillStyle = MUTED;
+        ctx.fillText(txt, cx + 16, y);
+        cx += 16 + ctx.measureText(txt).width + 26;
+    });
+}
+
+// ----------------------------------------------------------------------------
+// WIRING VIEW — left→right single-line fan-in:
+//   734 panels (stacked column) → 35 string buses → 4 inverters → grid (PDL)
+// ----------------------------------------------------------------------------
+let wireGeom = null;
+function computeWiring() {
+    const padTop = 70, padBot = 64;
+    const top = padTop, bot = H - padBot;
+    const h = bot - top;
+    // four x columns
+    const xPanels = W * 0.10;
+    const xString = W * 0.40;
+    const xInv    = W * 0.70;
+    const xGrid   = W * 0.92;
+    wireGeom = { top, bot, h, xPanels, xString, xInv, xGrid };
+}
+
+function stringY(s) { const { top, h } = wireGeom; return top + (s + 0.5) / N_STRING * h; }
+function invY(inv)  { const { top, h } = wireGeom; return top + (inv + 0.5) / N_INV * h; }
+function panelStackY(i) { const { top, h } = wireGeom; return top + (i + 0.5) / N_PANELS * h; }
+
+function drawWiring(t) {
+    computeWiring();
+    const { top, bot, xPanels, xString, xInv, xGrid } = wireGeom;
+    const flow = reduceMotion ? 0 : (t * 0.00018) % 1;
+
+    // --- connectors: panels → strings (each string gathers its run of panels) ---
+    let p = 0;
+    for (let s = 0; s < N_STRING; s++) {
+        const sy = stringY(s);
+        const lit = hover === s;
+        ctx.strokeStyle = lit ? ACCENT : 'rgba(240,235,224,0.10)';
+        ctx.lineWidth = lit ? 1.3 : 0.6;
+        const col = stringColor(s, lit);
+        for (let k = 0; k < stringLen[s]; k++, p++) {
+            const py = panelStackY(p);
+            ctx.beginPath();
+            ctx.moveTo(xPanels + 6, py);
+            ctx.bezierCurveTo((xPanels + xString) / 2, py, (xPanels + xString) / 2, sy, xString - 8, sy);
+            ctx.stroke();
+        }
+        // string → inverter
+        const iy = invY(stringInv[s]);
+        ctx.strokeStyle = lit ? ACCENT : col;
+        ctx.lineWidth = lit ? 1.6 : 1.0;
+        ctx.beginPath();
+        ctx.moveTo(xString + 6, sy);
+        ctx.bezierCurveTo((xString + xInv) / 2, sy, (xString + xInv) / 2, iy, xInv - 18, iy);
+        ctx.stroke();
+    }
+
+    // --- inverter → grid bus ---
+    const gy = (top + bot) / 2;
+    for (let inv = 0; inv < N_INV; inv++) {
+        const iy = invY(inv);
+        ctx.strokeStyle = AMBER;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(xInv + 18, iy);
+        ctx.bezierCurveTo((xInv + xGrid) / 2, iy, (xInv + xGrid) / 2, gy, xGrid - 4, gy);
+        ctx.stroke();
+    }
+
+    // --- animated flow pulses along the grid bus ---
+    if (!reduceMotion) {
+        for (let inv = 0; inv < N_INV; inv++) {
+            const iy = invY(inv);
+            const ph = (flow + inv / N_INV) % 1;
+            const fx = xInv + 18 + (xGrid - 4 - (xInv + 18)) * ph;
+            const fy = iy + (gy - iy) * (ph * ph * (3 - 2 * ph));
+            ctx.fillStyle = ACCENT;
+            ctx.beginPath();
+            ctx.arc(fx, fy, 2.0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // --- nodes: panel stack (aggregated column of ticks) ---
+    ctx.strokeStyle = 'rgba(240,235,224,0.30)';
+    ctx.lineWidth = 0.5;
+    const step = Math.max(1, Math.floor(N_PANELS / 180)); // don't draw 734 ticks if tiny
+    for (let i = 0; i < N_PANELS; i += step) {
+        const py = panelStackY(i);
+        ctx.beginPath();
+        ctx.moveTo(xPanels - 5, py);
+        ctx.lineTo(xPanels + 5, py);
+        ctx.stroke();
+    }
+
+    // --- string bus nodes ---
+    for (let s = 0; s < N_STRING; s++) {
+        const sy = stringY(s);
+        const lit = hover === s;
+        ctx.fillStyle = lit ? ACCENT : stringColor(s, false);
+        ctx.beginPath();
+        ctx.arc(xString, sy, lit ? 3.6 : 2.4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // --- inverter blocks ---
+    for (let inv = 0; inv < N_INV; inv++) {
+        const iy = invY(inv);
+        ctx.fillStyle = '#15120c';
+        ctx.strokeStyle = AMBER;
+        ctx.lineWidth = 1.2;
+        roundRect(xInv - 18, iy - 16, 36, 32, 4);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = AMBER;
+        ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('INV' + (inv + 1), xInv, iy - 4);
+        ctx.fillStyle = MUTED;
+        ctx.fillText(invPanels[inv] + 'p', xInv, iy + 7);
+    }
+
+    // --- grid / PDL terminal ---
+    ctx.fillStyle = '#15120c';
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 1.4;
+    roundRect(xGrid - 4, gy - 22, 30, 44, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = ACCENT;
+    ctx.font = '9px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('GRID', xGrid + 11, gy - 4);
+    ctx.fillStyle = MUTED;
+    ctx.fillText('PDL', xGrid + 11, gy + 8);
+
+    // --- column captions ---
+    ctx.font = '11px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'center';
+    const cap = [
+        [xPanels, N_PANELS + ' PANELS', INK],
+        [xString, N_STRING + ' STRINGS', INK],
+        [xInv,    N_INV + ' INVERTERS', INK],
+        [xGrid + 11, 'GRID (PDL)', INK],
+    ];
+    cap.forEach(([x, txt, col]) => {
+        ctx.fillStyle = col;
+        ctx.fillText(txt, x, top - 24);
+    });
+    ctx.fillStyle = MUTED;
+    ctx.font = '10px "JetBrains Mono", ui-monospace, monospace';
+    ctx.fillText(KWC + ' kWc total · single grid connection', W / 2, bot + 36);
+}
+
+// ----------------------------------------------------------------------------
+// helpers
+// ----------------------------------------------------------------------------
+function roundRect(x, y, w, h, r) {
+    if (w < 2 * r) r = w / 2; if (h < 2 * r) r = h / 2;
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+
+// ----------------------------------------------------------------------------
+// hover: grid → panel index; wiring → string index
+// ----------------------------------------------------------------------------
+let hover = -1, mx = -1, my = -1;
+canvas.addEventListener('pointermove', e => {
+    const r = canvas.getBoundingClientRect();
+    mx = e.clientX - r.left; my = e.clientY - r.top;
+    if (view === 'grid' && gridGeom) {
+        const { ox, oy, cell } = gridGeom;
+        const col = Math.floor((mx - ox) / cell);
+        const row = Math.floor((my - oy) / cell);
+        if (col >= 0 && row >= 0 && row < ROWS) {
+            const i = col * ROWS + row;
+            hover = (i >= 0 && i < N_PANELS) ? i : -1;
+        } else hover = -1;
+    } else if (view === 'wiring' && wireGeom) {
+        // nearest string bus by y
+        const { top, h } = wireGeom;
+        const s = Math.round(((my - top) / h) * N_STRING - 0.5);
+        hover = (s >= 0 && s < N_STRING && Math.abs(mx - wireGeom.xString) < W * 0.45) ? s : -1;
+    }
+    updateTip();
+});
+canvas.addEventListener('pointerleave', () => { hover = -1; tip.style.opacity = '0'; });
+
+function updateTip() {
+    if (hover < 0) { tip.style.opacity = '0'; return; }
+    let txt;
+    if (view === 'grid') {
+        const s = panelString[hover];
+        txt = 'String <b>#' + (s + 1) + '</b> · ' + stringLen[s] + ' panels · inverter <b>' + (stringInv[s] + 1) + '</b>';
+    } else {
+        const s = hover;
+        txt = 'String <b>#' + (s + 1) + '</b> · ' + stringLen[s] + ' panels → inverter <b>' + (stringInv[s] + 1) + '</b>';
+    }
+    tip.innerHTML = txt;
+    tip.style.left = mx + 'px';
+    tip.style.top = my + 'px';
+    tip.style.opacity = '1';
+}
+
+// ----------------------------------------------------------------------------
+// render loop
+// ----------------------------------------------------------------------------
+function draw(t) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#0c0a07';
+    ctx.fillRect(0, 0, W, H);
+    if (view === 'grid') drawGrid();
+    else drawWiring(t);
+}
+
+if (STILL) {
+    // single deterministic frame for hero export
+    function once() {
+        if (W < 2 || H < 2) { requestAnimationFrame(once); return; }
+        draw(0);
+    }
+    requestAnimationFrame(once);
+} else {
+    let raf;
+    function frame(t) { draw(t); raf = requestAnimationFrame(frame); }
+    raf = requestAnimationFrame(frame);
+}
+})();
+</script>
+</body>
+</html>

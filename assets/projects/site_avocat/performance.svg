@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" width="100%" role="img"
+     aria-label="Performance scorecard: zero frameworks, zero trackers, zero third-party cookies, zero build steps. About 1.1 megabytes uncompressed, sub-1-second load, Lighthouse 95-plus, 88 ARIA attributes, AAA contrast. GDPR-compliant by architecture. Figures stated in the dossier, not live-measured.">
+  <defs>
+    <style>
+      text { font-family: "JetBrains Mono", ui-monospace, monospace; fill: #f0ebe0; }
+      .t-title { font-size: 26px; font-weight: 600; fill: #f7f3ea; }
+      .t-sub   { font-size: 12px; fill: rgba(240,235,224,0.55); letter-spacing: 0.04em; }
+      .zero    { font-size: 70px; font-weight: 700; fill: #ff4b1f; }
+      .z-label { font-size: 13px; fill: rgba(240,235,224,0.72); }
+      .stat-n  { font-size: 30px; font-weight: 700; fill: #f2a51f; }
+      .stat-l  { font-size: 12px; fill: rgba(240,235,224,0.62); letter-spacing: 0.03em; }
+      .card    { fill: #141009; stroke: rgba(240,235,224,0.18); stroke-width: 1; }
+      .t-foot  { font-size: 12.5px; fill: rgba(240,235,224,0.72); }
+      .t-tag   { font-size: 10px; letter-spacing: 0.08em; fill: rgba(240,235,224,0.45); }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="750" fill="#0c0a07"/>
+
+  <!-- header -->
+  <text x="48" y="58" class="t-title">By the numbers</text>
+  <text x="48" y="82" class="t-sub">figures stated in the dossier · static scorecard, not a live benchmark</text>
+  <text x="1152" y="70" text-anchor="end" class="stat-n">95+</text>
+  <text x="1152" y="92" text-anchor="end" class="t-tag">LIGHTHOUSE, ACROSS THE BOARD</text>
+
+  <!-- four big zeros -->
+  <g>
+    <rect class="card" x="48"  y="116" width="262" height="172" rx="6"/>
+    <text x="179" y="218" text-anchor="middle" class="zero">0</text>
+    <text x="179" y="250" text-anchor="middle" class="z-label">frameworks</text>
+
+    <rect class="card" x="326" y="116" width="262" height="172" rx="6"/>
+    <text x="457" y="218" text-anchor="middle" class="zero">0</text>
+    <text x="457" y="250" text-anchor="middle" class="z-label">trackers</text>
+
+    <rect class="card" x="604" y="116" width="262" height="172" rx="6"/>
+    <text x="735" y="218" text-anchor="middle" class="zero">0</text>
+    <text x="735" y="250" text-anchor="middle" class="z-label">third-party cookies</text>
+
+    <rect class="card" x="882" y="116" width="270" height="172" rx="6"/>
+    <text x="1017" y="218" text-anchor="middle" class="zero">0</text>
+    <text x="1017" y="250" text-anchor="middle" class="z-label">build steps</text>
+  </g>
+
+  <!-- supporting stat row -->
+  <g>
+    <rect class="card" x="48"  y="312" width="262" height="124" rx="6"/>
+    <text x="179" y="372" text-anchor="middle" class="stat-n">~1.1 MB</text>
+    <text x="179" y="402" text-anchor="middle" class="stat-l">uncompressed, whole site</text>
+
+    <rect class="card" x="326" y="312" width="262" height="124" rx="6"/>
+    <text x="457" y="372" text-anchor="middle" class="stat-n">&lt; 1 s</text>
+    <text x="457" y="402" text-anchor="middle" class="stat-l">load time</text>
+
+    <rect class="card" x="604" y="312" width="262" height="124" rx="6"/>
+    <text x="735" y="372" text-anchor="middle" class="stat-n">88</text>
+    <text x="735" y="402" text-anchor="middle" class="stat-l">ARIA attributes</text>
+
+    <rect class="card" x="882" y="312" width="270" height="124" rx="6"/>
+    <text x="1017" y="372" text-anchor="middle" class="stat-n">AAA</text>
+    <text x="1017" y="402" text-anchor="middle" class="stat-l">colour contrast</text>
+  </g>
+
+  <!-- accessibility motif: contrast + focus ring -->
+  <g>
+    <rect class="card" x="48" y="460" width="540" height="150" rx="6"/>
+    <text x="68" y="490" class="stat-l" fill="#f0ebe0">Accessibility-first</text>
+    <text x="68" y="512" class="t-tag">SKIP LINK · VISIBLE FOCUS RINGS · REDUCED-MOTION</text>
+    <!-- contrast bar -->
+    <rect x="68" y="528" width="220" height="22" rx="2" fill="#0c0a07" stroke="rgba(240,235,224,0.2)"/>
+    <text x="80" y="544" font-size="12" fill="#f0ebe0">AAA contrast sample</text>
+    <!-- focus ring sample -->
+    <rect x="310" y="524" width="170" height="30" rx="3" fill="#141009" stroke="#ff4b1f" stroke-width="2"/>
+    <text x="395" y="544" text-anchor="middle" font-size="11" fill="#ff4b1f">focus ring</text>
+    <text x="68" y="586" class="stat-l">Clientele skews older — high contrast and clear focus aren't optional.</text>
+  </g>
+
+  <!-- GDPR card -->
+  <g>
+    <rect class="card" x="604" y="460" width="548" height="150" rx="6"/>
+    <text x="624" y="490" class="stat-l" fill="#f0ebe0">GDPR-compliant by architecture</text>
+    <text x="624" y="520" class="t-foot">PII never leaves the device until the user sends</text>
+    <text x="624" y="544" class="t-foot">from their own mail client.</text>
+    <text x="624" y="582" class="t-tag">NO GOOGLE ANALYTICS · NO PIXEL · NO CONSENT BANNER NEEDED</text>
+  </g>
+
+  <!-- footer -->
+  <text x="48" y="668" class="t-foot">The architecture is the deliverable as much as the design.</text>
+  <text x="1152" y="668" text-anchor="end" class="t-tag">FIGURES PER DOSSIER · NOT LIVE-MEASURED</text>
+</svg>

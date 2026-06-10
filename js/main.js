@@ -122,7 +122,7 @@
     // that lead the Work section. Recruiter-in-a-hurry path: a small
     // curated set the visitor can act on before the full filterable grid.
     // IDs are intentionally hardcoded — this is curation, not ranking.
-    const FEATURED_IDS = ['sabda_vfx', 'lrd_calico', 'qatar_360', 'planning_manager'];
+    const FEATURED_IDS = ['sabda_vfx', 'lrd_calico', 'qatar_360'];
     function renderFeatured() {
         const mount = $('#workFeatured');
         if (!mount || !state.projects) return;
@@ -406,6 +406,56 @@
             if (e.key === 'Escape') closeModal();
             if (e.key === 'Tab') trapFocus(e);
         });
+        initMediaLightbox();
+    }
+
+    // ---- Media lightbox: click a dossier diagram/image to zoom (Discord-style).
+    // The SVG diagrams render small inside the narrow dossier column; this lets a
+    // reader click any of them (or any still image) to see it full-size. ----
+    let lightboxEl = null;
+    function getLightbox() {
+        if (lightboxEl) return lightboxEl;
+        lightboxEl = document.createElement('div');
+        lightboxEl.className = 'media-lightbox';
+        lightboxEl.setAttribute('role', 'dialog');
+        lightboxEl.setAttribute('aria-modal', 'true');
+        lightboxEl.setAttribute('aria-label', 'Enlarged image');
+        lightboxEl.innerHTML = '<button type="button" class="lightbox-close" aria-label="Close enlarged image">✕</button><img alt="">';
+        // A click anywhere (backdrop, the image, or the close button) dismisses.
+        lightboxEl.addEventListener('click', () => closeLightbox());
+        document.body.appendChild(lightboxEl);
+        return lightboxEl;
+    }
+    function openLightbox(src, alt) {
+        const lb = getLightbox();
+        const img = lb.querySelector('img');
+        img.src = src;
+        img.alt = alt || '';
+        lb.classList.add('is-open');
+    }
+    function closeLightbox() {
+        if (!lightboxEl) return;
+        lightboxEl.classList.remove('is-open');
+        const img = lightboxEl.querySelector('img');
+        if (img) img.removeAttribute('src'); // release the decoded bitmap
+    }
+    function initMediaLightbox() {
+        // Delegate: clicking any dossier still image / SVG diagram enlarges it.
+        document.addEventListener('click', (e) => {
+            const img = e.target.closest && e.target.closest('.dossier-media-image img');
+            if (!img) return;
+            e.preventDefault();
+            openLightbox(img.currentSrc || img.src, img.alt);
+        });
+        // Esc closes the lightbox first. Capture phase + stopPropagation so the
+        // dossier's own Esc handler doesn't also fire and close the dossier.
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && lightboxEl && lightboxEl.classList.contains('is-open')) {
+                e.stopPropagation();
+                e.preventDefault();
+                closeLightbox();
+            }
+        }, true);
     }
     function trapFocus(e) {
         const sheet = $('.dossier-sheet');

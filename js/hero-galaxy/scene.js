@@ -568,17 +568,13 @@ export async function mountScene({ section }) {
     const _proj4  = new Float32Array(4);
 
     function visibleStars() {
-        // Strict tier-based visibility for stars at every zoom level:
-        //   galaxy → all 3 (they're the structure)
-        //   system → ONLY the focused sun (other systems' suns at distant
-        //            galaxy positions would otherwise render as bright
-        //            unlabeled blobs behind the focused system — the
-        //            "rogue" reported across multiple sessions)
-        //   planet → none (visitor is on a planet, sun is irrelevant
-        //            visually and was painting a 30–60u-behind glow blob)
-        //   moon   → none (same reason)
-        if (state.level === 'planet' || state.level === 'moon') return [];
-        if (state.level === 'system') return stars.filter(s => s.id === state.focusedSystemId);
+        // All 3 suns render at every zoom level — they're useful spatial
+        // landmarks at every scale, and dropping them at planet/moon view
+        // was over-correction during the "rogue blob" debug saga (actual
+        // culprit was a particle ring, not the sun meshes). Bloom is still
+        // filtered separately in the render loop — at planet/moon view
+        // the focused sun's bloom billboard would blow up off-screen, so
+        // it's suppressed there even though the sphere keeps rendering.
         return stars;
     }
     function visiblePlanets() {
@@ -1073,10 +1069,18 @@ export async function mountScene({ section }) {
                     // having to zoom into each system.
                     show = body.kind === 'star' || body.kind === 'planet';
                 } else if (state.level === 'system') {
-                    show = body.kind === 'star'
+                    // ONLY the focused system's sun + its planets. Other
+                    // suns still RENDER (as distant landmarks) but their
+                    // labels were creating background noise; visitor is
+                    // examining one system, the others' names are clutter.
+                    show = (body.kind === 'star'   && body.id === state.focusedSystemId)
                         || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId);
                 } else if (state.level === 'planet' || state.level === 'moon') {
-                    show = body.kind === 'star'
+                    // Same rule one level deeper — focused system's sun
+                    // label is kept (useful "where am I" cue), other suns
+                    // are silent. Focused system's planets + focused
+                    // planet's moons are labelled.
+                    show = (body.kind === 'star'   && body.id === state.focusedSystemId)
                         || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId)
                         || (body.kind === 'moon'   && body.meta.planetId === state.focusedPlanetId);
                 }

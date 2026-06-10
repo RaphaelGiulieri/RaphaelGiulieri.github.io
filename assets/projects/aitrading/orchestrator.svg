@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" width="100%" font-family="JetBrains Mono, ui-monospace, monospace">
+  <defs>
+    <marker id="o-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ff4b1f"/>
+    </marker>
+    <marker id="o-arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f2a51f"/>
+    </marker>
+    <marker id="o-arrow-mute" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="rgba(240,235,224,0.45)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="750" fill="#0c0a07"/>
+
+  <!-- title -->
+  <text x="48" y="56" fill="#f0ebe0" font-size="26" letter-spacing="1">Overnight orchestrator</text>
+  <text x="48" y="82" fill="rgba(240,235,224,0.6)" font-size="13" letter-spacing="0.5">a leader agent dispatches ephemeral specialists on a budget, then files everything for the morning</text>
+
+  <!-- night band marker -->
+  <text x="1152" y="56" fill="rgba(240,235,224,0.45)" font-size="11" text-anchor="end" letter-spacing="0.5">runs while the market is closed</text>
+
+  <!-- ============ LEADER (left hub) ============ -->
+  <g>
+    <rect x="48" y="150" width="270" height="150" rx="8" fill="rgba(255,75,31,0.10)" stroke="#ff4b1f" stroke-width="2"/>
+    <text x="68" y="182" fill="#ff4b1f" font-size="17" font-weight="bold">Leader agent</text>
+    <text x="68" y="206" fill="rgba(240,235,224,0.75)" font-size="11.5">router + critic</text>
+    <text x="68" y="228" fill="rgba(240,235,224,0.6)" font-size="11">routes: BASH · SPAWN ·</text>
+    <text x="68" y="245" fill="rgba(240,235,224,0.6)" font-size="11">PARALLEL · LIBRARIAN</text>
+    <text x="68" y="270" fill="rgba(240,235,224,0.5)" font-size="10.5">whitelisted to Glob / Grep /</text>
+    <text x="68" y="285" fill="rgba(240,235,224,0.5)" font-size="10.5">route_to — never edits code itself</text>
+  </g>
+
+  <!-- ============ EPHEMERAL SPECIALISTS (centre stack) ============ -->
+  <text x="470" y="138" fill="rgba(240,235,224,0.72)" font-size="13" text-anchor="middle">Ephemeral specialists · spawned per task, torn down after</text>
+
+  <g>
+    <rect x="392" y="152" width="312" height="50" rx="6" fill="#141009" stroke="rgba(240,235,224,0.20)"/>
+    <text x="408" y="174" fill="#f0ebe0" font-size="13">investigator</text>
+    <text x="408" y="192" fill="rgba(240,235,224,0.55)" font-size="10.5">reads the data, frames the hypothesis</text>
+  </g>
+  <g>
+    <rect x="392" y="212" width="312" height="50" rx="6" fill="#141009" stroke="rgba(240,235,224,0.20)"/>
+    <text x="408" y="234" fill="#f0ebe0" font-size="13">developer</text>
+    <text x="408" y="252" fill="rgba(240,235,224,0.55)" font-size="10.5">writes the experiment, runs the backtest</text>
+  </g>
+  <g>
+    <rect x="392" y="272" width="312" height="50" rx="6" fill="#141009" stroke="rgba(240,235,224,0.20)"/>
+    <text x="408" y="294" fill="#f0ebe0" font-size="13">reviewer</text>
+    <text x="408" y="312" fill="rgba(240,235,224,0.55)" font-size="10.5">checks the result against the validation rules</text>
+  </g>
+  <g>
+    <rect x="392" y="332" width="312" height="50" rx="6" fill="#141009" stroke="rgba(240,235,224,0.20)"/>
+    <text x="408" y="354" fill="#f0ebe0" font-size="13">reviewer_local · librarian</text>
+    <text x="408" y="372" fill="rgba(240,235,224,0.55)" font-size="10.5">local model second-opinion + memory writes</text>
+  </g>
+
+  <!-- leader -> specialists arrows -->
+  <line x1="318" y1="190" x2="390" y2="177" stroke="#ff4b1f" stroke-width="1.6" marker-end="url(#o-arrow)"/>
+  <line x1="318" y1="220" x2="390" y2="237" stroke="#ff4b1f" stroke-width="1.6" marker-end="url(#o-arrow)"/>
+  <line x1="318" y1="248" x2="390" y2="297" stroke="#ff4b1f" stroke-width="1.6" marker-end="url(#o-arrow)"/>
+  <line x1="318" y1="270" x2="390" y2="357" stroke="#ff4b1f" stroke-width="1.6" marker-end="url(#o-arrow)"/>
+  <!-- specialists -> leader return (critic loop) -->
+  <path d="M392,200 C360,210 350,250 320,255" stroke="rgba(240,235,224,0.45)" stroke-width="1.2" fill="none" stroke-dasharray="4 4" marker-end="url(#o-arrow-mute)"/>
+  <text x="330" y="318" fill="rgba(240,235,224,0.5)" font-size="10">results return to the critic</text>
+
+  <!-- ============ BUDGET TRACKER (top right) ============ -->
+  <g>
+    <rect x="780" y="152" width="372" height="110" rx="8" fill="#141009" stroke="rgba(242,165,31,0.5)"/>
+    <text x="800" y="182" fill="#f2a51f" font-size="15">Budget tracker</text>
+    <text x="800" y="206" fill="rgba(240,235,224,0.65)" font-size="11.5">per-agent + global USD / token / turn caps</text>
+    <text x="800" y="226" fill="rgba(240,235,224,0.65)" font-size="11.5">soft &amp; hard ceilings throttle spawns</text>
+    <text x="800" y="246" fill="rgba(240,235,224,0.65)" font-size="11.5">daily reset · keeps an overnight run bounded</text>
+  </g>
+  <!-- every spawn checks the budget -->
+  <line x1="704" y1="200" x2="778" y2="200" stroke="#f2a51f" stroke-width="1.6" marker-end="url(#o-arrow-amber)"/>
+  <text x="712" y="190" fill="rgba(242,165,31,0.9)" font-size="10">meter</text>
+
+  <!-- ============ MEMORY STORE (bottom right) ============ -->
+  <g>
+    <rect x="780" y="300" width="372" height="120" rx="8" fill="#141009" stroke="rgba(240,235,224,0.22)"/>
+    <text x="800" y="330" fill="#f0ebe0" font-size="15">Memory store</text>
+    <text x="800" y="354" fill="rgba(240,235,224,0.65)" font-size="11.5">vector drawers + a knowledge graph</text>
+    <text x="800" y="374" fill="rgba(240,235,224,0.65)" font-size="11.5">the librarian writes drawers &amp; triples directly</text>
+    <text x="800" y="394" fill="rgba(240,235,224,0.65)" font-size="11.5">searchable — last night's findings persist</text>
+  </g>
+  <!-- librarian -> memory -->
+  <line x1="704" y1="357" x2="778" y2="357" stroke="#ff4b1f" stroke-width="1.6" marker-end="url(#o-arrow)"/>
+  <text x="712" y="347" fill="rgba(240,235,224,0.55)" font-size="10">file</text>
+
+  <!-- ============ MORNING HANDOFF (bottom) ============ -->
+  <g>
+    <rect x="48" y="470" width="1104" height="130" rx="8" fill="rgba(20,16,9,0.6)" stroke="#ff4b1f" stroke-width="1.6"/>
+    <text x="72" y="506" fill="#ff4b1f" font-size="18" letter-spacing="0.5">MORNING handoff</text>
+    <text x="72" y="536" fill="rgba(240,235,224,0.75)" font-size="13">A single MORNING.md collects the night's results: what ran, what survived validation, what failed.</text>
+    <text x="72" y="560" fill="rgba(240,235,224,0.75)" font-size="13">It opens with a prioritised shortlist — the first thing read at the desk the next morning.</text>
+    <text x="72" y="586" fill="rgba(242,165,31,0.9)" font-size="11.5">The morning reads the memory store first, so each night compounds on the last instead of starting cold.</text>
+  </g>
+  <!-- memory + leader feed the morning -->
+  <path d="M880,420 L880,452 L600,452 L600,468" stroke="#ff4b1f" stroke-width="1.6" fill="none" marker-end="url(#o-arrow)"/>
+  <path d="M183,300 L183,452 L560,452 L560,468" stroke="rgba(240,235,224,0.3)" stroke-width="1.2" fill="none" stroke-dasharray="3 4"/>
+
+  <!-- footer honesty note -->
+  <text x="48" y="660" fill="rgba(240,235,224,0.55)" font-size="11.5">Concept diagram of the orchestration architecture — not a screenshot of a live run. Specialist agents are spawned on demand and disposed of when their task is done.</text>
+</svg>

@@ -879,15 +879,12 @@ button {
 .featured-label span { color: var(--accent); padding: 0 4px; }
 .featured-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 1px;
     background: var(--rule);
     border: 1px solid var(--rule);
 }
-@media (max-width: 980px) {
-    .featured-grid { grid-template-columns: 1fr 1fr; }
-}
-@media (max-width: 600px) {
+@media (max-width: 860px) {
     .featured-grid { grid-template-columns: 1fr; }
 }
 
@@ -1179,7 +1176,8 @@ button {
 .card-status[data-status="active"] { color: var(--accent); }
 .card-status[data-status="wip"] { color: #e6b74a; }
 .card-status[data-status="prototype"],
-.card-status[data-status="archived"] { color: var(--ink-dim); }
+.card-status[data-status="archived"],
+.card-status[data-status="self-directed"] { color: var(--ink-dim); }
 .card-year { color: var(--ink-muted); }
 
 .card-project[data-highlight="true"] .card-index::before {
@@ -1746,7 +1744,8 @@ button {
 .dossier-status-pill[data-status="completed"]::before { background: #6cbd94; box-shadow: 0 0 0 3px rgba(108, 189, 148, 0.28); }
 .dossier-status-pill[data-status="wip"]::before { background: #e6b74a; box-shadow: 0 0 0 3px rgba(230, 183, 74, 0.28); }
 .dossier-status-pill[data-status="prototype"]::before,
-.dossier-status-pill[data-status="archived"]::before { background: var(--ink-dim); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 14%, transparent); }
+.dossier-status-pill[data-status="archived"]::before,
+.dossier-status-pill[data-status="self-directed"]::before { background: var(--ink-dim); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 14%, transparent); }
 
 .dossier-hero-overlay .dossier-close {
     /* nothing — let the global .dossier-close take over, but place inside hero-tools */
@@ -2486,6 +2485,50 @@ button {
     color: var(--accent);
     font-weight: 500;
 }
+
+/* ── Media lightbox — click a dossier diagram/image to zoom (Discord-style) ── */
+.dossier-media-image { position: relative; }
+.dossier-media-image img { cursor: zoom-in; }
+.dossier-media-image::after {
+    content: "\2922  enlarge";
+    position: absolute; top: 8px; right: 8px;
+    font-family: var(--f-mono, "JetBrains Mono", monospace);
+    font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #f0ebe0; background: rgba(12, 10, 7, 0.7);
+    border: 1px solid rgba(240, 235, 224, 0.25);
+    padding: 3px 7px; border-radius: 2px;
+    opacity: 0; transition: opacity 160ms ease-out;
+    pointer-events: none; backdrop-filter: blur(4px);
+}
+.dossier-media-image:hover::after { opacity: 1; }
+
+.media-lightbox {
+    position: fixed; inset: 0; z-index: 1000;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(8, 6, 4, 0.94);
+    backdrop-filter: blur(10px);
+    padding: 4vmin; cursor: zoom-out;
+    animation: lightbox-in 180ms ease-out;
+}
+.media-lightbox.is-open { display: flex; }
+.media-lightbox img {
+    max-width: 96vw; max-height: 92vh;
+    width: auto; height: auto; object-fit: contain;
+    background: #0c0a07;
+    border: 1px solid rgba(255, 75, 31, 0.35);
+    box-shadow: 0 24px 90px rgba(0, 0, 0, 0.7);
+}
+.media-lightbox .lightbox-close {
+    position: fixed; top: 18px; right: 22px;
+    width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(12, 10, 7, 0.6);
+    border: 1px solid rgba(240, 235, 224, 0.4);
+    color: #f0ebe0; font: inherit; font-size: 17px; line-height: 1;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.media-lightbox .lightbox-close:hover { border-color: var(--accent, #ff4b1f); color: var(--accent, #ff4b1f); }
+@keyframes lightbox-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .media-lightbox { animation: none; } }
 
 .chat.is-expanded .chat-collapsed { display: none; }
 .chat-panel {

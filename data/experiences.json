@@ -1,45 +1,15 @@
 {
-  "updated": "2026-04-29",
+  "updated": "2026-06-08",
   "entries": [
     {
       "id": "qatar_360_freelance",
-      "year": "2025",
+      "year": "Spring 2025",
       "year_sort": 2025.9,
       "role": "Freelance — Creative technologist",
       "client": "A Doha creative agency, for a Gulf tourism board",
       "scope": "WebGL 360° tourism campaign. GPGPU particle reveal, three VFX modes, depth-driven cloud veil, mobile-first PWA, Paramiko-driven deployment.",
       "skills": ["WebGL / GLSL", "Three.js", "Production deployment"],
       "project_ids": ["qatar_360"]
-    },
-    {
-      "id": "planning_manager_freelance",
-      "year": "2025",
-      "year_sort": 2025.3,
-      "role": "Freelance — Full-stack engineer",
-      "client": "A French workforce-management team",
-      "scope": "Workforce-scheduling SaaS replacing a manual Excel workflow. eTemptation XML import, shift-rotation algorithm, constraint-satisfaction fixer, three variant generation, PDF / Excel export — in production, in French.",
-      "skills": ["FastAPI", "lxml SpreadsheetML", "WeasyPrint", "openpyxl"],
-      "project_ids": ["planning_manager"]
-    },
-    {
-      "id": "gaec_solar_freelance",
-      "year": "2024",
-      "year_sort": 2024.8,
-      "role": "Freelance — 3D modelling & documentation",
-      "client": "A French dairy farm",
-      "scope": "337 kWc rooftop solar installation engineering package: parametric Python OBJ/MTL mesh from permit drawings, Excel calepinage + electrical configs, 4,800-word HTML installer manual walking the Arkelios workflow end-to-end.",
-      "skills": ["Python parametric geometry", "Solar PV engineering", "French regulatory documentation"],
-      "project_ids": ["gaec_solar"]
-    },
-    {
-      "id": "site_avocat_freelance",
-      "year": "2024",
-      "year_sort": 2024.6,
-      "role": "Freelance — Web developer & designer",
-      "client": "A Nice-based French lawyer",
-      "scope": "Professional legal website: 42 vanilla HTML pages, 30 in-depth legal-guide articles, no framework, no tracking, AAA colour contrast, GDPR-compliant by architecture, 130+ Schema.org structured-data blocks, Lighthouse 95+ across the board.",
-      "skills": ["Semantic HTML5", "Vanilla CSS + JS", "Schema.org SEO", "GDPR compliance"],
-      "project_ids": ["site_avocat"]
     },
     {
       "id": "sabda_ta",
@@ -55,7 +25,7 @@
       "id": "little_red_dog_ta",
       "year": "Apr — Sep 2023",
       "year_sort": 2023.4,
-      "role": "Technical Artist — Little Red Dog Games",
+      "role": "Technical Artist (freelance) — Little Red Dog Games",
       "client": "An indie game studio",
       "scope": "VFX in Unity's VFX Graph + EmberGen flipbook bakes (explosions, blood splashes), a custom Character PBR shader for stylised character lighting, fog-of-war and terrain-dithering enhancements, plus a 70-shader URP library leaning on a single shared CustomLighting include.",
       "skills": ["Unity URP", "VFX Graph", "EmberGen", "HLSL", "Shader-library architecture", "MaterialPropertyBlock"],

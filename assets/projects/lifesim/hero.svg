@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" width="100%" font-family="JetBrains Mono, ui-monospace, monospace">
+  <defs>
+    <marker id="hL" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#ff4b1f"/></marker>
+    <marker id="hT" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="rgb(255,158,51)"/></marker>
+    <marker id="hF" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="rgba(120,150,170,0.92)"/></marker>
+    <marker id="hO" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="rgb(230,209,158)"/></marker>
+    <radialGradient id="vig" cx="50%" cy="45%" r="75%">
+      <stop offset="60%" stop-color="#0c0a07" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.55"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="600" fill="#0c0a07"/>
+
+  <!-- ============ EDGES (directed, asymmetric; warm family) ============ -->
+  <!-- node coords:
+       you      800,300
+       smith   1120,165
+       elder    430,150
+       herder   400,470
+       merchant1160,455
+       guard    800,540
+       curves bow apart so A->B and B->A don't overlap -->
+
+  <!-- love = #ff4b1f (solid+ / dashed-) -->
+  <g fill="none" stroke="#ff4b1f">
+    <path d="M1110 200 C 980 250, 880 270, 845 285" stroke-width="3" marker-end="url(#hL)" opacity="0.85"/>          <!-- smith->elder loyal (via you region) -->
+    <path d="M 470 460 C 540 380, 460 250, 455 185" stroke-width="3" marker-end="url(#hL)" opacity="0.8"/>           <!-- herder->elder kin -->
+    <path d="M 790 510 C 640 430, 520 250, 460 175" stroke-width="3" marker-end="url(#hL)" opacity="0.85"/>          <!-- guard->elder sworn -->
+    <path d="M1115 425 C 900 470, 620 500, 445 480" stroke-width="2.4" marker-end="url(#hL)" opacity="0.7"/>         <!-- merchant->herder needs wool -->
+  </g>
+
+  <!-- trust = amber (solid+ / dashed-) -->
+  <g fill="none" stroke="rgb(255,158,51)">
+    <path d="M1085 185 C 980 230, 880 270, 825 290" stroke-width="3" marker-end="url(#hT)" opacity="0.85"/>          <!-- smith->you admires -->
+    <path d="M 470 175 C 560 230, 700 280, 775 295" stroke-width="2.6" marker-end="url(#hT)" opacity="0.75"/>        <!-- elder->you wary? no, you->elder respect: drawn below -->
+    <path d="M 820 280 C 640 230, 520 195, 470 170" stroke-width="2.6" marker-end="url(#hT)" opacity="0.75" stroke-dasharray="7 7"/> <!-- placeholder neg sample -->
+    <path d="M 460 480 C 430 350, 430 250, 445 180" stroke-width="2.6" marker-end="url(#hT)" opacity="0.7"/>         <!-- herder->elder trust herd? keep -->
+    <path d="M1120 430 C 1160 350, 1160 250, 1140 185" stroke-width="2.6" marker-end="url(#hT)" opacity="0.7" stroke-dasharray="7 7"/> <!-- herder->merchant distrust (drawn from merchant area) -->
+  </g>
+
+  <!-- fear = cool shadow -->
+  <g fill="none" stroke="rgba(120,150,170,0.92)">
+    <path d="M 460 175 C 580 220, 700 260, 775 290" stroke-width="2.4" marker-end="url(#hF)" opacity="0.85"/>        <!-- elder->you wary of stranger -->
+    <path d="M1150 435 C 1010 410, 900 350, 835 305" stroke-width="2.4" marker-end="url(#hF)" opacity="0.8"/>        <!-- merchant->you fears reputation -->
+    <path d="M 800 525 C 800 460, 800 380, 800 330" stroke-width="2.4" marker-end="url(#hF)" opacity="0.8"/>         <!-- guard->you watches -->
+  </g>
+
+  <!-- owes = bone -->
+  <g fill="none" stroke="rgb(230,209,158)">
+    <path d="M 835 290 C 960 250, 1060 200, 1105 175" stroke-width="2.4" marker-end="url(#hO)" opacity="0.78"/>      <!-- you->smith owes for blade -->
+    <path d="M 800 525 C 920 440, 1040 270, 1110 195" stroke-width="2.2" marker-end="url(#hO)" opacity="0.7"/>       <!-- guard->smith owes repairs -->
+    <path d="M1140 440 C 980 470, 620 500, 440 480" stroke-width="2.2" marker-end="url(#hO)" opacity="0.65" stroke-dasharray="7 7"/> <!-- herder owes merchant for grain -->
+  </g>
+
+  <!-- ============ NODES ============ -->
+  <g>
+    <!-- STRANGER / YOU (accent core) -->
+    <circle cx="800" cy="300" r="22" fill="#141009" stroke="rgba(255,75,31,0.8)" stroke-width="2"/>
+    <circle cx="800" cy="300" r="9" fill="#ff4b1f"/>
+    <text x="800" y="340" fill="#f0ebe0" font-size="17" text-anchor="middle">STRANGER / YOU</text>
+
+    <!-- SMITH -->
+    <circle cx="1120" cy="165" r="18" fill="#141009" stroke="rgba(240,235,224,0.22)" stroke-width="1.5"/>
+    <text x="1120" y="200" fill="rgba(240,235,224,0.85)" font-size="16" text-anchor="middle">SMITH</text>
+
+    <!-- ELDER -->
+    <circle cx="430" cy="150" r="18" fill="#141009" stroke="rgba(240,235,224,0.22)" stroke-width="1.5"/>
+    <text x="430" y="185" fill="rgba(240,235,224,0.85)" font-size="16" text-anchor="middle">ELDER</text>
+
+    <!-- HERDER -->
+    <circle cx="400" cy="470" r="18" fill="#141009" stroke="rgba(240,235,224,0.22)" stroke-width="1.5"/>
+    <text x="400" y="505" fill="rgba(240,235,224,0.85)" font-size="16" text-anchor="middle">HERDER</text>
+
+    <!-- MERCHANT -->
+    <circle cx="1160" cy="455" r="18" fill="#141009" stroke="rgba(240,235,224,0.22)" stroke-width="1.5"/>
+    <text x="1160" y="490" fill="rgba(240,235,224,0.85)" font-size="16" text-anchor="middle">MERCHANT</text>
+
+    <!-- GUARD -->
+    <circle cx="800" cy="540" r="18" fill="#141009" stroke="rgba(240,235,224,0.22)" stroke-width="1.5"/>
+    <text x="800" y="575" fill="rgba(240,235,224,0.85)" font-size="16" text-anchor="middle">GUARD</text>
+  </g>
+
+  <!-- ============ chrome / title ============ -->
+  <text x="56" y="62" fill="#f0ebe0" font-size="30" letter-spacing="1.5">LifeSim</text>
+  <text x="56" y="90" fill="rgba(240,235,224,0.62)" font-size="14" letter-spacing="0.5">The village as a directed graph — A can love B while B fears A</text>
+  <text x="56" y="572" fill="rgba(240,235,224,0.45)" font-size="11.5" letter-spacing="0.3">Concept render · illustrative design data, not gameplay</text>
+
+  <!-- legend (top-right) -->
+  <g font-size="13" transform="translate(1330,46)">
+    <line x1="0" y1="0" x2="26" y2="0" stroke="#ff4b1f" stroke-width="3"/>
+    <text x="34" y="4" fill="rgba(240,235,224,0.78)">love</text>
+    <line x1="0" y1="24" x2="26" y2="24" stroke="rgb(255,158,51)" stroke-width="3"/>
+    <text x="34" y="28" fill="rgba(240,235,224,0.78)">trust</text>
+    <line x1="0" y1="48" x2="26" y2="48" stroke="rgba(120,150,170,0.92)" stroke-width="3"/>
+    <text x="34" y="52" fill="rgba(240,235,224,0.78)">fear</text>
+    <line x1="0" y1="72" x2="26" y2="72" stroke="rgb(230,209,158)" stroke-width="3"/>
+    <text x="34" y="76" fill="rgba(240,235,224,0.78)">owes</text>
+    <line x1="0" y1="96" x2="26" y2="96" stroke="rgba(240,235,224,0.55)" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <text x="34" y="100" fill="rgba(240,235,224,0.6)">= negative</text>
+  </g>
+
+  <rect x="0" y="0" width="1600" height="600" fill="url(#vig)"/>
+</svg>

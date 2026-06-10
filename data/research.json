@@ -117,7 +117,7 @@
       "id": "ecology_engineering",
       "order": 9,
       "title": "Energy & ecology engineering",
-      "pitch": "Thermal modelling of building envelopes, renewable-energy sizing, efficiency optimisation for residential and agricultural installations. Background from prior work on heat isolation, renewables, and the [solar-install modelling](gaec_solar) for a French dairy farm. Applying software craft — simulation, optimisation, tooling — to decarbonisation is the direction.",
+      "pitch": "Thermal modelling of building envelopes, renewable-energy sizing, efficiency optimisation for residential and agricultural installations. Background from prior work on heat isolation, renewables, and a self-directed [solar-install modelling](gaec_solar) study. Applying software craft — simulation, optimisation, tooling — to decarbonisation is the direction.",
       "the_question": "What's missing between the existing off-the-shelf thermal-simulation tools (EnergyPlus, IES-VE) and what a small-farm / retrofit client actually needs? Where does better tooling cut material misuse?",
       "groundwork": ["gaec_solar"],
       "needs": [

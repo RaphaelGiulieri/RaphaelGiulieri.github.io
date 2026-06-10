@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Design-system specimen · de-identified · Raphael Giulieri</title>
+<style>
+    /* ---- House chrome (verbatim tokens from demos/voronoi.html) ---- */
+    html, body { margin: 0; height: 100%; background: #0c0a07; color: #f0ebe0; font-family: "JetBrains Mono", ui-monospace, monospace; }
+    body { overflow: hidden; }
+    .label { position: absolute; bottom: 12px; left: 12px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.78); pointer-events: none; line-height: 1.5; max-width: calc(100% - 24px); text-shadow: 0 1px 6px rgba(0,0,0,0.6); z-index: 5; }
+    .label b { color: #ff4b1f; font-weight: 500; }
+    .controls { position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; z-index: 5; }
+    .controls button { font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(240,235,224,0.55); background: rgba(12,10,7,0.55); border: 1px solid rgba(240,235,224,0.18); padding: 4px 8px; cursor: pointer; backdrop-filter: blur(6px); }
+    .controls button.on { color: #ff4b1f; border-color: #ff4b1f; }
+
+    /* ---- Stage ---- */
+    .stage { position: absolute; inset: 0; overflow: auto; display: flex; justify-content: center; padding: 56px 16px 44px; box-sizing: border-box; }
+    .stage::-webkit-scrollbar { width: 8px; height: 8px; }
+    .stage::-webkit-scrollbar-thumb { background: rgba(240,235,224,0.16); }
+
+    /* The specimen container — its width is what the Desktop/Mobile toggle changes.
+       All type below scales off clamp() driven by the container width via cqi units
+       where supported, falling back to viewport units. */
+    .specimen {
+        container-type: inline-size;
+        width: 100%;
+        max-width: 1040px;
+        background: #141009;
+        border: 1px solid rgba(240,235,224,0.12);
+        border-radius: 4px;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+        transition: max-width 0.45s cubic-bezier(0.4,0,0.2,1);
+        overflow: hidden;
+    }
+    body.mobile .specimen { max-width: 390px; }
+
+    /* Browser-chrome hint bar atop the specimen */
+    .chrome { display: flex; align-items: center; gap: 8px; padding: 9px 14px; border-bottom: 1px solid rgba(240,235,224,0.10); background: rgba(12,10,7,0.5); }
+    .chrome .dots { display: flex; gap: 5px; }
+    .chrome .dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(240,235,224,0.22); }
+    .chrome .url { font-size: 10px; letter-spacing: 0.04em; color: rgba(240,235,224,0.42); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chrome .badge { margin-left: auto; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(240,235,224,0.4); border: 1px solid rgba(240,235,224,0.18); padding: 2px 6px; border-radius: 2px; white-space: nowrap; }
+
+    /* Neutral accent strip — explicitly NOT the client palette */
+    .accentstrip { height: 4px; background: linear-gradient(90deg, #ff4b1f 0%, #ff4b1f 38%, #f2a51f 38%, #f2a51f 62%, rgba(240,235,224,0.25) 62%); }
+
+    .page { display: grid; grid-template-columns: 1fr; gap: 0; }
+    @container (min-width: 720px) {
+        .page { grid-template-columns: minmax(0,1fr) 232px; }
+    }
+
+    .doc { padding: clamp(20px, 4cqi, 40px); min-width: 0; }
+    .side { border-left: 1px solid rgba(240,235,224,0.08); padding: clamp(18px, 3cqi, 30px); }
+    @container (max-width: 719px) {
+        .side { border-left: 0; border-top: 1px solid rgba(240,235,224,0.08); }
+    }
+
+    /* ---- The clamp() type scale ---- */
+    .breadcrumb { font-size: clamp(10px, 1.1cqi, 12px); letter-spacing: 0.04em; color: rgba(240,235,224,0.5); margin-bottom: 18px; }
+    .breadcrumb span { color: rgba(240,235,224,0.34); }
+    h1.spec { font-size: clamp(26px, 5.4cqi, 46px); line-height: 1.08; letter-spacing: -0.01em; margin: 0 0 14px; font-weight: 600; color: #f7f3ea; }
+    h2.spec { font-size: clamp(17px, 2.8cqi, 24px); line-height: 1.2; margin: 30px 0 10px; font-weight: 600; color: #f2a51f; }
+    h3.spec { font-size: clamp(13px, 1.8cqi, 16px); line-height: 1.3; margin: 18px 0 6px; font-weight: 600; color: #f0ebe0; }
+    p.spec  { font-size: clamp(13px, 1.55cqi, 16px); line-height: 1.7; margin: 0 0 14px; color: rgba(240,235,224,0.82); max-width: 64ch; }
+    small.spec { font-size: clamp(10px, 1.1cqi, 12px); color: rgba(240,235,224,0.5); }
+
+    /* type-scale rail at the top of the doc */
+    .scale { border: 1px dashed rgba(240,235,224,0.16); border-radius: 3px; padding: 12px 14px; margin: 0 0 26px; }
+    .scale .row { display: flex; align-items: baseline; gap: 12px; padding: 5px 0; cursor: default; border-radius: 2px; }
+    .scale .row:hover { background: rgba(255,75,31,0.07); }
+    .scale .row .name { flex: 0 0 42px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #ff4b1f; }
+    .scale .row .sample { color: #f0ebe0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .scale .row .formula { margin-left: auto; font-size: 9.5px; color: rgba(240,235,224,0.42); white-space: nowrap; }
+    @container (max-width: 519px) { .scale .row .formula { display: none; } }
+    .scale .s-h1 { font-size: clamp(15px, 2.6cqi, 22px); font-weight: 600; }
+    .scale .s-h2 { font-size: clamp(13px, 2cqi, 18px); font-weight: 600; color: #f2a51f; }
+    .scale .s-bd { font-size: clamp(12px, 1.4cqi, 15px); }
+    .scale .s-sm { font-size: clamp(10px, 1cqi, 12px); color: rgba(240,235,224,0.6); }
+    .scale .caption { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(240,235,224,0.4); margin-bottom: 4px; }
+
+    /* ---- FAQ accordion (real aria-expanded buttons) ---- */
+    .faq { margin-top: 8px; border-top: 1px solid rgba(240,235,224,0.1); }
+    .faq .q { border-bottom: 1px solid rgba(240,235,224,0.1); }
+    .faq button.qbtn {
+        width: 100%; text-align: left; background: none; border: 0; cursor: pointer;
+        font: inherit; color: #f0ebe0; font-size: clamp(13px, 1.6cqi, 15px); font-weight: 600;
+        padding: 14px 30px 14px 0; position: relative; display: block; line-height: 1.4;
+    }
+    .faq button.qbtn:focus-visible { outline: 2px solid #ff4b1f; outline-offset: 2px; }
+    .faq button.qbtn::after {
+        content: "+"; position: absolute; right: 2px; top: 12px; color: #ff4b1f;
+        font-size: 18px; line-height: 1; transition: transform 0.25s ease;
+    }
+    .faq button.qbtn[aria-expanded="true"]::after { content: "\2212"; }
+    .faq .a {
+        overflow: hidden; max-height: 0; transition: max-height 0.32s cubic-bezier(0.4,0,0.2,1);
+    }
+    .faq button.qbtn[aria-expanded="true"] + .a { max-height: 320px; }
+    .faq .a p { font-size: clamp(12px, 1.45cqi, 14.5px); line-height: 1.65; color: rgba(240,235,224,0.74); margin: 0 0 14px; padding-right: 8px; }
+
+    /* sidebar */
+    .side .h { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(240,235,224,0.46); margin: 0 0 10px; }
+    .side ul { list-style: none; margin: 0 0 22px; padding: 0; }
+    .side li { font-size: 12px; line-height: 1.5; padding: 3px 0; color: rgba(240,235,224,0.66); border-left: 2px solid transparent; padding-left: 10px; }
+    .side li.cur { color: #ff4b1f; border-left-color: #ff4b1f; }
+    .contact { border: 1px solid rgba(240,235,224,0.14); border-radius: 3px; padding: 13px; }
+    .contact .role { font-size: 12px; color: #f0ebe0; margin-bottom: 2px; }
+    .contact .meta { font-size: 10.5px; color: rgba(240,235,224,0.5); line-height: 1.5; margin-bottom: 10px; }
+    .contact a.mail {
+        display: inline-block; font: inherit; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+        color: #ff4b1f; border: 1px solid #ff4b1f; padding: 6px 11px; border-radius: 2px; text-decoration: none;
+    }
+    .schemarow { margin-top: 12px; font-size: 9px; letter-spacing: 0.05em; color: rgba(240,235,224,0.4); line-height: 1.6; }
+    .schemarow b { color: #f2a51f; font-weight: 500; }
+
+    /* still mode hides chrome */
+    body.still .controls, body.still .label { display: none !important; }
+    body.still .stage { overflow: hidden; }
+
+    @media (prefers-reduced-motion: reduce) {
+        .specimen, .faq .a, .faq button.qbtn::after { transition: none !important; }
+    }
+</style>
+</head>
+<body>
+<div class="controls" role="group" aria-label="Specimen controls">
+    <button id="btn-desktop" class="on" aria-pressed="true">Desktop</button>
+    <button id="btn-mobile" aria-pressed="false">Mobile</button>
+    <button id="btn-faq">FAQ: expand all</button>
+</div>
+
+<div class="stage">
+    <article class="specimen" role="img"
+        aria-label="De-identified legal-guide type specimen. Toggle desktop or mobile to see the two-column to one-column reflow.">
+        <div class="chrome">
+            <span class="dots"><i></i><i></i><i></i></span>
+            <span class="url">cabinet-placeholder.example / guides / depot-de-garantie</span>
+            <span class="badge">Cabinet &#9634; · specimen</span>
+        </div>
+        <div class="accentstrip" title="Representative palette — not the client's branding"></div>
+
+        <div class="page">
+            <div class="doc">
+                <!-- clamp() type-scale rail -->
+                <div class="scale" aria-hidden="true">
+                    <div class="caption">clamp() fluid type scale — resize / toggle mobile to watch it rescale</div>
+                    <div class="row"><span class="name">H1</span><span class="sample s-h1">Aa Titre</span><span class="formula">clamp(26px, 5.4cqi, 46px)</span></div>
+                    <div class="row"><span class="name">H2</span><span class="sample s-h2">Aa Section</span><span class="formula">clamp(17px, 2.8cqi, 24px)</span></div>
+                    <div class="row"><span class="name">Body</span><span class="sample s-bd">Aa corps de texte</span><span class="formula">clamp(13px, 1.55cqi, 16px)</span></div>
+                    <div class="row"><span class="name">Small</span><span class="sample s-sm">Aa note</span><span class="formula">clamp(10px, 1.1cqi, 12px)</span></div>
+                </div>
+
+                <nav class="breadcrumb">Accueil <span>/</span> Guides <span>/</span> Dépôt de garantie</nav>
+                <h1 class="spec">Récupérer un dépôt de garantie</h1>
+                <p class="spec">Placeholder de spécimen. Ce gabarit illustre la hiérarchie typographique de l'un des trente guides — titre, chapô, sous-sections, puis un bloc questions-réponses. Le texte est factice ; seule la structure est réelle.</p>
+
+                <h2 class="spec">Le délai légal de restitution</h2>
+                <p class="spec">Corps de paragraphe de démonstration. La largeur de mesure est plafonnée à environ soixante-quatre caractères pour le confort de lecture, et l'échelle se recompose en colonne unique en vue mobile.</p>
+
+                <h3 class="spec">Ce qu'il faut réunir</h3>
+                <p class="spec">Sous-section de démonstration. Sur la version réelle, chaque guide porte un balisage <small class="spec">Article&nbsp;+ FAQPage&nbsp;+ BreadcrumbList</small> afin que le bloc FAQ remonte en rich snippet.</p>
+
+                <h2 class="spec">Questions fréquentes</h2>
+                <div class="faq" id="faq">
+                    <div class="q">
+                        <button class="qbtn" aria-expanded="false">Sous quel délai le dépôt doit-il être restitué ?</button>
+                        <div class="a"><p>Réponse de spécimen (texte factice). Le composant est un vrai bouton <code>aria-expanded</code> ; il s'ouvre au clic et au clavier, et respecte <code>prefers-reduced-motion</code>.</p></div>
+                    </div>
+                    <div class="q">
+                        <button class="qbtn" aria-expanded="false">Que faire en cas de retenue abusive ?</button>
+                        <div class="a"><p>Réponse de spécimen (texte factice). Chaque paire question-réponse alimente le balisage <code>FAQPage</code> de la page réelle.</p></div>
+                    </div>
+                    <div class="q">
+                        <button class="qbtn" aria-expanded="false">Le bailleur peut-il déduire l'usure normale ?</button>
+                        <div class="a"><p>Réponse de spécimen (texte factice). Hiérarchie, focus visible et contraste AAA sont conservés en vue mobile.</p></div>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="side">
+                <p class="h">Sur cette page</p>
+                <ul>
+                    <li class="cur">Délai légal de restitution</li>
+                    <li>Ce qu'il faut réunir</li>
+                    <li>Questions fréquentes</li>
+                </ul>
+                <div class="contact">
+                    <div class="role">Prise de contact</div>
+                    <div class="meta">Formulaire <code>mailto:</code> — aucune donnée ne quitte l'appareil avant l'envoi.</div>
+                    <a class="mail" href="#" onclick="return false;">Écrire un message</a>
+                    <div class="schemarow">schema.org&nbsp;: <b>Article</b> · <b>FAQPage</b> · <b>BreadcrumbList</b></div>
+                </div>
+            </aside>
+        </div>
+    </article>
+</div>
+
+<p class="label"><b>Design-system specimen · de-identified</b><br>Placeholder copy · representative palette (not the client's navy/gold) · the client site is private. Real DOM + CSS — clamp() type scale, working FAQ accordion, genuine 2-col → 1-col reflow.</p>
+
+<script>
+(() => {
+'use strict';
+
+const params = new URLSearchParams(location.search);
+const still = params.get('still') === '1';
+
+const btnD = document.getElementById('btn-desktop');
+const btnM = document.getElementById('btn-mobile');
+const btnF = document.getElementById('btn-faq');
+const faq  = document.getElementById('faq');
+
+function setMode(mobile) {
+    document.body.classList.toggle('mobile', mobile);
+    btnM.classList.toggle('on', mobile);
+    btnM.setAttribute('aria-pressed', String(mobile));
+    btnD.classList.toggle('on', !mobile);
+    btnD.setAttribute('aria-pressed', String(!mobile));
+}
+btnD.addEventListener('click', () => setMode(false));
+btnM.addEventListener('click', () => setMode(true));
+
+// FAQ accordion — real aria-expanded toggling, single-open not enforced (multi allowed).
+const qbtns = Array.from(faq.querySelectorAll('.qbtn'));
+qbtns.forEach((b) => {
+    b.addEventListener('click', () => {
+        const open = b.getAttribute('aria-expanded') === 'true';
+        b.setAttribute('aria-expanded', String(!open));
+        syncFaqLabel();
+    });
+});
+function allOpen() { return qbtns.every((b) => b.getAttribute('aria-expanded') === 'true'); }
+function syncFaqLabel() { btnF.textContent = allOpen() ? 'FAQ: collapse all' : 'FAQ: expand all'; }
+btnF.addEventListener('click', () => {
+    const open = !allOpen();
+    qbtns.forEach((b) => b.setAttribute('aria-expanded', String(open)));
+    syncFaqLabel();
+});
+
+// Boot clean on every (re)mount.
+if (still) {
+    document.body.classList.add('still');
+    setMode(false);
+    // Open the first FAQ row so the export shows the accordion is interactive.
+    if (qbtns[0]) qbtns[0].setAttribute('aria-expanded', 'true');
+} else {
+    setMode(false);
+    syncFaqLabel();
+}
+})();
+</script>
+</body>
+</html>

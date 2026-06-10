@@ -115,34 +115,6 @@
       }
     },
     {
-      "id": "planning_manager",
-      "title": "Workforce scheduling SaaS",
-      "tagline": "Replaces a French team's manual Excel rotation with an eTemptation importer, a rotation algorithm, a constraint fixer, and PDF / Excel export.",
-      "categories": [
-        "web",
-        "client",
-        "tools"
-      ],
-      "skills_short": [
-        "FastAPI + Pydantic",
-        "Constraint-satisfaction scheduling",
-        "Excel + PDF export",
-        "Domain-specific UX",
-        "eTemptation XML import"
-      ],
-      "year": 2025,
-      "status": "shipped",
-      "client": "A French workforce-management team",
-      "role": "Solo developer",
-      "highlight": true,
-      "rank": 78,
-      "cover": "assets/projects/planning_manager/cover.webp",
-      "links": {
-        "repo": null,
-        "demo": null
-      }
-    },
-    {
       "id": "imagegen",
       "title": "ComfyUI dashboard for local image generation",
       "tagline": "A Flask front-end orchestrating four diffusion backends, five ControlNet preprocessors, and IP-Adapter character consistency on an 8 GB RTX 3070.",
@@ -229,9 +201,8 @@
     {
       "id": "gaec_solar",
       "title": "Solar PV 3D modelling & calepinage",
-      "tagline": "A 337 kWc rooftop solar install for a French dairy farm: 734 panels, 35 strings, 4 Huawei inverters, parametric Python OBJ mesh, Excel calepinage, 4,800-word installer manual.",
+      "tagline": "A self-directed engineering study: a 337 kWc rooftop solar install modelled parametrically from permit drawings — 734 panels, 35 strings, 4 Huawei inverters, Excel calepinage, 4,800-word installer manual.",
       "categories": [
-        "client",
         "3d",
         "docs"
       ],
@@ -243,8 +214,8 @@
         "Editorial documentation HTML"
       ],
       "year": 2026,
-      "status": "shipped",
-      "client": "A French dairy farm",
+      "status": "self-directed",
+      "client": null,
       "role": "Solo developer (modelling + documentation)",
       "highlight": true,
       "rank": 70,
@@ -259,8 +230,7 @@
       "title": "Law-firm website (Nice, France)",
       "tagline": "42 hand-written HTML pages, 30 in-depth legal guides, no tracking, no framework, AAA colour contrast, mailto: contact form.",
       "categories": [
-        "web",
-        "client"
+        "web"
       ],
       "skills_short": [
         "Semantic HTML5",
@@ -270,8 +240,8 @@
         "Vanilla CSS + JS"
       ],
       "year": 2025,
-      "status": "shipped",
-      "client": "A Nice-based French lawyer",
+      "status": "self-directed",
+      "client": null,
       "role": "Solo developer",
       "highlight": true,
       "rank": 68,

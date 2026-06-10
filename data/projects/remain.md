@@ -20,16 +20,14 @@ hero:
   alt: "Remain — overcast grassland with a colossus on the horizon"
   type: image
 gallery:
-  - src: assets/projects/remain/01-grass.webp
-    alt: "Close-up of compute-culled grass at the player's feet"
-    caption: "Per-blade culling on a million-blade grid runs at 60 fps because most blades never reach the rasteriser."
-  - src: assets/projects/remain/02-colossus.webp
-    alt: "Player swinging from a grappling hook around the colossus's leg"
-    caption: "The colossus is hit-tested before skinning, so the grappling hook lands on bone, not animation."
-  - src: assets/projects/remain/03-clouds.webp
-    alt: "Fluid-simulated clouds reacting to the colossus walking through them"
-    caption: "Clouds run a 2D Navier-Stokes solve on textures; the colossus is a moving pressure source."
+  - src: assets/projects/remain/01-overview.webp
+    alt: "Wide overcast grassland at dusk — trees, terrain, and light shafts through the haze"
+    caption: "The overcast grassland — a million-blade grass field, trees, the road and lake. Most blades never reach the rasteriser; a compute pre-pass culls them first."
+  - src: assets/projects/remain/02-clouds.webp
+    alt: "Volumetric god-rays breaking through the cloud layer over the grassland"
+    caption: "Light shafts through the cloud layer — the clouds are a 2D Navier-Stokes solve on textures, not a billboard."
   - src: assets/projects/remain/demo.mp4
+    name: demo
     poster: assets/projects/remain/demo-poster.webp
     type: video
     caption: "60 s of play — multiplayer, grappling, the cloud sim, the retro post."
@@ -55,7 +53,7 @@ You drop in alongside a few other players — voice chat is spatial, so people f
 - The colossus is **hit-testable before it's animated** — the grappling hook lands on bone geometry, not on whatever the skinning shader produced that frame. Feels surgical instead of sloppy.
 - Clouds aren't a billboard trick. They're a 2D Navier-Stokes solve on texture pairs, with the colossus injected as a pressure source. You can see it walking through them.
 
-![[gallery:2]]
+![[gallery:1]]
 
 ## Decisions worth telling
 

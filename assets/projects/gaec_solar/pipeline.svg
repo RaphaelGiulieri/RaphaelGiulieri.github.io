@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" font-family="JetBrains Mono, ui-monospace, monospace" role="img" aria-label="Parametric pipeline: permit dimensions to generate_mesh.py to OBJ mesh to Excel calepinage to HTML manual, with a byte-for-byte regeneration loop">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#9aa3ad"/>
+    </marker>
+    <marker id="arrowAmber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#f2a51f"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1600" height="600" fill="#0c0a07"/>
+
+  <!-- title -->
+  <text x="60" y="62" fill="#f0ebe0" font-size="26" letter-spacing="1">Parametric pipeline</text>
+  <text x="60" y="90" fill="rgba(240,235,224,0.6)" font-size="14" letter-spacing="1">CONCEPT DIAGRAM · reproducible, permit-traceable — re-run regenerates byte-for-byte</text>
+
+  <!-- ============ stage boxes ============ -->
+  <!-- stage 1: permit dimensions (input) -->
+  <g>
+    <rect x="60" y="200" width="220" height="150" rx="8" fill="#15120c" stroke="#2a2f37" stroke-width="1.5"/>
+    <!-- document glyph -->
+    <g stroke="#7fb2c8" stroke-width="2" fill="none">
+      <path d="M150 244 h40 l14 14 v44 h-54 z"/>
+      <path d="M190 244 v14 h14"/>
+      <line x1="160" y1="276" x2="184" y2="276"/>
+      <line x1="160" y1="288" x2="184" y2="288"/>
+    </g>
+    <text x="170" y="322" fill="#f0ebe0" font-size="15" text-anchor="middle">Permit dimensions</text>
+    <text x="170" y="342" fill="#9aa3ad" font-size="11" text-anchor="middle">eaves · ridge · grid</text>
+  </g>
+
+  <!-- stage 2: generate_mesh.py (the script) -->
+  <g>
+    <rect x="370" y="200" width="240" height="150" rx="8" fill="#15120c" stroke="#ff4b1f" stroke-width="1.8"/>
+    <!-- script / terminal glyph -->
+    <g stroke="#ff4b1f" stroke-width="2" fill="none">
+      <rect x="462" y="244" width="56" height="44" rx="4"/>
+      <path d="M472 260 l8 6 l-8 6"/>
+      <line x1="486" y1="276" x2="504" y2="276"/>
+    </g>
+    <text x="490" y="322" fill="#f0ebe0" font-size="15" text-anchor="middle">generate_mesh.py</text>
+    <text x="490" y="342" fill="#9aa3ad" font-size="11" text-anchor="middle">~280 lines · no magic numbers</text>
+  </g>
+
+  <!-- stage 3: OBJ + MTL mesh -->
+  <g>
+    <rect x="700" y="200" width="220" height="150" rx="8" fill="#15120c" stroke="#2a2f37" stroke-width="1.5"/>
+    <!-- mesh-cube glyph -->
+    <g stroke="#cf9f5a" stroke-width="2" fill="none">
+      <path d="M810 246 l26 14 v30 l-26 14 l-26 -14 v-30 z"/>
+      <path d="M784 260 l26 14 l26 -14"/>
+      <line x1="810" y1="274" x2="810" y2="304"/>
+    </g>
+    <text x="810" y="322" fill="#f0ebe0" font-size="15" text-anchor="middle">OBJ + MTL mesh</text>
+    <text x="810" y="342" fill="#9aa3ad" font-size="11" text-anchor="middle">panel zones on the roof</text>
+  </g>
+
+  <!-- stage 4: Excel calepinage -->
+  <g>
+    <rect x="1010" y="200" width="220" height="150" rx="8" fill="#15120c" stroke="#2a2f37" stroke-width="1.5"/>
+    <!-- grid glyph -->
+    <g stroke="#7fb2c8" stroke-width="1.6" fill="none">
+      <rect x="1094" y="246" width="52" height="40" rx="2"/>
+      <line x1="1094" y1="260" x2="1146" y2="260"/>
+      <line x1="1094" y1="273" x2="1146" y2="273"/>
+      <line x1="1111" y1="246" x2="1111" y2="286"/>
+      <line x1="1128" y1="246" x2="1128" y2="286"/>
+    </g>
+    <text x="1120" y="322" fill="#f0ebe0" font-size="15" text-anchor="middle">Excel calepinage</text>
+    <text x="1120" y="342" fill="#9aa3ad" font-size="11" text-anchor="middle">panel schedule · one cell / panel</text>
+  </g>
+
+  <!-- stage 5: HTML manual -->
+  <g>
+    <rect x="1320" y="200" width="220" height="150" rx="8" fill="#15120c" stroke="#2a2f37" stroke-width="1.5"/>
+    <!-- page / browser glyph -->
+    <g stroke="#cf9f5a" stroke-width="2" fill="none">
+      <rect x="1404" y="244" width="52" height="44" rx="3"/>
+      <line x1="1404" y1="256" x2="1456" y2="256"/>
+      <line x1="1412" y1="268" x2="1448" y2="268"/>
+      <line x1="1412" y1="278" x2="1438" y2="278"/>
+    </g>
+    <text x="1430" y="322" fill="#f0ebe0" font-size="15" text-anchor="middle">HTML manual</text>
+    <text x="1430" y="342" fill="#9aa3ad" font-size="11" text-anchor="middle">prints clean · works offline</text>
+  </g>
+
+  <!-- ============ forward arrows ============ -->
+  <line x1="280" y1="275" x2="368" y2="275" stroke="#9aa3ad" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="610" y1="275" x2="698" y2="275" stroke="#9aa3ad" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="920" y1="275" x2="1008" y2="275" stroke="#9aa3ad" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="1230" y1="275" x2="1318" y2="275" stroke="#9aa3ad" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ============ regeneration loop: outputs back to the script ============ -->
+  <path d="M1430 350 C 1430 470, 490 470, 490 360"
+        fill="none" stroke="#f2a51f" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrowAmber)"/>
+  <rect x="820" y="438" width="280" height="32" rx="6" fill="#0c0a07"/>
+  <text x="960" y="460" fill="#f2a51f" font-size="13" text-anchor="middle" letter-spacing="0.5">re-run → regenerates byte-for-byte</text>
+
+  <!-- input label above stage 1 -->
+  <text x="170" y="180" fill="#9aa3ad" font-size="12" text-anchor="middle" letter-spacing="1">INPUT</text>
+  <text x="490" y="180" fill="#ff4b1f" font-size="12" text-anchor="middle" letter-spacing="1">SCRIPT</text>
+  <text x="1280" y="180" fill="#9aa3ad" font-size="12" text-anchor="middle" letter-spacing="1">DELIVERABLES</text>
+
+  <!-- footer note -->
+  <text x="60" y="552" fill="rgba(240,235,224,0.45)" font-size="11" letter-spacing="0.5">Illustrative architecture — generic labels only · no real dimensions, file paths, or site identity.</text>
+</svg>

@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" width="100%" role="img"
+     aria-label="Information-architecture diagram: 42 hand-written pages — home, 8 practice areas, 4 compliance pages, and 30 legal guides each carrying Article, FAQPage and BreadcrumbList schema. Zero-dependency vanilla stack.">
+  <defs>
+    <style>
+      text { font-family: "JetBrains Mono", ui-monospace, monospace; fill: #f0ebe0; }
+      .t-title { font-size: 26px; font-weight: 600; fill: #f7f3ea; }
+      .t-sub   { font-size: 12px; fill: rgba(240,235,224,0.55); letter-spacing: 0.04em; }
+      .t-node  { font-size: 14px; font-weight: 600; fill: #f0ebe0; }
+      .t-meta  { font-size: 11px; fill: rgba(240,235,224,0.62); }
+      .t-count { font-size: 13px; font-weight: 600; fill: #ff4b1f; }
+      .t-tag   { font-size: 10px; letter-spacing: 0.08em; fill: rgba(240,235,224,0.55); }
+      .t-foot  { font-size: 12px; fill: rgba(240,235,224,0.7); letter-spacing: 0.02em; }
+      .node    { fill: #141009; stroke: rgba(240,235,224,0.20); stroke-width: 1; }
+      .node-accent { fill: #141009; stroke: #ff4b1f; stroke-width: 1.4; }
+      .link    { stroke: rgba(240,235,224,0.30); stroke-width: 1.4; fill: none; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ff4b1f"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="750" fill="#0c0a07"/>
+
+  <!-- header -->
+  <text x="48" y="58" class="t-title">Information architecture</text>
+  <text x="48" y="82" class="t-sub">42 hand-written pages · de-identified · placeholder labels</text>
+  <text x="1152" y="58" text-anchor="end" class="t-count">42</text>
+  <text x="1152" y="78" text-anchor="end" class="t-tag">PAGES TOTAL</text>
+
+  <!-- ROOT: Home -->
+  <g>
+    <rect class="node-accent" x="64" y="316" width="180" height="68" rx="5"/>
+    <text x="154" y="346" text-anchor="middle" class="t-node">Home</text>
+    <text x="154" y="366" text-anchor="middle" class="t-meta">homepage · 1</text>
+  </g>
+
+  <!-- links from Home to the four branches -->
+  <path class="link" marker-end="url(#arrow)" d="M244,330 C320,330 330,150 404,150"/>
+  <path class="link" marker-end="url(#arrow)" d="M244,344 C320,344 330,300 404,300"/>
+  <path class="link" marker-end="url(#arrow)" d="M244,356 C320,356 330,452 404,452"/>
+  <path class="link" marker-end="url(#arrow)" d="M244,370 C320,370 330,612 404,612"/>
+
+  <!-- Branch 1: Practice areas (8) -->
+  <g>
+    <rect class="node" x="408" y="116" width="252" height="74" rx="5"/>
+    <text x="426" y="146" class="t-node">Practice areas</text>
+    <text x="426" y="168" class="t-meta">landing pages · sector-level</text>
+    <text x="642" y="142" text-anchor="end" class="t-count">×8</text>
+  </g>
+  <!-- 8 leaf chips -->
+  <g class="t-tag" fill="rgba(240,235,224,0.55)">
+    <rect x="680" y="116" width="64" height="20" rx="3" class="node"/><text x="712" y="130" text-anchor="middle" class="t-tag">aire 1</text>
+    <rect x="752" y="116" width="64" height="20" rx="3" class="node"/><text x="784" y="130" text-anchor="middle" class="t-tag">aire 2</text>
+    <rect x="824" y="116" width="64" height="20" rx="3" class="node"/><text x="856" y="130" text-anchor="middle" class="t-tag">aire 3</text>
+    <rect x="896" y="116" width="64" height="20" rx="3" class="node"/><text x="928" y="130" text-anchor="middle" class="t-tag">aire 4</text>
+    <rect x="680" y="142" width="64" height="20" rx="3" class="node"/><text x="712" y="156" text-anchor="middle" class="t-tag">aire 5</text>
+    <rect x="752" y="142" width="64" height="20" rx="3" class="node"/><text x="784" y="156" text-anchor="middle" class="t-tag">aire 6</text>
+    <rect x="824" y="142" width="64" height="20" rx="3" class="node"/><text x="856" y="156" text-anchor="middle" class="t-tag">aire 7</text>
+    <rect x="896" y="142" width="64" height="20" rx="3" class="node"/><text x="928" y="156" text-anchor="middle" class="t-tag">aire 8</text>
+  </g>
+  <text x="982" y="156" class="t-tag">illustrative labels</text>
+
+  <!-- Branch 2: Compliance (4) -->
+  <g>
+    <rect class="node" x="408" y="266" width="252" height="74" rx="5"/>
+    <text x="426" y="296" class="t-node">Compliance</text>
+    <text x="426" y="318" class="t-meta">mentions légales · privacy · CGU</text>
+    <text x="642" y="292" text-anchor="end" class="t-count">×4</text>
+  </g>
+  <rect x="680" y="290" width="118" height="26" rx="3" class="node-accent"/>
+  <text x="739" y="307" text-anchor="middle" class="t-tag" fill="#ff4b1f">noindex</text>
+  <text x="812" y="307" class="t-tag">required, not ranked</text>
+
+  <!-- Branch 3: Legal guides (30) -->
+  <g>
+    <!-- stacked cards to convey ×30 -->
+    <rect class="node" x="416" y="424" width="244" height="74" rx="5"/>
+    <rect class="node" x="412" y="420" width="244" height="74" rx="5"/>
+    <rect class="node-accent" x="408" y="416" width="244" height="74" rx="5"/>
+    <text x="426" y="446" class="t-node">Legal guides</text>
+    <text x="426" y="468" class="t-meta">long-form articles, real queries</text>
+    <text x="634" y="442" text-anchor="end" class="t-count">×30</text>
+  </g>
+  <!-- schema callout for the guides branch -->
+  <path class="link" marker-end="url(#arrow)" d="M652,452 C700,452 712,452 760,452"/>
+  <g>
+    <rect class="node-accent" x="764" y="416" width="300" height="74" rx="5"/>
+    <text x="780" y="440" class="t-meta" fill="#f2a51f">schema.org per guide</text>
+    <text x="780" y="461" class="t-node" font-size="13">Article · FAQPage · BreadcrumbList</text>
+    <text x="780" y="480" class="t-tag">→ FAQ rich snippet in Google</text>
+  </g>
+  <!-- three example guide titles (dossier's own examples) -->
+  <text x="408" y="516" class="t-tag">e.g. Divorce par consentement mutuel · Après une garde à vue · Récupérer un dépôt de garantie</text>
+  <text x="408" y="532" class="t-tag" fill="rgba(240,235,224,0.4)">guide titles illustrative / representative</text>
+
+  <!-- Branch 4: Contact -->
+  <g>
+    <rect class="node" x="408" y="586" width="252" height="56" rx="5"/>
+    <text x="426" y="612" class="t-node">Contact</text>
+    <text x="426" y="630" class="t-meta">mailto: form · no backend</text>
+  </g>
+
+  <!-- footer: zero-dependency stack band -->
+  <rect x="48" y="672" width="1104" height="44" rx="4" fill="#141009" stroke="rgba(240,235,224,0.16)"/>
+  <text x="64" y="699" class="t-foot">Vanilla HTML5 · Vanilla CSS · Vanilla JS &#8201;—&#8201; no framework · no build · no analytics · no cookies</text>
+  <text x="1136" y="699" text-anchor="end" class="t-tag">counts per dossier</text>
+
+  <!-- small split legend -->
+  <text x="48" y="742" class="t-tag" fill="rgba(240,235,224,0.45)">split: 1 home + 8 practice + 4 compliance + 30 guides — concept diagram, not the live site</text>
+</svg>

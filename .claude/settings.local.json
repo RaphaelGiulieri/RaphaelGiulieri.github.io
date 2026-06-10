@@ -15,7 +15,11 @@
       "Bash(rm -f \"C:/Users/Legion/.claude/nodriver-mcp-launcher.py\")",
       "Bash(node -e \"const r=require\\('c:/Users/Legion/Desktop/RaphaelGiulieri.github.io/data/research.json'\\); console.log\\('keys:', Object.keys\\(r\\)\\); const e=require\\('c:/Users/Legion/Desktop/RaphaelGiulieri.github.io/data/experiences.json'\\); console.log\\('exp keys:', Object.keys\\(e\\)\\);\")",
       "Bash(git checkout *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "mcp__nodriver-mcp__navigate",
+      "mcp__nodriver-mcp__screenshot"
     ],
     "additionalDirectories": [
       "C:\\Users\\Legion\\.claude"

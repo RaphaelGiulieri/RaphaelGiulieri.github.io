@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" width="100%" font-family="JetBrains Mono, ui-monospace, monospace">
+  <defs>
+    <marker id="arw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ff4b1f"/>
+    </marker>
+    <marker id="arwm" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="rgba(240,235,224,0.55)"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="750" fill="#0c0a07"/>
+
+  <!-- Title -->
+  <text x="48" y="56" fill="#f0ebe0" font-size="26" letter-spacing="1">NPC decision loop</text>
+  <text x="48" y="82" fill="rgba(240,235,224,0.6)" font-size="13" letter-spacing="0.5">One tick of an NPC — architecture diagram, illustrative</text>
+
+  <!-- ===== Loop ring of 4 stage nodes (clockwise) ===== -->
+  <!-- positions: Perception top, Memory right, Goals/Needs bottom, Action left -->
+
+  <!-- connecting arcs (clockwise) -->
+  <g fill="none" stroke="#ff4b1f" stroke-width="2.2">
+    <path d="M 740 250 C 840 270, 880 330, 870 400" marker-end="url(#arw)"/>
+    <path d="M 820 510 C 770 580, 660 600, 560 575" marker-end="url(#arw)"/>
+    <path d="M 356 575 C 405 555, 400 490, 366 490" marker-end="url(#arw)"/>
+    <path d="M 240 380 C 230 300, 340 215, 468 208" marker-end="url(#arw)"/>
+  </g>
+
+  <!-- world-feedback label on the Action->Perception arc -->
+  <text x="300" y="170" fill="rgba(240,235,224,0.6)" font-size="11.5" text-anchor="middle">world changes →</text>
+  <text x="300" y="186" fill="rgba(240,235,224,0.6)" font-size="11.5" text-anchor="middle">perceive again</text>
+
+  <!-- ===== PERCEPTION (top) ===== -->
+  <g>
+    <rect x="470" y="150" width="280" height="104" rx="10" fill="#141009" stroke="rgba(240,235,224,0.20)" stroke-width="1.4"/>
+    <text x="610" y="184" fill="#f0ebe0" font-size="19" text-anchor="middle" letter-spacing="0.5">1 · PERCEPTION</text>
+    <text x="610" y="210" fill="rgba(240,235,224,0.72)" font-size="12.5" text-anchor="middle">line-of-sight + earshot</text>
+    <text x="610" y="230" fill="rgba(240,235,224,0.72)" font-size="12.5" text-anchor="middle">real geometric checks</text>
+  </g>
+
+  <!-- ===== MEMORY (right) — accent highlight ===== -->
+  <g>
+    <rect x="800" y="395" width="290" height="120" rx="10" fill="#1a0d06" stroke="#ff4b1f" stroke-width="2"/>
+    <text x="945" y="430" fill="#ff4b1f" font-size="19" text-anchor="middle" letter-spacing="0.5">2 · MEMORY</text>
+    <text x="945" y="456" fill="rgba(240,235,224,0.82)" font-size="12.5" text-anchor="middle">episodic — remembers when you lied</text>
+    <text x="945" y="476" fill="rgba(240,235,224,0.72)" font-size="12" text-anchor="middle">gossip = canonical info network,</text>
+    <text x="945" y="494" fill="rgba(240,235,224,0.72)" font-size="12" text-anchor="middle">and it lies · confidence decays / retelling</text>
+  </g>
+
+  <!-- ===== GOALS / NEEDS (bottom) ===== -->
+  <g>
+    <rect x="355" y="540" width="300" height="118" rx="10" fill="#141009" stroke="rgba(240,235,224,0.20)" stroke-width="1.4"/>
+    <text x="505" y="575" fill="#f0ebe0" font-size="19" text-anchor="middle" letter-spacing="0.5">3 · GOALS / NEEDS</text>
+    <text x="505" y="601" fill="rgba(240,235,224,0.72)" font-size="12.5" text-anchor="middle">needs + discrete personality traits</text>
+    <text x="505" y="621" fill="rgba(240,235,224,0.72)" font-size="12.5" text-anchor="middle">→ behaviour-utility scoring</text>
+    <text x="505" y="641" fill="rgba(240,235,224,0.55)" font-size="11.5" text-anchor="middle">what they do when nobody is watching</text>
+  </g>
+
+  <!-- ===== ACTION (left) ===== -->
+  <g>
+    <rect x="115" y="380" width="250" height="170" rx="10" fill="#141009" stroke="rgba(240,235,224,0.20)" stroke-width="1.4"/>
+    <text x="240" y="414" fill="#f0ebe0" font-size="19" text-anchor="middle" letter-spacing="0.5">4 · ACTION</text>
+    <text x="240" y="440" fill="rgba(240,235,224,0.72)" font-size="12.5" text-anchor="middle">talk · trade · fight · flee · routine</text>
+    <text x="240" y="462" fill="rgba(240,235,224,0.55)" font-size="11.5" text-anchor="middle">voice in, voice out</text>
+    <!-- escalation ladder anchor -->
+    <line x1="240" y1="476" x2="240" y2="500" stroke="rgba(240,235,224,0.3)" stroke-width="1.2"/>
+    <text x="240" y="520" fill="rgba(240,235,224,0.6)" font-size="11.5" text-anchor="middle">how the choice is computed ↓</text>
+  </g>
+
+  <!-- ===== four-tier AI escalation ladder (hangs off Action) ===== -->
+  <g>
+    <rect x="100" y="600" width="280" height="120" rx="9" fill="#100c08" stroke="rgba(240,235,224,0.16)" stroke-width="1.2"/>
+    <text x="118" y="624" fill="rgba(240,235,224,0.7)" font-size="12.5" letter-spacing="0.5">FOUR-TIER AI · cost model</text>
+
+    <!-- ladder rungs: free local rules -> model call -->
+    <g font-size="11.5">
+      <rect x="118" y="636" width="244" height="17" rx="3" fill="#141009" stroke="rgba(240,235,224,0.18)"/>
+      <text x="126" y="648" fill="rgba(240,235,224,0.8)">tier 1 · local rules</text>
+      <text x="354" y="648" fill="rgba(240,235,224,0.5)" text-anchor="end">free</text>
+
+      <rect x="118" y="656" width="244" height="17" rx="3" fill="#141009" stroke="rgba(240,235,224,0.18)"/>
+      <text x="126" y="668" fill="rgba(240,235,224,0.8)">tier 2 · cheaper heuristics</text>
+
+      <rect x="118" y="676" width="244" height="17" rx="3" fill="#141009" stroke="rgba(240,235,224,0.18)"/>
+      <text x="126" y="688" fill="rgba(240,235,224,0.8)">tier 3 · …escalate…</text>
+
+      <rect x="118" y="696" width="244" height="17" rx="3" fill="#1a0d06" stroke="#ff4b1f" stroke-width="1.3"/>
+      <text x="126" y="708" fill="#ff4b1f">tier 4 · model call</text>
+      <text x="354" y="708" fill="#f2a51f" text-anchor="end">≈ €1 / hr</text>
+    </g>
+    <text x="100" y="736" fill="rgba(240,235,224,0.45)" font-size="10.5">Tiers named in the dossier, not enumerated — shown illustratively.</text>
+  </g>
+
+  <!-- ladder connector from Action -->
+  <line x1="240" y1="550" x2="240" y2="600" stroke="rgba(240,235,224,0.25)" stroke-width="1.2" stroke-dasharray="3 3"/>
+
+  <!-- footer -->
+  <text x="1152" y="724" fill="rgba(240,235,224,0.4)" font-size="10.5" text-anchor="end">Conceptual design · LifeSim · not a screenshot of a running game</text>
+</svg>

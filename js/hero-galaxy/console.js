@@ -148,7 +148,37 @@ export async function mountConsole({ section, galaxyData, onOpenDossier }) {
             .hg-console-cta:focus-visible { outline: 2px solid var(--text, #f0ebe0); outline-offset: 2px; }
 
             @media (max-width: 720px) {
-                .hg-console { display: none; }
+                /* Bottom-aligned strip on mobile instead of bottom-left
+                   panel. Sits above the SCROLL ↓ button (which is at
+                   bottom: 72px on mobile per style.css) with a small gap,
+                   spans the full width minus side gutters, and caps at
+                   38% of the viewport so it never eats the whole hero. */
+                .hg-console {
+                    left: 12px;
+                    right: 12px;
+                    bottom: 116px;
+                    width: auto;
+                    max-height: 38dvh;
+                    padding: 12px 14px 10px;
+                    font-size: 11px;
+                }
+                .hg-console-title {
+                    font-size: 18px;
+                    margin-bottom: 6px;
+                }
+                .hg-console-meta {
+                    font-size: 9px;
+                    gap: 2px 8px;
+                    padding: 4px 0;
+                    margin: 2px 0 6px;
+                }
+                .hg-console-list {
+                    font-size: 10px;
+                    margin-bottom: 6px;
+                }
+                .hg-console-list li { padding: 2px 0; }
+                .hg-console-body p { margin-bottom: 6px; }
+                .hg-console-cta { padding: 10px 14px; font-size: 11px; }
             }
             @media (prefers-reduced-motion: reduce) {
                 .hg-console { transition: none; }

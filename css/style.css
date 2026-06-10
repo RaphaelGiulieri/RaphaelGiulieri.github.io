@@ -484,17 +484,32 @@ button {
     color: rgba(240, 235, 224, 0.2);
 }
 .hero-galaxy .galaxy-scroll-hint {
+    /* Acts as the touch escape hatch — single-finger drag on the canvas
+       belongs to the orbit handler (touch-action: none), so without a
+       tappable affordance mobile visitors have no way to leave the
+       masthead. Click handler in scene.js scrolls to the next section. */
     position: absolute;
     bottom: 32px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 5;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    padding: 10px 14px;
     font-family: var(--f-mono, monospace);
     font-size: 10px;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: rgba(240, 235, 224, 0.45);
-    pointer-events: none;
+    color: rgba(240, 235, 224, 0.55);
+    pointer-events: auto;
+    transition: color 200ms var(--ease-out, ease-out);
+}
+.hero-galaxy .galaxy-scroll-hint:hover,
+.hero-galaxy .galaxy-scroll-hint:focus-visible {
+    color: var(--accent, #ff4b1f);
+    outline: none;
 }
 /* Floating body-labels: anchored over each body's projected screen position,
    updated every frame by JS via the --x / --y custom properties. Constant

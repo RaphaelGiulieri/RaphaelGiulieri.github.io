@@ -69,6 +69,16 @@ export async function mountScene({ section }) {
     const PORTRAIT_SPREAD     = 1.05;
     const BASE_CAM_GALAXY     = 140;
     const PORTRAIT_CAM_GALAXY = 105;
+    // System view also needs to pull back in portrait — otherwise the
+    // planets orbiting the focused sun cluster in screen space and their
+    // labels stack on top of each other. ~60% further out is enough for
+    // each planet's screen position to clearly separate.
+    const BASE_CAM_SYSTEM     = 32;
+    const PORTRAIT_CAM_SYSTEM = 52;
+    const BASE_CAM_PLANET     = 6;
+    const PORTRAIT_CAM_PLANET = 9;
+    const BASE_CAM_MOON       = 1.5;
+    const PORTRAIT_CAM_MOON   = 2.2;
 
     // State machine
     const state = {
@@ -102,6 +112,18 @@ export async function mountScene({ section }) {
             if (typeof window.openModal === 'function') window.openModal(projectId, section);
         },
     });
+
+    // Wire the scroll-hint as the touch escape hatch. Single-finger drag
+    // on the canvas stays with the orbit handler (touch-action: none), so
+    // without an explicit tap target mobile visitors couldn't leave the
+    // masthead. The hint scrolls to whatever follows the hero section.
+    const scrollHintEl = section.querySelector('.galaxy-scroll-hint');
+    if (scrollHintEl) {
+        scrollHintEl.addEventListener('click', () => {
+            const next = section.nextElementSibling;
+            (next || document.body).scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
     consoleApi.render(state);
 
     const controls = wireControls({
@@ -869,8 +891,17 @@ export async function mountScene({ section }) {
         camera.fov          = BASE_FOV         + (PORTRAIT_FOV        - BASE_FOV)         * t;
         world.galaxySpread  = BASE_SPREAD      + (PORTRAIT_SPREAD     - BASE_SPREAD)      * t;
         world.camDistGalaxy = BASE_CAM_GALAXY  + (PORTRAIT_CAM_GALAXY - BASE_CAM_GALAXY)  * t;
+        world.camDistSystem = BASE_CAM_SYSTEM  + (PORTRAIT_CAM_SYSTEM - BASE_CAM_SYSTEM)  * t;
+        world.camDistPlanet = BASE_CAM_PLANET  + (PORTRAIT_CAM_PLANET - BASE_CAM_PLANET)  * t;
+        world.camDistMoon   = BASE_CAM_MOON    + (PORTRAIT_CAM_MOON   - BASE_CAM_MOON)    * t;
         setAspect(camera, aspect);
-        if (state.level === 'galaxy') camera.distance = world.camDistGalaxy;
+        // Push the new distance into the camera immediately for the current
+        // level so the visitor sees the retuning on rotation rather than on
+        // the next focus transition.
+        if      (state.level === 'galaxy') camera.distance = world.camDistGalaxy;
+        else if (state.level === 'system') camera.distance = world.camDistSystem;
+        else if (state.level === 'planet') camera.distance = world.camDistPlanet;
+        else if (state.level === 'moon')   camera.distance = world.camDistMoon;
     }
     applyAspectTuning();
 

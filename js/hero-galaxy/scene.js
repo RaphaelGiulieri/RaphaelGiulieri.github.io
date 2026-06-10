@@ -1063,22 +1063,12 @@ export async function mountScene({ section }) {
                 // Other systems' star labels stay visible at every zoom level
                 // so the visitor never loses orientation. Planet/moon labels
                 // appear only when we're inside their parent body.
-                if (state.level === 'galaxy') {
-                    // Stars + every planet — lets visitors skim every
-                    // skill/sub-category from the top-down view without
-                    // having to zoom into each system.
-                    show = body.kind === 'star' || body.kind === 'planet';
-                } else if (state.level === 'system') {
-                    // All sun labels (distant suns stay named so the
-                    // visitor keeps spatial bearing) + planets in the
-                    // focused system.
-                    show = body.kind === 'star'
-                        || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId);
-                } else if (state.level === 'planet' || state.level === 'moon') {
-                    show = body.kind === 'star'
-                        || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId)
-                        || (body.kind === 'moon'   && body.meta.planetId === state.focusedPlanetId);
-                }
+                // Every body — sun, planet, moon — keeps its label at every
+                // zoom level. Visitor never loses spatial bearing or the
+                // name of any visible body. Off-screen and behind-camera
+                // bodies are still filtered automatically by the NDC bounds
+                // check below (the `_proj4[3] <= 0` and `ndcX/Y` clamps).
+                show = true;
                 if (!show) { el.classList.remove('is-visible'); continue; }
                 // Project worldPos → clip
                 const wp = body.worldPos;

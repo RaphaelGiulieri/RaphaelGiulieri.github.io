@@ -20,14 +20,16 @@ fn surface(s: Surface) -> vec4<f32> {
     let p = s.local_pos;
 
     // ── Maria (dark basalt plains) vs Highlands (cratered light surface) ──
-    // Low-frequency 3D fbm picks the regional pattern. Sharp smoothstep
-    // boundary gives the classic "patches of dark sea" look from lunar
-    // photography (Mare Tranquillitatis, Mare Imbrium, etc.).
+    // Albedo spread tuned to real lunar values: highland/maria ratio
+    // is ~0.6, not the 0.35 we had before. The earlier version made
+    // the moon look both sun-lit and deep-shadowed at once — physically
+    // impossible under a single light source. The softer smoothstep
+    // range avoids the binary "two-tone" look; real maria feather out.
     let regional   = fbm3(p * 2.2, 4);
-    let maria_mask = smoothstep(0.48, 0.56, regional);
+    let maria_mask = smoothstep(0.44, 0.60, regional);
 
     let highland_col = vec3<f32>(0.58, 0.53, 0.47);
-    let maria_col    = vec3<f32>(0.21, 0.19, 0.17);
+    let maria_col    = vec3<f32>(0.38, 0.35, 0.32);
     var base = mix(highland_col, maria_col, maria_mask);
 
     // ── Cratering, two scales ──
@@ -35,6 +37,8 @@ fn surface(s: Surface) -> vec4<f32> {
     // basins like Tycho, Copernicus. Medium craters (8×): numerous, fill
     // the highlands. Each voronoi cell becomes one crater: the cell-edge
     // band is the bright rim, the cell-centre region is the dark floor.
+    // Contrast kept gentle — at portfolio viewing scale the moon disc
+    // is small, so strong crater shading reads as noise, not detail.
     let v_large = voronoi(p * 3.5);
     let v_med   = voronoi(p * 8.0);
 
@@ -46,11 +50,11 @@ fn surface(s: Surface) -> vec4<f32> {
                     * (1.0 - smoothstep(0.03, 0.09, v_med));
     let floor_med   = 1.0 - smoothstep(0.0, 0.02, v_med);
 
-    // Crater floors darken the base; crater rims brighten it. Floors of
-    // large craters in maria become very dark; rims in highlands become
-    // distinctly visible bright rings.
-    base = base * (1.0 - floor_large * 0.45) + rim_large * 0.18;
-    base = base * (1.0 - floor_med   * 0.25) + rim_med   * 0.10;
+    // A crater on the lit side is only a few percent darker than the
+    // surrounding plain; the deep blacks in lunar photos come from rim
+    // shadows we can't fake without a height field. So: gentle.
+    base = base * (1.0 - floor_large * 0.18) + rim_large * 0.07;
+    base = base * (1.0 - floor_med   * 0.10) + rim_med   * 0.04;
 
     // ── Fine surface roughness ──
     // High-freq fbm adds the dust-grain micro-relief that catches the

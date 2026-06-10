@@ -1058,9 +1058,28 @@ export async function mountScene({ section }) {
             const w = rect.width, h = rect.height;
             const offX = rect.left - sectionRect.left;
             const offY = rect.top  - sectionRect.top;
+            const lvl = state.level;
             for (const { el, body } of labels.values()) {
-                // Project worldPos → clip first — we need the screen-space
-                // radius to gate planet/moon labels by "close enough to read."
+                // Label-visibility logic, by kind × current zoom level:
+                //   galaxy  → suns only (orientation marker per discipline)
+                //   system  → suns + planets of focused system
+                //   planet  → suns + planets of focused system + moons of focused planet
+                //   moon    → same as planet (deeper view of same context)
+                // This mirrors the spatial intent: at each zoom you label
+                // exactly the family of bodies the visitor can act on, plus
+                // the suns so they never lose the discipline anchor.
+                let show = false;
+                if (body.kind === 'star') {
+                    show = true;
+                } else if (body.kind === 'planet') {
+                    show = lvl !== 'galaxy'
+                        && body.meta.systemId === state.focusedSystemId;
+                } else { // moon
+                    show = (lvl === 'planet' || lvl === 'moon')
+                        && body.meta.planetId === state.focusedPlanetId;
+                }
+                if (!show) { el.classList.remove('is-visible'); continue; }
+                // Project worldPos → clip (only for bodies we'll actually show)
                 const wp = body.worldPos;
                 _proj4[0] = _vp[0]*wp[0] + _vp[4]*wp[1] + _vp[8] *wp[2] + _vp[12];
                 _proj4[1] = _vp[1]*wp[0] + _vp[5]*wp[1] + _vp[9] *wp[2] + _vp[13];
@@ -1072,10 +1091,10 @@ export async function mountScene({ section }) {
                 if (ndcX < -1.05 || ndcX > 1.05 || ndcY < -1.05 || ndcY > 1.05) { el.classList.remove('is-visible'); continue; }
                 const px = offX + (ndcX * 0.5 + 0.5) * w;
                 const py = offY + (-ndcY * 0.5 + 0.5) * h;
-                // Project a per-kind silhouette radius onto the screen — used
-                // both to gate visibility (close-enough-to-read for planets
-                // and moons) and to position the label above the disc.
-                // Multipliers are tunable via the dev panel.
+                // Project a per-kind silhouette radius onto the screen so the
+                // label sits above the visible body. Multipliers are tunable
+                // via the dev panel (labelMultStar / labelMultPlanet /
+                // labelMultMoon) so e.g. stars can clear their halo or not.
                 const dx = wp[0] - camera.eye[0];
                 const dy = wp[1] - camera.eye[1];
                 const dz = wp[2] - camera.eye[2];
@@ -1085,15 +1104,6 @@ export async function mountScene({ section }) {
                            : world.labelMultMoon;
                 const worldRadius = body.radiusWorld * body.scale * mult;
                 const screenRadius = worldRadius * (h * 0.5) / (eyeDist * Math.tan(camera.fov * 0.5));
-                // Suns label at every zoom — they're the system anchors, the
-                // visitor needs to know where Graphics / ML / Web-Systems live
-                // regardless of focus depth. Planets and moons only label when
-                // their screen disc is big enough to point at — distant ones
-                // crowd the canvas with text smaller than the body it names.
-                if (body.kind !== 'star' && screenRadius < 22) {
-                    el.classList.remove('is-visible');
-                    continue;
-                }
                 el.style.setProperty('--x', px + 'px');
                 el.style.setProperty('--y', (py - screenRadius) + 'px');
                 el.classList.add('is-visible');

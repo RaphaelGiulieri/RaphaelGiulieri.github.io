@@ -1061,22 +1061,21 @@ export async function mountScene({ section }) {
             const lvl = state.level;
             for (const { el, body } of labels.values()) {
                 // Label-visibility logic, by kind × current zoom level:
-                //   galaxy  → suns only (orientation marker per discipline)
-                //   system  → suns + planets of focused system
-                //   planet  → suns + planets of focused system + moons of focused planet
-                //   moon    → same as planet (deeper view of same context)
-                // This mirrors the spatial intent: at each zoom you label
-                // exactly the family of bodies the visitor can act on, plus
-                // the suns so they never lose the discipline anchor.
+                //   galaxy → suns only (each one anchors a discipline)
+                //   system / planet / moon → suns + every planet AND moon of
+                //   the focused system. Same rule for planets and moons:
+                //   once the visitor is inside a system, every body in it is
+                //   actionable and so should be named. No distance culling —
+                //   if a body is in the focused system, it's labelled,
+                //   period. (Bodies from OTHER systems still render in the
+                //   background but stay unlabelled — they're not actionable
+                //   from this zoom.)
                 let show = false;
                 if (body.kind === 'star') {
                     show = true;
-                } else if (body.kind === 'planet') {
+                } else {
                     show = lvl !== 'galaxy'
                         && body.meta.systemId === state.focusedSystemId;
-                } else { // moon
-                    show = (lvl === 'planet' || lvl === 'moon')
-                        && body.meta.planetId === state.focusedPlanetId;
                 }
                 if (!show) { el.classList.remove('is-visible'); continue; }
                 // Project worldPos → clip (only for bodies we'll actually show)

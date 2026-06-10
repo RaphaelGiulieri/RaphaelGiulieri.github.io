@@ -1069,18 +1069,13 @@ export async function mountScene({ section }) {
                     // having to zoom into each system.
                     show = body.kind === 'star' || body.kind === 'planet';
                 } else if (state.level === 'system') {
-                    // ONLY the focused system's sun + its planets. Other
-                    // suns still RENDER (as distant landmarks) but their
-                    // labels were creating background noise; visitor is
-                    // examining one system, the others' names are clutter.
-                    show = (body.kind === 'star'   && body.id === state.focusedSystemId)
+                    // All sun labels (distant suns stay named so the
+                    // visitor keeps spatial bearing) + planets in the
+                    // focused system.
+                    show = body.kind === 'star'
                         || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId);
                 } else if (state.level === 'planet' || state.level === 'moon') {
-                    // Same rule one level deeper — focused system's sun
-                    // label is kept (useful "where am I" cue), other suns
-                    // are silent. Focused system's planets + focused
-                    // planet's moons are labelled.
-                    show = (body.kind === 'star'   && body.id === state.focusedSystemId)
+                    show = body.kind === 'star'
                         || (body.kind === 'planet' && body.meta.systemId === state.focusedSystemId)
                         || (body.kind === 'moon'   && body.meta.planetId === state.focusedPlanetId);
                 }
@@ -1236,17 +1231,14 @@ export async function mountScene({ section }) {
             pass.setBindGroup(1, s.haloBG);
             pass.drawIndexed(ico.indexCount);
         }
-        // Star bloom — bloom only when the sun itself is the visual subject:
-        //   galaxy view → every sun (they're the main signal)
-        //   system view → focused sun (centred on screen)
-        //   planet / moon view → NO bloom (the sun is off-screen behind the
-        //     camera or off to one side, and even with the NDC clamp its
-        //     bloom billboard reads as a giant featureless rogue blob next
-        //     to the focused body).
-        const bloomTargets =
-            state.level === 'galaxy' ? visibleStars() :
-            state.level === 'system' ? visibleStars().filter(s => s.id === state.focusedSystemId) :
-            [];
+        // Star bloom — every visible sun gets its bloom billboard at every
+        // zoom level. The billboard radius is proportional to apparent
+        // screen size (radius_world × bloomRadiusMul / eye_dist) AND
+        // clamped to 0.55 NDC half-height, so distant suns naturally
+        // produce small, tasteful bloom rather than the "rogue blob" we
+        // were trying to dodge earlier (that turned out to be a particle
+        // ring, not the bloom).
+        const bloomTargets = visibleStars();
         if (bloomTargets.length) {
             pass.setPipeline(sunBloomPipeline);
             pass.setBindGroup(0, bloomCameraBG);

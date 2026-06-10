@@ -29,7 +29,8 @@ export async function mountScene({ section }) {
     if (!canvas) throw new Error('no #galaxy-canvas');
     const starsCanvas = section.querySelector('#galaxy-stars');
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    function refreshDpr() { dpr = Math.min(window.devicePixelRatio || 1, 2); }
     function resizeBacking() {
         const w = Math.floor(canvas.clientWidth  * dpr);
         const h = Math.floor(canvas.clientHeight * dpr);
@@ -54,6 +55,20 @@ export async function mountScene({ section }) {
     setAspect(camera, canvas.width / canvas.height);
     camera.distance = 80;
     camera.target.set([0, 0, 0]);
+
+    // Aspect-tuning baselines. The galaxy was tuned for landscape (~1.6
+    // aspect). Portrait phones (aspect ~0.46) narrow the horizontal extent
+    // until the side suns fall outside the frustum. applyAspectTuning()
+    // below lerps FOV + galaxy spread + camera distance between landscape
+    // and portrait profiles so the 3 suns stay in frame in any orientation,
+    // without ever calling screen.orientation.lock() (which requires
+    // fullscreen on most mobile browsers and is impractical per-section).
+    const BASE_FOV            = Math.PI / 3.5;   // ~51.4°  landscape
+    const PORTRAIT_FOV        = Math.PI / 2.4;   // ~75°    portrait
+    const BASE_SPREAD         = 1.76;
+    const PORTRAIT_SPREAD     = 1.05;
+    const BASE_CAM_GALAXY     = 140;
+    const PORTRAIT_CAM_GALAXY = 105;
 
     // State machine
     const state = {
@@ -839,6 +854,26 @@ export async function mountScene({ section }) {
         }
     }
 
+    // Lerp scene tuning between landscape and portrait profiles. t = 0 at
+    // aspect ≥ 1 (full landscape baseline), t = 1 at aspect ≤ 0.4 (deep
+    // portrait). The (1 - aspect) / 0.6 mapping smooths the transition so
+    // partial-landscape phones don't jump between tunings on every rotation
+    // tick. Also pushes the new galaxy distance directly into the camera
+    // when at galaxy view so the change is visible immediately rather than
+    // waiting for the next focus transition.
+    function applyAspectTuning() {
+        const w = canvas.width, h = canvas.height;
+        if (!w || !h) return;
+        const aspect = w / h;
+        const t = Math.max(0, Math.min(1, (1.0 - aspect) / 0.6));
+        camera.fov          = BASE_FOV         + (PORTRAIT_FOV        - BASE_FOV)         * t;
+        world.galaxySpread  = BASE_SPREAD      + (PORTRAIT_SPREAD     - BASE_SPREAD)      * t;
+        world.camDistGalaxy = BASE_CAM_GALAXY  + (PORTRAIT_CAM_GALAXY - BASE_CAM_GALAXY)  * t;
+        setAspect(camera, aspect);
+        if (state.level === 'galaxy') camera.distance = world.camDistGalaxy;
+    }
+    applyAspectTuning();
+
     let running = true;
     const io = new IntersectionObserver((entries) => {
         for (const e of entries) {
@@ -849,9 +884,27 @@ export async function mountScene({ section }) {
     }, { threshold: [0, 0.1] });
     io.observe(section);
 
+    // Adapt to rotation + viewport resizes. rAF-coalesce so dragging a
+    // desktop window edge doesn't reconfigure WebGPU on every pixel, and
+    // so orientationchange's racy "new dims not yet stable" window gets
+    // skipped — by the rAF tick the layout has settled.
+    let _vpPending = false;
+    function onViewportChange() {
+        if (_vpPending) return;
+        _vpPending = true;
+        requestAnimationFrame(() => {
+            _vpPending = false;
+            refreshDpr();
+            if (resizeBacking()) { applyAspectTuning(); ensureDepth(); }
+            else                 { applyAspectTuning(); }
+        });
+    }
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', onViewportChange);
+
     function frame(now) {
         if (!running) return;
-        if (resizeBacking()) { setAspect(camera, canvas.width / canvas.height); ensureDepth(); }
+        if (resizeBacking()) { applyAspectTuning(); ensureDepth(); }
         const t = now * 0.001;
         const lastNow = frame._lastNow ?? now;
         const dt = Math.min(0.05, (now - lastNow) / 1000);

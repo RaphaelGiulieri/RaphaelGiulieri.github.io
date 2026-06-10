@@ -17,10 +17,16 @@ export function wireControls({ canvas, camera, getState, onInput }) {
     let velYaw = 0, velPitch = 0;
 
     function onPointerDown(e) {
-        if (e.button !== undefined && e.button !== 0 && e.button !== 1) return;
+        // Accept primary mouse button, middle, and touch/pen (button === 0 or -1).
+        if (e.button !== undefined && e.button !== 0 && e.button !== 1 && e.button !== -1) return;
         dragging = true; lastX = e.clientX; lastY = e.clientY;
         velYaw = 0; velPitch = 0;
-        canvas.setPointerCapture?.(e.pointerId ?? 1);
+        try { canvas.setPointerCapture?.(e.pointerId ?? 1); } catch {}
+        // For touch/pen, preventDefault stops the synthetic mouse + focus +
+        // context-menu events iOS Safari schedules on touchdown. Pairs with
+        // touch-action: none on the canvas; without it some edge browsers
+        // still schedule a delayed scroll.
+        if (e.pointerType === 'touch' || e.pointerType === 'pen') e.preventDefault?.();
         onInput?.();
     }
     function onPointerMove(e) {
@@ -34,7 +40,16 @@ export function wireControls({ canvas, camera, getState, onInput }) {
     }
     function onPointerUp(e) {
         dragging = false;
-        canvas.releasePointerCapture?.(e.pointerId ?? 1);
+        try { canvas.releasePointerCapture?.(e.pointerId ?? 1); } catch {}
+    }
+    function onPointerCancel(e) {
+        // Browser stole the gesture (Android edge-swipe nav, app switch,
+        // OS-level intercept). Reset `dragging` so the inertia tick can run
+        // and the next pointerdown starts cleanly — without this the flag
+        // stays true and `if (dragging) return` in tickInertia freezes the
+        // camera until the visitor taps again.
+        dragging = false;
+        try { canvas.releasePointerCapture?.(e.pointerId ?? 1); } catch {}
     }
     function onWheel(e) {
         const stateLevel = getState();
@@ -77,9 +92,10 @@ export function wireControls({ canvas, camera, getState, onInput }) {
         }
     }
 
-    canvas.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup',   onPointerUp);
+    canvas.addEventListener('pointerdown',   onPointerDown);
+    window.addEventListener('pointermove',   onPointerMove);
+    window.addEventListener('pointerup',     onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
     canvas.addEventListener('wheel', onWheel, { passive: false });
     canvas.addEventListener('touchstart', onTouchStart, { passive: true });
     canvas.addEventListener('touchmove',  onTouchMove,  { passive: false });

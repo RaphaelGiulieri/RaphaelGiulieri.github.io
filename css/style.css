@@ -418,7 +418,8 @@ button {
 /* ─── Hero galaxy — 100vh dedicated landing (3D WebGPU galaxy) ─── */
 .hero-galaxy {
     position: relative;
-    height: 100vh;
+    height: 100vh;        /* fallback for browsers without dvh */
+    height: 100dvh;       /* dynamic viewport — collapses with iOS Safari URL bar so the canvas doesn't resize mid-scroll */
     width: 100%;
     background: #010101;
     overflow: hidden;
@@ -434,7 +435,20 @@ button {
     display: block;
 }
 .hero-galaxy #galaxy-stars  { z-index: 0; pointer-events: none; }
-.hero-galaxy #galaxy-canvas { z-index: 1; background: transparent; }
+.hero-galaxy #galaxy-canvas {
+    z-index: 1;
+    background: transparent;
+    /* Single-finger drag belongs to our orbit handler. Without this the
+       browser interprets a vertical-ish drag as page scroll after ~10 px,
+       fires pointercancel, and the orbit freezes mid-gesture. Pointer
+       capture cannot override touch-action arbitration — the CSS rule is
+       the only fix. Page scroll still works from outside the canvas, and
+       two-finger pinch still reaches our onTouchMove handler. */
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
 /* Live-mode overlay chrome */
 .hero-galaxy .galaxy-breadcrumb {
     position: absolute;
@@ -597,8 +611,27 @@ button {
     text-decoration: none;
 }
 @media (max-width: 720px) {
-    .hero-galaxy .galaxy-breadcrumb { top: 72px; left: 16px; font-size: 10px; }
+    .hero-galaxy .galaxy-breadcrumb {
+        top: 72px; left: 16px;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+    }
+    .hero-galaxy .galaxy-breadcrumb ol { gap: 8px; }
+    .hero-galaxy .galaxy-breadcrumb li + li::before { margin-right: 8px; }
+    /* Lift the scroll hint clear of the chat collapsed pill (bottom: 12 px,
+       40 px tall) so the two stop sharing the same edge band. */
+    .hero-galaxy .galaxy-scroll-hint { bottom: 72px; font-size: 11px; letter-spacing: 0.18em; }
+    .hero-galaxy .galaxy-label           { font-size: 11px; }
+    .hero-galaxy .galaxy-label.is-star   { font-size: 11px; letter-spacing: 0.10em; }
+    .hero-galaxy .galaxy-label.is-moon   { font-size: 10px; }
     .hero-galaxy.is-fallback .hero-fallback { padding: 64px 20px 48px; }
+}
+/* Landscape phones — the masthead is 64 px tall, the breadcrumb has to
+   come in below it and the scroll-hint has to come in too since the
+   viewport height is small. */
+@media (orientation: landscape) and (max-height: 480px) {
+    .hero-galaxy .galaxy-breadcrumb { top: 56px; }
+    .hero-galaxy .galaxy-scroll-hint { bottom: 14px; }
 }
 
 /* Stats relocated from the hero into the About section. */
@@ -616,7 +649,7 @@ button {
     font-size: 9px;
     letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: rgba(28, 22, 14, 0.5);
+    color: var(--ink-dim);
     margin-bottom: 4px;
 }
 .about-stats dd {
@@ -1019,11 +1052,43 @@ button {
     vertical-align: baseline;
 }
 .filter-item.is-active .filter-count { color: var(--accent); opacity: 0.75; }
+@media (max-width: 720px) {
+    /* Drop the inline `·` separators — at 390 px they orphan to new lines
+       and read as broken. Chip-shaped items hit ~40 px tall so they're
+       comfortable for thumbs while staying visually in the editorial
+       language (1 px border, sharp 2 px corners, mono caps). */
+    .filter-strip {
+        gap: 8px;
+        font-size: 13px;
+        padding-bottom: var(--s-4);
+        margin-bottom: var(--s-5);
+    }
+    .filter-strip i { display: none; }
+    .filter-legend { width: 100%; margin: 0 0 4px; }
+    .filter-item {
+        padding: 10px 12px;
+        border: 1px solid var(--rule);
+        border-radius: 2px;
+        min-height: 40px;
+        display: inline-flex;
+        align-items: center;
+        line-height: 1;
+    }
+    .filter-item::after { display: none; }
+    .filter-item.is-active {
+        border-color: var(--accent);
+        color: var(--accent);
+    }
+}
 
 /* --- Projects grid ------------------------------------ */
 .projects-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    /* `min(340px, 100%)` so the track never asks for more than the container
+       width — at narrow viewports cards reflow to a single column without
+       triggering horizontal scroll (340 px > available 350-ish px content
+       column on a 390-wide phone was busting the row otherwise). */
+    grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
     gap: 0;
     border-top: 1px solid var(--rule);
 }
@@ -1221,7 +1286,7 @@ button {
 /* --- Research grid ------------------------------------ */
 .research-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
     gap: 0;
     border-top: 1px solid var(--rule);
 }
@@ -2007,6 +2072,13 @@ button {
     line-height: 1;
     pointer-events: none;
 }
+@media (max-width: 480px) {
+    /* At narrow widths the 3em curly quote slipped off the left edge of
+       the dossier sheet. Pull the blockquote padding in slightly and
+       anchor the glyph inside the new padding so nothing clips. */
+    .dossier-body blockquote { padding-left: var(--s-5); }
+    .dossier-body blockquote::before { left: 0; font-size: 2.4em; }
+}
 .dossier-body hr {
     border: 0;
     border-top: 1px dashed var(--rule);
@@ -2018,6 +2090,19 @@ button {
     margin: var(--s-5) 0;
     font-size: 13px;
     font-family: var(--f-mono);
+}
+@media (max-width: 720px) {
+    /* Wide markdown tables (3+ columns with prose cells) bust the dossier
+       sheet on phones. Promote to a scrollable block so columns keep their
+       natural width and the visitor can pan horizontally — better than
+       crushing every column to unreadable width. */
+    .dossier-body table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        white-space: nowrap;
+        max-width: 100%;
+    }
 }
 .dossier-body th, .dossier-body td {
     border: 1px solid var(--rule);
@@ -2402,11 +2487,20 @@ button {
 
 /* --- Small-screen polish ----------------------------- */
 @media (max-width: 720px) {
-    .section-head { margin-bottom: var(--s-7); }
+    /* Section vertical padding was clamp(--s-9, 14vh, --s-11) ≈ 118 px on a
+       844 px-tall phone — 5 sections × 236 px of empty band each made the
+       page feel endless. --s-7 keeps the editorial rhythm while reclaiming
+       ~700 px of vertical real estate. */
+    .section { padding: var(--s-7) var(--gutter); }
+    .section-head { margin-bottom: var(--s-6); }
     .hero-disciplines { grid-template-columns: 1fr; gap: var(--s-5); padding: var(--s-4) 0; }
     .card-project, .card-research { min-height: auto; }
     .research-num { font-size: 44px; top: var(--s-4); right: var(--s-4); }
     .colophon-imprint p { max-width: 100%; }
+    /* 4 stats in a 2×2 grid instead of 4×1 — auto-fit's min-content path
+       was dropping the 4th stat to its own row at 390 px. */
+    .about-stats { grid-template-columns: repeat(2, 1fr); gap: var(--s-3); }
+    .about-stats dd { font-size: 24px; }
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -2781,8 +2875,9 @@ a.chat-chip:focus-visible {
     .chat.is-expanded .chat-panel {
         width: 100vw;
         max-width: 100vw;
-        height: 100vh;
-        max-height: 100vh;
+        height: 100vh;        /* fallback */
+        height: 100dvh;       /* iOS URL-bar collapse + on-screen keyboard aware */
+        max-height: 100dvh;
         border: 0;
         border-radius: 0;
     }

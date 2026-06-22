@@ -199,33 +199,6 @@
       }
     },
     {
-      "id": "gaec_solar",
-      "title": "Solar PV 3D modelling & calepinage",
-      "tagline": "A self-directed engineering study: a 337 kWc rooftop solar install modelled parametrically from permit drawings — 734 panels, 35 strings, 4 Huawei inverters, Excel calepinage, 4,800-word installer manual.",
-      "categories": [
-        "3d",
-        "docs"
-      ],
-      "skills_short": [
-        "Parametric 3D modelling",
-        "Solar PV engineering",
-        "Reproducible deliverables",
-        "French regulatory documentation",
-        "Editorial documentation HTML"
-      ],
-      "year": 2026,
-      "status": "self-directed",
-      "client": null,
-      "role": "Solo developer (modelling + documentation)",
-      "highlight": true,
-      "rank": 70,
-      "cover": "assets/projects/gaec_solar/cover.webp",
-      "links": {
-        "repo": null,
-        "demo": null
-      }
-    },
-    {
       "id": "site_avocat",
       "title": "Law-firm website (Nice, France)",
       "tagline": "42 hand-written HTML pages, 30 in-depth legal guides, no tracking, no framework, AAA colour contrast, mailto: contact form.",

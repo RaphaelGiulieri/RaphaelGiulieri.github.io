@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="theme-light cv-page">
+<html lang="en" class="cv-page">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -17,7 +17,8 @@
     <meta property="og:image:alt" content="Raphael Giulieri — CV · n° 02 · Spring 2026">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:image" content="https://raphaelgiulieri.github.io/assets/og.png">
-    <meta name="theme-color" content="#f3ece0">
+    <meta name="theme-color" content="#f3ece0" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0c0a07" media="(prefers-color-scheme: dark)">
 
     <link rel="icon" type="image/svg+xml" href="../favicon.svg">
 
@@ -27,6 +28,24 @@
 
     <link rel="stylesheet" href="../css/style.css">
     <link rel="stylesheet" href="style.css">
+
+    <!-- Theme init: synchronously apply the stored / preferred theme
+         before paint so the CV doesn't flash the wrong palette.
+         CV defaults to LIGHT on first visit (it's a document) and
+         remembers the visitor's choice via the same rg-theme key
+         the portfolio uses, so switching from portfolio to CV keeps
+         your preference. -->
+    <script>
+        (function () {
+            try {
+                var html = document.documentElement;
+                var stored = localStorage.getItem('rg-theme');
+                if (stored === 'dark') html.classList.add('theme-dark');
+                else if (stored === 'light') html.classList.add('theme-light');
+                else { html.classList.add('theme-light'); localStorage.setItem('rg-theme', 'light'); }
+            } catch (e) { document.documentElement.classList.add('theme-light'); }
+        })();
+    </script>
 </head>
 <body class="cv-body">
     <a class="skip" href="#cv-main">Skip to content</a>
@@ -37,10 +56,16 @@
                 <span class="brand-sigil">R<i>·</i>G</span>
                 <span class="brand-issue">n° 02 · CV · Spring 2026</span>
             </a>
-            <a href="../" class="cv-cross-link" aria-label="View the full portfolio">
-                <span class="cross-arrow" aria-hidden="true">↗</span>
-                <span class="cross-text">n° 01 · portfolio</span>
-            </a>
+            <div class="cv-masthead-actions">
+                <a href="../" class="cv-cross-link" aria-label="View the full portfolio">
+                    <span class="cross-arrow" aria-hidden="true">↗</span>
+                    <span class="cross-text">n° 01 · portfolio</span>
+                </a>
+                <button class="theme-toggle" id="themeToggle" aria-label="Toggle colour theme">
+                    <span class="theme-dot"></span>
+                    <span class="theme-label">—</span>
+                </button>
+            </div>
         </div>
     </header>
 
@@ -79,20 +104,10 @@
             <header class="cv-section-head">
                 <p class="cv-section-marker"><span class="rule-pre" aria-hidden="true"></span> § 01 / Selected work</p>
                 <h2 id="cv-work-title" class="cv-section-title">Selected work<span class="title-dot">.</span></h2>
-                <p class="cv-section-count">10 of 30 — full catalogue at <a href="../#work">portfolio</a></p>
+                <p class="cv-section-count">9 of 29 — full catalogue at <a href="../#work">portfolio</a></p>
             </header>
 
             <ol class="cv-work-list">
-                <li class="cv-work-row">
-                    <span class="cv-year">2026</span>
-                    <div class="cv-work-body">
-                        <p class="cv-work-title"><em>Solar PV 3D modelling &amp; calepinage</em><span class="cv-role"> — solo</span></p>
-                        <p class="cv-work-scope">337 kWc / 734-panel rooftop install — parametric model, 35 strings, 4 inverters, 4 800-word installer manual.</p>
-                        <ul class="cv-chips">
-                            <li>SketchUp + Python</li><li>parametric modelling</li><li>solar PV engineering</li><li>French regulatory docs</li><li>editorial HTML</li>
-                        </ul>
-                    </div>
-                </li>
                 <li class="cv-work-row">
                     <span class="cv-year">2025</span>
                     <div class="cv-work-body">
@@ -347,5 +362,33 @@
         </footer>
 
     </main>
+
+    <!-- Theme toggle handler. Same rg-theme localStorage key as the
+         portfolio so the choice carries between /cv/ and /. -->
+    <script>
+        (function () {
+            var html = document.documentElement;
+            var btn = document.getElementById('themeToggle');
+            var label = document.querySelector('.theme-label');
+            function updateLabel() {
+                var isLight = html.classList.contains('theme-light');
+                if (label) label.textContent = isLight ? 'Light' : 'Dark';
+            }
+            updateLabel();
+            if (!btn) return;
+            btn.addEventListener('click', function () {
+                var isLight = html.classList.contains('theme-light');
+                html.classList.remove('theme-light', 'theme-dark');
+                if (isLight) {
+                    html.classList.add('theme-dark');
+                    localStorage.setItem('rg-theme', 'dark');
+                } else {
+                    html.classList.add('theme-light');
+                    localStorage.setItem('rg-theme', 'light');
+                }
+                updateLabel();
+            });
+        })();
+    </script>
 </body>
 </html>

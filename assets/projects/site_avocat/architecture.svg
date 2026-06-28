@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 750" width="100%" role="img"
-     aria-label="Information-architecture diagram: 42 hand-written pages — home, 8 practice areas, 4 compliance pages, and 30 legal guides each carrying Article, FAQPage and BreadcrumbList schema. Zero-dependency vanilla stack.">
+     aria-label="Information-architecture diagram: 42 semantic-HTML pages — home, 8 practice areas, 4 compliance pages, and 30 legal guides each carrying Article, FAQPage and BreadcrumbList schema. AI-assisted build, zero-dependency vanilla stack.">
   <defs>
     <style>
       text { font-family: "JetBrains Mono", ui-monospace, monospace; fill: #f0ebe0; }
@@ -23,7 +23,7 @@
 
   <!-- header -->
   <text x="48" y="58" class="t-title">Information architecture</text>
-  <text x="48" y="82" class="t-sub">42 hand-written pages · de-identified · placeholder labels</text>
+  <text x="48" y="82" class="t-sub">42 semantic-HTML pages · de-identified · placeholder labels</text>
   <text x="1152" y="58" text-anchor="end" class="t-count">42</text>
   <text x="1152" y="78" text-anchor="end" class="t-tag">PAGES TOTAL</text>
 

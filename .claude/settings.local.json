@@ -19,7 +19,8 @@
       "Skill(run)",
       "Skill(run:*)",
       "mcp__nodriver-mcp__navigate",
-      "mcp__nodriver-mcp__screenshot"
+      "mcp__nodriver-mcp__screenshot",
+      "Bash(npm run *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Legion\\.claude"

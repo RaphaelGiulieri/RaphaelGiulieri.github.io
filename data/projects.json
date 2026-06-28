@@ -201,15 +201,15 @@
     {
       "id": "site_avocat",
       "title": "Law-firm website (Nice, France)",
-      "tagline": "42 hand-written HTML pages, 30 in-depth legal guides, no tracking, no framework, AAA colour contrast, mailto: contact form.",
+      "tagline": "42-page semantic-HTML site, 30 in-depth legal guides, no tracking, no framework, AAA colour contrast, mailto: contact form. AI-assisted build.",
       "categories": [
         "web"
       ],
       "skills_short": [
         "Semantic HTML5",
+        "AI-assisted development",
         "Accessibility-first",
         "Schema.org SEO",
-        "GDPR-by-architecture",
         "Vanilla CSS + JS"
       ],
       "year": 2025,

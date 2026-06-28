@@ -1,13 +1,13 @@
 ---
 id: site_avocat
 title: "Law-firm website (Nice, France)"
-tagline: "Forty-two hand-written HTML pages, thirty in-depth legal guides, no tracking, no framework, no analytics. A complete build — not yet deployed."
+tagline: "Forty-two semantic-HTML pages, thirty in-depth legal guides, no tracking, no framework, no analytics. AI-assisted build; a complete build — not yet deployed."
 categories: [web, client]
 skills_short:
   - Semantic HTML5
+  - AI-assisted development
   - Accessibility-first
   - Schema.org SEO
-  - GDPR-by-architecture
   - Vanilla CSS + JS
 year: 2025
 status: self-directed
@@ -27,7 +27,7 @@ gallery:
     caption: "Design system (de-identified, placeholder copy): the clamp() type scale, a working FAQ accordion, and the real two-column → one-column reflow. Toggle desktop / mobile. Not the client's site."
   - src: assets/projects/site_avocat/architecture.svg
     alt: "Sitemap diagram — 42 pages, 30 legal guides with schema.org, zero-dependency stack"
-    caption: "Information architecture: 42 hand-written pages — home, 8 practice areas, 4 compliance pages, and 30 legal guides each carrying Article + FAQPage + BreadcrumbList schema. No framework, no build, no analytics. Concept diagram, not the live site."
+    caption: "Information architecture: 42 semantic-HTML pages — home, 8 practice areas, 4 compliance pages, and 30 legal guides each carrying Article + FAQPage + BreadcrumbList schema. AI-assisted build, no framework, no build step, no analytics. Concept diagram, not the live site."
   - src: assets/projects/site_avocat/performance.svg
     alt: "Performance infographic — 0 frameworks, 0 trackers, 0 cookies, ~1.1 MB, sub-1s load, Lighthouse 95+"
     caption: "Zero frameworks, zero trackers, zero third-party cookies — ~1.1 MB, sub-1s load, Lighthouse 95+, 88 ARIA attributes, AAA contrast. GDPR-compliant by architecture. Figures per dossier, not live-measured."
@@ -41,7 +41,7 @@ links:
 
 # Law-firm website (Nice, France)
 
-A self-directed build for a small Nice law firm — complete, though not yet deployed. Built entirely in vanilla HTML, CSS, and JavaScript — no build tool, no framework, no analytics, no cookies. Forty-two pages: a homepage, eight practice-area landing pages, four compliance pages, and **thirty in-depth legal guide articles** covering the procedures the firm's clients actually search for.
+A self-directed build for a small Nice law firm — complete, though not yet deployed. Built in vanilla HTML, CSS, and JavaScript with significant AI assistance for the legal-guide copy and the schema-rich page scaffolding — no build tool, no framework, no analytics, no cookies in the shipped output. Forty-two pages: a homepage, eight practice-area landing pages, four compliance pages, and **thirty in-depth legal guide articles** covering the procedures the firm's clients actually search for.
 
 The decision to reject Next.js + Tailwind was deliberate. Anyone can open any page and read what it does. There's no compiled bundle, no source maps in production, no dependency audit. The site will still work in five years. SEO is helped because there's no JavaScript hydration to delay indexing. GDPR compliance is automatic because no third-party cookies exist; no consent banner is needed.
 

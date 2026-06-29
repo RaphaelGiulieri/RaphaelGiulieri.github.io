@@ -382,7 +382,7 @@
       "rank": 73,
       "cover": "assets/projects/tech_particles/cover.webp",
       "links": {
-        "repo": null,
+        "repo": "https://github.com/RaphaelGiulieri/AudioReactiveProject",
         "demo": null
       }
     },
@@ -467,7 +467,7 @@
       "rank": 68,
       "cover": "assets/projects/tech_compute_procedural/cover.webp",
       "links": {
-        "repo": null,
+        "repo": "https://github.com/RaphaelGiulieri/ReactionDiffusion",
         "demo": null
       }
     },

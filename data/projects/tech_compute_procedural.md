@@ -107,7 +107,7 @@ The same Gray-Scott field used three ways — as the height + colour of a glossy
 
 ## Where it stands
 
-Active. Remain's compute pipeline is the production case study. The DOTS exploration sits as a capability for future large-entity projects. The next horizon is GPU compute for 3D fluid sims and physics — bridging from "particles and cellular automata" into proper rigid-body / soft-body work.
+Active. Remain's compute pipeline is the production case study. The DOTS exploration ([code on GitHub](https://github.com/RaphaelGiulieri/ECSProject)) sits as a capability for future large-entity projects. The Gray-Scott reaction-diffusion sandbox is [also public](https://github.com/RaphaelGiulieri/ReactionDiffusion). The next horizon is GPU compute for 3D fluid sims and physics — bridging from "particles and cellular automata" into proper rigid-body / soft-body work.
 
 ## See it live
 

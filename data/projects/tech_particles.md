@@ -66,7 +66,7 @@ The choice is never about which is "best" — it's about which paradigm fits the
 
 ## Where it stands
 
-Active. Every current project touches particles somewhere; each one chooses its paradigm based on the budget and the engine. Cross-engine fluency is the body of work; no single project is the headline.
+Active. Every current project touches particles somewhere; each one chooses its paradigm based on the budget and the engine. Cross-engine fluency is the body of work; no single project is the headline. The WebGPU compute engine that drives the masthead and the [Particle Playground](demos/particle-playground.html) is open-source at [github.com/RaphaelGiulieri/AudioReactiveProject](https://github.com/RaphaelGiulieri/AudioReactiveProject) — the `particles/` subdirectory there is what's vendored into this site.
 
 ## See it live
 

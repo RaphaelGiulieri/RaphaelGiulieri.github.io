@@ -10,7 +10,7 @@ skills_short:
   - Mobile-first PWA
   - Production deployment
 year: 2025
-status: shipped
+status: delivered
 client: "A Doha creative agency, for a Gulf tourism board"
 role: Solo developer
 highlight: true
@@ -34,8 +34,8 @@ gallery:
     type: video
     caption: "20 s tour through the three moods — RELAX → DISCOVER → MOVE."
 headline:
-  value: "Live · Spring 2026"
-  label: "deployed at event booths"
+  value: "Delivered · Spring 2025"
+  label: "campaign cancelled before launch"
 links:
   repo: null
   demo: null
@@ -67,6 +67,6 @@ Each mood is a different reveal physics. Relax and Move use a 2D incompressible 
 
 ## Where it stands
 
-Deployed in production. Recent iteration concentrated on Discover mode's depth-driven veil — seven versions until the spawn gate, the videosphere mask, and the debug view all agreed. The mood system, scene catalogue, and deployment tooling are stable.
+Delivered to the agency in Spring 2025, with the deployment pipeline and three moods stable; the campaign was cancelled before public launch due to regional events. The mood system, scene catalogue, and deployment tooling remain complete; the public-facing booth rollout did not happen.
 
 The underlying tech — curl-noise GPGPU particles and the Navier-Stokes fluid solver — has its own dedicated showcase under [tech_particles](tech_particles) and [tech_volumetric](tech_volumetric).

@@ -61,6 +61,10 @@
                     <span class="cross-arrow" aria-hidden="true">↗</span>
                     <span class="cross-text">n° 01 · portfolio</span>
                 </a>
+                <button type="button" class="cv-pdf-btn" id="cvPdfBtn" aria-label="Download this CV as PDF — opens your browser's print dialog with a print-tuned stylesheet">
+                    <span class="cv-pdf-arrow" aria-hidden="true">↓</span>
+                    <span class="cv-pdf-text">PDF</span>
+                </button>
                 <button class="theme-toggle" id="themeToggle" aria-label="Toggle colour theme">
                     <span class="theme-dot"></span>
                     <span class="theme-label">—</span>
@@ -95,7 +99,8 @@
                     <div><dt>Base</dt><dd>Nice, France · remote worldwide</dd></div>
                     <div><dt>Email</dt><dd><a href="mailto:contact.raphael.giulieri@gmail.com">contact.raphael.giulieri@gmail.com</a></dd></div>
                     <div><dt>Portfolio</dt><dd><a href="../">raphaelgiulieri.github.io</a> <span aria-hidden="true">↗</span></dd></div>
-                    <div><dt>GitHub</dt><dd><a href="https://github.com/Dra65" rel="me noopener">github.com/Dra65</a> <span aria-hidden="true">↗</span></dd></div>
+                    <div><dt>LinkedIn</dt><dd><a href="https://www.linkedin.com/in/raphaelgiulieri/" rel="me noopener">linkedin.com/in/raphaelgiulieri</a> <span aria-hidden="true">↗</span></dd></div>
+                    <div><dt>GitHub</dt><dd><a href="https://github.com/RaphaelGiulieri" rel="me noopener">github.com/RaphaelGiulieri</a> <span aria-hidden="true">↗</span></dd></div>
                     <div><dt>Artstation</dt><dd><a href="https://artstation.com/raphaelgiulieri" rel="me noopener">artstation.com/raphaelgiulieri</a> <span aria-hidden="true">↗</span></dd></div>
                     <div><dt>Languages</dt><dd>French (native) · English (fluent)</dd></div>
                 </dl>
@@ -115,7 +120,7 @@
                     <span class="cv-year">2023</span>
                     <div class="cv-work-body">
                         <p class="cv-work-title"><em>Calico Inferno shader library — Little Red Dog Games</em><span class="cv-role"> — technical artist</span></p>
-                        <p class="cv-work-scope">70-shader URP library on a shared CustomLighting include, plus character PBR, fog-of-war and explosion VFX. Shipped in Calico Inferno.</p>
+                        <p class="cv-work-scope">70-shader URP library on a shared CustomLighting include, plus character PBR, fog-of-war and explosion VFX. Delivered into the Calico Inferno build before LRD closed; the game never released.</p>
                         <ul class="cv-chips">
                             <li>Unity URP</li><li>HLSL</li><li>custom lighting includes</li><li>VFX Graph</li><li>MaterialPropertyBlock</li>
                         </ul>
@@ -181,7 +186,7 @@
                         <span class="cv-year">Spring<br>2025</span>
                         <div class="cv-exp-body">
                             <p class="cv-exp-title">Freelance creative technologist <span class="cv-exp-client">— <em>Doha creative agency, for a Gulf tourism board</em></span></p>
-                            <p class="cv-exp-scope">Shipped a mobile-first 360° WebGL campaign with three VFX modes and Paramiko-driven production deployment.</p>
+                            <p class="cv-exp-scope">Built a mobile-first 360° WebGL campaign with three VFX modes and Paramiko-driven production deployment. Delivered to the agency; campaign cancelled before public launch due to regional events.</p>
                             <ul class="cv-chips">
                                 <li>WebGL</li><li>GLSL</li><li>Three.js</li><li>GPGPU</li><li>PWA</li>
                             </ul>
@@ -201,7 +206,7 @@
                         <span class="cv-year">2023</span>
                         <div class="cv-exp-body">
                             <p class="cv-exp-title">Freelance technical artist <span class="cv-exp-client">— <em>Little Red Dog Games</em> (Calico Inferno)</span></p>
-                            <p class="cv-exp-scope">Built a 70-shader URP library on a shared CustomLighting include, plus character PBR, fog-of-war and explosion VFX. Shipped in Calico Inferno.</p>
+                            <p class="cv-exp-scope">Built a 70-shader URP library on a shared CustomLighting include, plus character PBR, fog-of-war and explosion VFX. Delivered before LRD closed; Calico Inferno never released.</p>
                             <ul class="cv-chips">
                                 <li>Unity URP</li><li>HLSL</li><li>VFX Graph</li><li>EmberGen</li><li>MaterialPropertyBlock</li>
                             </ul>
@@ -277,6 +282,9 @@
                 <p class="cv-section-marker"><span class="rule-pre" aria-hidden="true"></span> § 04 / Training</p>
                 <h2 id="cv-train-title" class="cv-section-title">Training<span class="title-dot">.</span></h2>
             </header>
+            <p class="cv-section-lede">
+                Engineering background (<em>DUT GEII</em> + <em>CPGE</em> + 2 yrs <em>ESTP</em>), then a deliberate pivot into game programming at <em>Isart Digital</em> when real-time graphics became the focus.
+            </p>
 
             <ol class="cv-train-list">
                 <li class="cv-train-row">
@@ -335,19 +343,46 @@
                 if (label) label.textContent = isLight ? 'Light' : 'Dark';
             }
             updateLabel();
-            if (!btn) return;
-            btn.addEventListener('click', function () {
-                var isLight = html.classList.contains('theme-light');
-                html.classList.remove('theme-light', 'theme-dark');
-                if (isLight) {
-                    html.classList.add('theme-dark');
-                    localStorage.setItem('rg-theme', 'dark');
-                } else {
+            if (btn) {
+                btn.addEventListener('click', function () {
+                    var isLight = html.classList.contains('theme-light');
+                    html.classList.remove('theme-light', 'theme-dark');
+                    if (isLight) {
+                        html.classList.add('theme-dark');
+                        localStorage.setItem('rg-theme', 'dark');
+                    } else {
+                        html.classList.add('theme-light');
+                        localStorage.setItem('rg-theme', 'light');
+                    }
+                    updateLabel();
+                });
+            }
+
+            /* PDF download: temporarily force light theme so the print
+               stylesheet renders against the warm-paper palette regardless
+               of the visitor's current screen choice, then trigger the
+               browser's print dialog (Chrome/Firefox/Safari all expose a
+               'Save as PDF' destination from there). Restore the theme on
+               afterprint. window.print() blocks on Chrome until the user
+               commits or cancels, so this is straightforward. */
+            var pdf = document.getElementById('cvPdfBtn');
+            if (pdf) {
+                pdf.addEventListener('click', function () {
+                    var wasDark = html.classList.contains('theme-dark');
+                    if (wasDark) html.classList.remove('theme-dark');
                     html.classList.add('theme-light');
-                    localStorage.setItem('rg-theme', 'light');
-                }
-                updateLabel();
-            });
+                    function restore() {
+                        if (wasDark) {
+                            html.classList.remove('theme-light');
+                            html.classList.add('theme-dark');
+                        }
+                        updateLabel();
+                        window.removeEventListener('afterprint', restore);
+                    }
+                    window.addEventListener('afterprint', restore);
+                    setTimeout(function () { window.print(); }, 50);
+                });
+            }
         })();
     </script>
 </body>

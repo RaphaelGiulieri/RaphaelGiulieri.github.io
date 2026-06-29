@@ -89,7 +89,7 @@
     {
       "id": "qatar_360",
       "title": "360° tourism campaign — WebGL + GPGPU",
-      "tagline": "A QR-code-triggered 360° video experience where curl-noise particles reveal the frame under your gaze.",
+      "tagline": "A QR-code-triggered 360° video experience where curl-noise particles reveal the frame under your gaze. Delivered to the agency; campaign cancelled before public launch due to regional events.",
       "categories": [
         "web",
         "graphics",
@@ -103,7 +103,7 @@
         "Production deployment"
       ],
       "year": 2025,
-      "status": "shipped",
+      "status": "delivered",
       "client": "A Doha creative agency, for a Gulf tourism board",
       "role": "Solo developer",
       "highlight": true,
@@ -144,7 +144,7 @@
     {
       "id": "lrd_calico",
       "title": "Indie game shader library — 70 shaders",
-      "tagline": "A full production shader library for an indie client's game — UI blurs, damage-localized shaders, bullet impacts, custom-lit character pipeline, environment, outline.",
+      "tagline": "A full production shader library for an indie client's game — UI blurs, damage-localized shaders, bullet impacts, custom-lit character pipeline, environment, outline. Delivered before the studio closed; the game never released.",
       "categories": [
         "graphics",
         "game",
@@ -158,7 +158,7 @@
         "Shader-library architecture"
       ],
       "year": 2023,
-      "status": "shipped",
+      "status": "delivered",
       "client": "An indie game studio",
       "role": "Technical Artist",
       "highlight": true,

@@ -1,7 +1,7 @@
 ---
 id: lrd_calico
 title: "Indie game shader library"
-tagline: "A 70-shader production library for an indie studio — bullet impacts, damage flashes, custom-lit characters — all sharing one lighting include so a tweak lands across the whole game at once."
+tagline: "A 70-shader production library for an indie studio — bullet impacts, damage flashes, custom-lit characters — all sharing one lighting include so a tweak lands across the whole game at once. Delivered before the studio closed; the game never released."
 categories: [graphics, game, client]
 skills_short:
   - Unity URP shader authoring
@@ -10,7 +10,7 @@ skills_short:
   - MaterialPropertyBlock patterns
   - Shader-library architecture
 year: 2023
-status: shipped
+status: delivered
 client: "An indie game studio"
 role: Technical Artist
 highlight: true
@@ -57,7 +57,7 @@ gallery:
     caption: "20 s of combat from the studio's build — every effect on screen flows through the shader library."
 headline:
   value: "70 shaders"
-  label: "shipped on one shared include"
+  label: "delivered on one shared include"
 links:
   repo: null
   demo: null
@@ -65,7 +65,7 @@ links:
 
 # Indie game shader library
 
-A full URP shader library shipped into an indie studio's Unity project. Seventy shaders covering character lighting, bullet impacts, damage feedback, blur UI, environment materials, backface outlines, depth-driven surface deformation. The point isn't the count — it's that all seventy lean on **one shared lighting include**, so the studio can tune the rim-light feel of the entire game by editing a single file.
+A full URP shader library delivered into an indie studio's Unity build. Seventy shaders covering character lighting, bullet impacts, damage feedback, blur UI, environment materials, backface outlines, depth-driven surface deformation. The point isn't the count — it's that all seventy lean on **one shared lighting include**, so the studio could tune the rim-light feel of the entire game by editing a single file.
 
 The shaders show up in three places: on characters (a custom-lit pipeline replacing URP's default), on the world (an environment material plus depth-driven trails for footprints, bullet hits and explosions), and on UI (gaussian blur for menus, outlines for selectables). Damage feedback is the clever piece — instead of flashing the whole character when something connects, the shader takes a world-space hit point + radius from a property block and pulses colour locally, so multiple simultaneous hits read as separate wounds.
 
@@ -97,6 +97,6 @@ The shaders show up in three places: on characters (a custom-lit pipeline replac
 
 ## Where it stands
 
-Delivered. Shipped into the studio's build. The library design — shared include, property-block dynamic data, depth-driven surface effects — is the pattern most of my Unity client work descends from.
+Delivered into the studio's build before Little Red Dog Games closed; *Calico Inferno* never released to the public. The library itself remains complete — shared include, property-block dynamic data, depth-driven surface effects — and the pattern is what most of my Unity client work descends from.
 
 ![[gallery:7]]

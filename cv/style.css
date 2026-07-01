@@ -123,6 +123,35 @@
 .cv-pdf-btn:focus-visible .cv-pdf-arrow { color: var(--accent-ink); }
 .cv-pdf-btn .cv-pdf-arrow { color: var(--accent); font-weight: 600; }
 
+/* Language toggle — EN / FR pair in the masthead. Mono editorial styling to
+   match the brand-issue / cross-link. It sits inside .cv-masthead-actions, so
+   the print rule that hides that container hides this automatically. */
+.cv-lang {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--f-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+}
+.cv-lang a {
+    color: var(--ink-muted);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: color var(--dur-fast) var(--ease-out),
+                border-color var(--dur-fast) var(--ease-out);
+}
+.cv-lang a:hover,
+.cv-lang a:focus-visible {
+    color: var(--accent);
+    border-color: var(--accent);
+    outline: none;
+}
+.cv-lang .is-active { color: var(--ink); }
+.cv-lang .sep { color: var(--ink-dim); }
+
 @media (max-width: 540px) {
     .cv-cross-link .cross-text { display: none; }
     .cv-cross-link { padding: 8px 10px; }

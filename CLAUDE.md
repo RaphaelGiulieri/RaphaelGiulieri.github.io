@@ -9,6 +9,17 @@ Notes for future agents working on this repo. Keep this file short — it's load
 - The bottom-right "Ask the portfolio" assistant is Claude Haiku 4.5 behind a Cloudflare Worker (`worker/`). The agent's knowledge is a corpus built from the three JSONs above + dossier highlights.
 - The masthead is the **hero galaxy** — a 3D WebGPU scene in `js/hero-galaxy/` (replaces the old particle-text SDF masthead). Three discipline-suns (graphics, ml-ai, web-systems) with planets (sub-categories) and moons (projects). Click navigation: sun → system → planet → moon. Data lives in `data/hero-galaxy.json`. See "Hero galaxy notes" below.
 
+## Superpowers scope on this repo
+
+Solo repo, direct-to-main, no test runner, graphics verified by looking at the screen. The plugin is enabled globally, so scope it down here:
+
+- Skip `brainstorming` / `writing-plans` for anything under ~3 files. Just make the change.
+- `test-driven-development` is N/A — there is no test framework and no `test` script in `package.json`. Don't propose adding one unless asked.
+- No worktrees, no PR/code-review flow (`using-git-worktrees`, `finishing-a-development-branch`, `requesting-code-review`, `receiving-code-review`).
+- **Do** use `systematic-debugging` for WebGPU/shader bugs. That's where hours actually get lost (see the rogue-blob episode).
+
+Past plans live in `docs/superpowers/`. Reference them; don't feel obliged to add more.
+
 ## The chat corpus stays in sync only if you rebuild + redeploy
 
 After **any** edit to `data/projects.json`, `data/research.json`, or `data/experiences.json`:
